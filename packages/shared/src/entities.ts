@@ -47,6 +47,7 @@ export interface Task {
   completed_at: Date | null;
   created_at: Date;
   updated_at: Date;
+  tag_ids?: number[];
 }
 
 export interface Note {

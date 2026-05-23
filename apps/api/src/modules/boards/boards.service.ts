@@ -106,6 +106,26 @@ export class BoardsService {
       throw new NotFoundException(`Board with id '${id}' not found`);
     }
 
+    // Enrich each task with tag_ids for UI tag filtering (single aggregate query).
+    const taskIds = board.columns.flatMap((c) => c.tasks.map((t) => t.id));
+    if (taskIds.length > 0) {
+      const rows = await this.dataSource.query<Array<{ task_id: number; tag_id: number }>>(
+        `SELECT task_id, tag_id FROM task_tags WHERE task_id IN (${taskIds.map(() => '?').join(',')})`,
+        taskIds,
+      );
+      const byTask = new Map<number, number[]>();
+      for (const r of rows) {
+        const arr = byTask.get(r.task_id) ?? [];
+        arr.push(r.tag_id);
+        byTask.set(r.task_id, arr);
+      }
+      for (const col of board.columns) {
+        for (const t of col.tasks) {
+          (t as TaskEntity & { tag_ids: number[] }).tag_ids = byTask.get(t.id) ?? [];
+        }
+      }
+    }
+
     return board;
   }
 

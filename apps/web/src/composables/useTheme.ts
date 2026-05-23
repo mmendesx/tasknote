@@ -9,18 +9,22 @@ function readStoredTheme(): Theme {
   return stored === 'light' ? 'light' : 'dark'
 }
 
-// Module-level singleton so all callers share the same reactive ref
+// Module-level singleton so all callers share the same reactive ref.
+// Initialised from localStorage so data-theme is set before any component mounts.
 const theme = ref<Theme>(readStoredTheme())
 
-// Apply immediately on module load (before any component mounts)
+// Apply immediately on module load (before Pinia or any component exists)
 document.documentElement.dataset.theme = theme.value
 
 /**
- * useTheme — provides reactive theme state with localStorage persistence.
+ * useTheme — reactive theme state with localStorage persistence.
  *
- * Later ICTs will migrate this ref into the Pinia settings store (ICT-16).
- * At that point this composable will read from and write to the store instead.
- * The public API (theme, setTheme, toggleTheme) stays the same.
+ * After settings load, App.vue (or the onboarding flow) calls setTheme() with
+ * the value from the settings store, which syncs this ref and persists to
+ * localStorage. This composable never imports the store directly — that would
+ * create a circular dependency and would execute before createPinia() runs.
+ *
+ * Public API: { theme, setTheme, toggleTheme } — stable across ICTs.
  */
 export function useTheme() {
   watch(theme, (next) => {
