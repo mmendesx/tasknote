@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+  <!--
+    TaskNote mark: a checkmark whose descending tail folds into a note corner.
+    Single weight, geometric, readable at 16px. Uses currentColor stroke.
+  -->
+
+  <!-- Note body: rectangle with folded top-right corner -->
+  <path
+    d="M6 4 H22 L26 8 V28 H6 Z"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linejoin="round"
+    stroke-linecap="round"
+    fill="none"
+  />
+
+  <!-- Folded corner fold lines -->
+  <path
+    d="M22 4 L22 8 H26"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linejoin="round"
+    stroke-linecap="round"
+    fill="none"
+  />
+
+  <!-- Checkmark: starts at left of note, sweeps through mid and up-right,
+       tail anchors near the fold corner -->
+  <path
+    d="M10 17 L14 21 L22 10"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+  />
+</svg>

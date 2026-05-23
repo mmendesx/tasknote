@@ -1,0 +1,113 @@
+/* TaskNote design tokens — single source of truth */
+/* Host app sets data-theme="dark" or data-theme="light" on <html> */
+
+/* ─── Dark theme (default) ─────────────────────────────────────── */
+:root,
+:root[data-theme='dark'] {
+  /* Background layers */
+  --color-bg: #0B0C0E;
+  --color-surface: #14161A;
+  --color-surface-elevated: #1B1E23;
+
+  /* Borders */
+  --color-border: #262A30;
+
+  /* Text */
+  --color-text-primary: #E7E9EC;
+  --color-text-secondary: #9BA1AB;
+  --color-text-muted: #5B616B;
+
+  /* Accent */
+  --color-accent: #A3E635;
+  --color-accent-hover: #BEF264;
+
+  /* Status */
+  --color-status-todo: #5B616B;
+  --color-status-doing: #F5C26B;
+  --color-status-blocked: #F87171;
+  --color-status-done: #A3E635;
+
+  /* Focus ring */
+  --color-focus-ring: #A3E635;
+
+  /* Motion */
+  --motion-duration-fast: 150ms;
+  --motion-duration-base: 250ms;
+  --motion-easing: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ─── Light theme ───────────────────────────────────────────────── */
+:root[data-theme='light'] {
+  /* Background layers */
+  --color-bg: #FAFAFA;
+  --color-surface: #FFFFFF;
+  --color-surface-elevated: #F4F4F5;
+
+  /* Borders */
+  --color-border: #E4E4E7;
+
+  /* Text */
+  --color-text-primary: #18181B;
+  --color-text-secondary: #52525B;
+  --color-text-muted: #A1A1AA;
+
+  /* Accent */
+  --color-accent: #65A30D;
+  --color-accent-hover: #4D7C0F;
+
+  /* Status */
+  --color-status-todo: #A1A1AA;
+  --color-status-doing: #D97706;
+  --color-status-blocked: #DC2626;
+  --color-status-done: #65A30D;
+
+  /* Focus ring */
+  --color-focus-ring: #65A30D;
+
+  /* Motion (unchanged) */
+  --motion-duration-fast: 150ms;
+  --motion-duration-base: 250ms;
+  --motion-easing: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ─── Reduced motion override ───────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration-fast: 0ms;
+    --motion-duration-base: 0ms;
+  }
+}
+
+/* ─── Typography ────────────────────────────────────────────────── */
+:root {
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+
+  --text-xs:   0.75rem;   /* 12px */
+  --text-sm:   0.875rem;  /* 14px */
+  --text-base: 1rem;      /* 16px */
+  --text-lg:   1.25rem;   /* 20px */
+  --text-xl:   1.75rem;   /* 28px */
+  --text-2xl:  2.5rem;    /* 40px */
+
+  --leading-body:     1.45;
+  --leading-heading:  1.2;
+}
+
+/* ─── Spacing ───────────────────────────────────────────────────── */
+:root {
+  --space-1: 0.25rem;   /* 4px  */
+  --space-2: 0.5rem;    /* 8px  */
+  --space-3: 0.75rem;   /* 12px */
+  --space-4: 1rem;      /* 16px */
+  --space-6: 1.5rem;    /* 24px */
+  --space-8: 2rem;      /* 32px */
+  --space-12: 3rem;     /* 48px */
+}
+
+/* ─── Radius ────────────────────────────────────────────────────── */
+:root {
+  --radius-control: 0.5rem;     /* 8px  — buttons, inputs */
+  --radius-card:    0.75rem;    /* 12px — task cards */
+  --radius-modal:   1rem;       /* 16px — dialogs, drawers */
+}

@@ -1,0 +1,57 @@
+/* TaskNote animation utilities
+ * Self-contained — no plugin dependency.
+ * All durations reference --motion-duration-* from tokens.css.
+ * prefers-reduced-motion zeros those vars at the token layer, so
+ * animations collapse to 0ms automatically — no per-rule media query needed.
+ */
+
+/* ─── Keyframes ─────────────────────────────────────────────────── */
+@keyframes tn-fade-in  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes tn-fade-out { from { opacity: 1; } to { opacity: 0; } }
+
+@keyframes tn-zoom-in  { from { transform: scale(0.95); } to { transform: scale(1); } }
+@keyframes tn-zoom-out { from { transform: scale(1); }    to { transform: scale(0.95); } }
+
+@keyframes tn-slide-in-right  { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes tn-slide-out-right { from { transform: translateX(0); }    to { transform: translateX(100%); } }
+
+@keyframes tn-slide-in-top  { from { transform: translateY(-8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes tn-slide-out-top { from { transform: translateY(0); opacity: 1; }    to { transform: translateY(-8px); opacity: 0; } }
+
+/* ─── Data-state hooks (Reka UI uses data-state="open"/"closed") ── */
+
+/* Overlay / backdrop */
+.tn-overlay[data-state='open']  { animation: tn-fade-in  var(--motion-duration-base) var(--motion-easing) forwards; }
+.tn-overlay[data-state='closed']{ animation: tn-fade-out var(--motion-duration-base) var(--motion-easing) forwards; }
+
+/* Dialog / modal panel */
+.tn-dialog[data-state='open']  {
+  animation:
+    tn-fade-in  var(--motion-duration-base) var(--motion-easing) forwards,
+    tn-zoom-in  var(--motion-duration-base) var(--motion-easing) forwards;
+}
+.tn-dialog[data-state='closed']  {
+  animation:
+    tn-fade-out  var(--motion-duration-base) var(--motion-easing) forwards,
+    tn-zoom-out  var(--motion-duration-base) var(--motion-easing) forwards;
+}
+
+/* Drawer panel */
+.tn-drawer[data-state='open']   { animation: tn-slide-in-right  var(--motion-duration-base) var(--motion-easing) forwards; }
+.tn-drawer[data-state='closed'] { animation: tn-slide-out-right var(--motion-duration-base) var(--motion-easing) forwards; }
+
+/* Dropdown / tooltip content */
+.tn-popover[data-state='open']  {
+  animation:
+    tn-fade-in var(--motion-duration-fast) var(--motion-easing) forwards,
+    tn-zoom-in var(--motion-duration-fast) var(--motion-easing) forwards;
+}
+.tn-popover[data-state='closed'] {
+  animation:
+    tn-fade-out var(--motion-duration-fast) var(--motion-easing) forwards,
+    tn-zoom-out var(--motion-duration-fast) var(--motion-easing) forwards;
+}
+
+/* Toast */
+.tn-toast[data-state='open']  { animation: tn-slide-in-right  var(--motion-duration-base) var(--motion-easing) forwards; }
+.tn-toast[data-state='closed']{ animation: tn-slide-out-right var(--motion-duration-base) var(--motion-easing) forwards; }
