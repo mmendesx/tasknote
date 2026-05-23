@@ -5,12 +5,47 @@
   "description": "TaskNote Vue 3 + Vite web app (port 5173)",
   "type": "module",
   "scripts": {
-    "dev": "echo '[web] Vite dev server will start here (installed in ICT-15)'",
-    "build": "echo '[web] build not yet configured (ICT-15)'",
-    "lint": "eslint src --ext .ts,.vue",
-    "test": "echo '[web] tests not yet configured (ICT-27)'",
-    "typecheck": "tsc --noEmit"
+    "dev": "vite",
+    "build": "vue-tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "vue-tsc --noEmit",
+    "test": "vitest",
+    "lint": "eslint ."
   },
-  "dependencies": {},
-  "devDependencies": {}
+  "dependencies": {
+    "vue": "^3.5.0",
+    "vue-router": "^4.4.0",
+    "pinia": "^2.2.0",
+    "@vueuse/core": "^11.0.0",
+    "@vueuse/integrations": "^11.0.0",
+    "sortablejs": "^1.15.0",
+    "reka-ui": "^2.0.0",
+    "animejs": "^4.0.0",
+    "markdown-it": "^14.0.0",
+    "@milkdown/core": "^7.0.0",
+    "@milkdown/vue": "^7.0.0",
+    "@milkdown/preset-commonmark": "^7.0.0",
+    "@milkdown/preset-gfm": "^7.0.0",
+    "@milkdown/plugin-listener": "^7.0.0",
+    "@milkdown/plugin-history": "^7.0.0",
+    "@milkdown/plugin-clipboard": "^7.0.0",
+    "@milkdown/plugin-prism": "^7.0.0",
+    "@milkdown/theme-nord": "^7.0.0",
+    "@tasknote/shared": "workspace:*",
+    "@tasknote/ui": "workspace:*",
+    "clsx": "^2.0.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0",
+    "@vitejs/plugin-vue": "^5.0.0",
+    "vue-tsc": "^2.0.0",
+    "typescript": "^5.6.0",
+    "tailwindcss": "^4.0.0-beta.1",
+    "@tailwindcss/vite": "^4.0.0-beta.1",
+    "autoprefixer": "^10.4.0",
+    "postcss": "^8.4.0",
+    "vitest": "^2.0.0",
+    "@vue/test-utils": "^2.4.0",
+    "jsdom": "^24.0.0"
+  }
 }

@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+  <!--
+    TaskNote favicon: simplified mark, optimised for 16x16.
+    Note outline + checkmark, single weight, currentColor.
+  -->
+
+  <!-- Note body with folded corner -->
+  <path
+    d="M2 1 H11 L14 4 V15 H2 Z"
+    stroke="currentColor"
+    stroke-width="1.5"
+    stroke-linejoin="round"
+    stroke-linecap="round"
+    fill="none"
+  />
+
+  <!-- Fold crease -->
+  <path
+    d="M11 1 L11 4 H14"
+    stroke="currentColor"
+    stroke-width="1.5"
+    stroke-linejoin="round"
+    stroke-linecap="round"
+    fill="none"
+  />
+
+  <!-- Checkmark -->
+  <path
+    d="M4.5 8.5 L6.5 10.5 L11 6"
+    stroke="currentColor"
+    stroke-width="1.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+  />
+</svg>
