@@ -1,4 +1,6 @@
-// @tasknote/shared — types, DTOs, and Zod schemas
-// Populated in ICT-2
+// @tasknote/shared — single barrel export for all types, schemas, constants, and errors
 
-export {}
+export * from './constants.js';
+export * from './entities.js';
+export * from './dtos.js';
+export * from './errors.js';
