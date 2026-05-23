@@ -1,5 +1,15 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { ColumnEntity } from './entities/column.entity';
+import { BoardEntity } from '../boards/entities/board.entity';
+import { TaskEntity } from '../tasks/entities/task.entity';
+import { ColumnsService } from './columns.service';
+import { ColumnsController } from './columns.controller';
 
-// Placeholder module — implementation lands in ICT-8.
-@Module({})
+@Module({
+  imports: [TypeOrmModule.forFeature([ColumnEntity, BoardEntity, TaskEntity])],
+  providers: [ColumnsService],
+  controllers: [ColumnsController],
+  exports: [ColumnsService],
+})
 export class ColumnsModule {}

@@ -37,13 +37,16 @@ export class AllExceptionsFilter implements ExceptionFilter {
       this.logger.warn(`[VALIDATION_ERROR] ${message}`, { details });
     } else if (exception instanceof HttpException) {
       status = exception.getStatus();
-      code = this.codeFromStatus(status);
       const exceptionResponse = exception.getResponse();
-      message =
-        typeof exceptionResponse === 'string'
-          ? exceptionResponse
-          : (exceptionResponse as Record<string, unknown>)['message'] as string ||
-            exception.message;
+      if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
+        const resp = exceptionResponse as Record<string, unknown>;
+        // Honor an explicit code when provided (e.g. ConflictException with { code, message })
+        code = typeof resp['code'] === 'string' ? resp['code'] : this.codeFromStatus(status);
+        message = (typeof resp['message'] === 'string' ? resp['message'] : null) ?? exception.message;
+      } else {
+        code = this.codeFromStatus(status);
+        message = typeof exceptionResponse === 'string' ? exceptionResponse : exception.message;
+      }
       this.logger.warn(`[${code}] ${message}`);
     } else if (exception instanceof Error) {
       status = HttpStatus.INTERNAL_SERVER_ERROR;

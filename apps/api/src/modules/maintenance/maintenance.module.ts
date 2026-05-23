@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
+import { BackupService } from './backup.service';
 
-// Placeholder module — implementation lands in ICT-5.
-@Module({})
+@Module({
+  providers: [BackupService],
+})
 export class MaintenanceModule {}
