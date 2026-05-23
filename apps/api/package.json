@@ -1,0 +1,15 @@
+{
+  "name": "@tasknote/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TaskNote NestJS API (port 3001)",
+  "scripts": {
+    "dev": "echo '[api] NestJS dev server will start here (installed in ICT-4)'",
+    "build": "echo '[api] build not yet configured (ICT-4)'",
+    "lint": "eslint src --ext .ts",
+    "test": "echo '[api] tests not yet configured (ICT-27)'",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

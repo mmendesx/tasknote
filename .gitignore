@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Turborepo
+.turbo/
+
+# TypeScript
+*.tsbuildinfo
+
+# SQLite databases (never commit local DB files)
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# Local tasknote data dir (if created inside repo by mistake)
+/.tasknote/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Test coverage
+coverage/

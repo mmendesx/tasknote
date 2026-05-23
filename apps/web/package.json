@@ -1,0 +1,16 @@
+{
+  "name": "@tasknote/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TaskNote Vue 3 + Vite web app (port 5173)",
+  "type": "module",
+  "scripts": {
+    "dev": "echo '[web] Vite dev server will start here (installed in ICT-15)'",
+    "build": "echo '[web] build not yet configured (ICT-15)'",
+    "lint": "eslint src --ext .ts,.vue",
+    "test": "echo '[web] tests not yet configured (ICT-27)'",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
