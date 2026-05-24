@@ -18,7 +18,7 @@
     "@nestjs/typeorm": "^10.0.2",
     "@nestjs/config": "^3.2.0",
     "@tasknote/shared": "workspace:*",
-    "better-sqlite3": "^9.4.0",
+    "better-sqlite3": "^11.0.0",
     "nestjs-zod": "^3.0.0",
     "reflect-metadata": "^0.2.1",
     "rxjs": "^7.8.1",
