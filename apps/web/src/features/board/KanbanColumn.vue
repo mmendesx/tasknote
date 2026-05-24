@@ -4,11 +4,7 @@ import { useSortable } from '@vueuse/integrations/useSortable'
 import type { ColumnWithTasks, Task } from '@tasknote/shared'
 import { useIsDesktop } from '@/composables/useIsDesktop'
 import { useAnime } from '@/composables/useAnime'
-import { Button } from '@tasknote/ui'
 import TaskCard from './TaskCard.vue'
-import QuickAddTaskInput from './QuickAddTaskInput.vue'
-import { useFocusedColumn } from '@/composables/useFocusedColumn'
-import { useCurrentBoardStore } from '@/stores/currentBoard'
 
 const props = defineProps<{
   column: ColumnWithTasks
@@ -22,17 +18,6 @@ const emit = defineEmits<{
 
 const isDesktop = useIsDesktop()
 const { animate, prefersReducedMotion } = useAnime()
-const { quickAddActiveColumnId, focusColumn, activateQuickAdd, clearQuickAdd } = useFocusedColumn()
-const currentBoardStore = useCurrentBoardStore()
-
-async function onQuickAddSubmit(title: string): Promise<void> {
-  await currentBoardStore.createTask(props.column.id, {
-    title,
-    priority: 'medium',
-    column_id: props.column.id,
-  })
-  clearQuickAdd()
-}
 
 // Local tasks mirror — DnD mutates this, watch syncs back from store on rollback.
 // deep: false is intentional: Sortable already mutated localTasks on happy path;
@@ -119,7 +104,6 @@ function onListDragEnd(evt: DragEvent) {
   <section
     class="kanban-column"
     :aria-label="`${column.name} column, ${taskCount} tasks`"
-    @click.self="focusColumn(column.id)"
   >
     <!-- Column header -->
     <header class="kanban-column__header">
@@ -162,14 +146,7 @@ function onListDragEnd(evt: DragEvent) {
       :data-column-id="column.id"
       @dragstart="onListDragStart"
       @dragend="onListDragEnd"
-      @click="focusColumn(column.id)"
     >
-      <QuickAddTaskInput
-        :column-id="column.id"
-        :active="quickAddActiveColumnId === column.id"
-        @submit="onQuickAddSubmit"
-        @cancel="clearQuickAdd"
-      />
       <TaskCard
         v-for="task in localTasks"
         :key="task.id"
@@ -184,21 +161,6 @@ function onListDragEnd(evt: DragEvent) {
       </p>
     </div>
 
-    <!-- Add task footer -->
-    <footer class="kanban-column__footer">
-      <Button
-        variant="ghost"
-        size="sm"
-        class="add-task-btn"
-        aria-label="Add task to this column"
-        @click="activateQuickAdd(column.id)"
-      >
-        <svg viewBox="0 0 12 12" width="12" height="12" fill="none" aria-hidden="true">
-          <path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-        </svg>
-        Add task
-      </Button>
-    </footer>
   </section>
 </template>
 
@@ -285,20 +247,6 @@ function onListDragEnd(evt: DragEvent) {
   margin: 0;
 }
 
-.kanban-column__footer {
-  padding: 6px 8px 8px;
-  border-top: 1px solid var(--color-border);
-  flex-shrink: 0;
-}
-
-.add-task-btn {
-  width: 100%;
-  justify-content: flex-start;
-  gap: 6px;
-  color: var(--color-text-muted);
-}
-
-.add-task-btn:hover { color: var(--color-text-secondary); }
 
 :global(.task-ghost) {
   opacity: 0.4;

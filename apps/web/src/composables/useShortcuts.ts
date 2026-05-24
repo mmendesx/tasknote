@@ -2,7 +2,7 @@ import { watch } from 'vue'
 import { useMagicKeys, createEventHook } from '@vueuse/core'
 import { useRouter } from 'vue-router'
 import { useBoardsStore } from '@/stores/boards'
-import { useFocusedColumn } from '@/composables/useFocusedColumn'
+import { useCurrentBoardStore } from '@/stores/currentBoard'
 import { useSelectedTask } from '@/composables/useSelectedTask'
 import { useCommandPalette } from '@/features/search/useCommandPalette'
 
@@ -31,9 +31,6 @@ function getHook(name: ShortcutName) {
 /**
  * Register a handler for a named shortcut.
  * Returns the unsubscribe function.
- *
- * Can be called before install() — handlers are registered on the hook and
- * will fire once the shortcut layer is active.
  */
 export function onShortcut(name: ShortcutName, handler: () => void): () => void {
   const hook = getHook(name)
@@ -50,10 +47,6 @@ export function triggerShortcut(name: ShortcutName): void {
 
 // ─── Input focus guard ─────────────────────────────────────────────────────────
 
-/**
- * Returns true when the active element is a text input.
- * cmd/ctrl+K bypasses this guard (always fires).
- */
 function isInputFocused(): boolean {
   const el = document.activeElement
   if (!el) return false
@@ -70,35 +63,21 @@ let installed = false
 /**
  * useShortcuts — singleton composable for the global keyboard shortcut layer.
  *
- * Call install() once from App.vue onMounted. All shortcut registrations
- * happen inside install() — components subscribe via onShortcut() instead.
- *
- * Shortcuts registered:
- *   n             → 'quick-add'       blocked in inputs; requires focused column
- *   cmd/ctrl+K    → 'command-palette' always fires (opens CommandPalette)
- *   ?             → 'cheatsheet'      blocked in inputs
- *   e             → 'edit-task'       blocked in inputs; requires selected task
- *   del/backspace → 'archive-task'    blocked in inputs; requires selected task
- *   1..9          → board jump        blocked in inputs; sorted by position
- *   g n           → 'go-notes'        blocked in inputs
- *   g b           → 'go-boards'       blocked in inputs
- *
- * g-prefix state machine: pressing 'g' sets pendingG=true for 750ms.
- * If 'n' or 'b' is pressed within that window, the combo fires. Otherwise
- * 'n' behaves as quick-add and 'b' is ignored.
+ * Must be called inside setup(). Call install() from onMounted.
+ * All inject()-based composables are called here (setup time), not inside install().
  */
 export function useShortcuts() {
+  // All composables that use inject() must be called here — inside setup()
+  const router = useRouter()
+  const boardsStore = useBoardsStore()
+  const currentBoardStore = useCurrentBoardStore()
+  const { selectedTaskId } = useSelectedTask()
+  const { openPalette } = useCommandPalette()
+  const keys = useMagicKeys()
+
   function install() {
     if (installed) return
     installed = true
-
-    const router = useRouter()
-    const boardsStore = useBoardsStore()
-    const { focusedColumnId, activateQuickAdd } = useFocusedColumn()
-    const { selectedTaskId } = useSelectedTask()
-    const { openPalette } = useCommandPalette()
-
-    const keys = useMagicKeys()
 
     // ─── g-prefix state machine ────────────────────────────────────────────
     let pendingG = false
@@ -134,15 +113,19 @@ export function useShortcuts() {
           triggerShortcut('go-notes')
           return
         }
-        // Standalone 'n': activate quick-add if a column is focused
-        if (focusedColumnId.value !== null) {
-          activateQuickAdd(focusedColumnId.value)
+        const firstCol = currentBoardStore.board?.columns[0]
+        if (firstCol) {
+          currentBoardStore.createTask(firstCol.id, {
+            title: 'New task',
+            priority: 'medium',
+            column_id: firstCol.id,
+          })
           triggerShortcut('quick-add')
         }
       }
     )
 
-    // ─── cmd/ctrl+K: command palette (always fires) ────────────────────────
+    // ─── cmd/ctrl+K: command palette ──────────────────────────────────────
     watch(
       () => (keys['Meta+k']?.value || keys['Ctrl+k']?.value),
       (active) => {
@@ -153,8 +136,6 @@ export function useShortcuts() {
     )
 
     // ─── ?: cheatsheet ─────────────────────────────────────────────────────
-    // useMagicKeys tracks KeyboardEvent.key values directly, so '?' works
-    // on US keyboard layouts (Shift+/) without explicit Shift handling.
     watch(
       () => keys['?']?.value,
       (active) => {
@@ -190,8 +171,6 @@ export function useShortcuts() {
     )
 
     // ─── 1..9: jump to board by position ──────────────────────────────────
-    // Boards are sorted by `position` field (ascending).
-    // '1' = first board (index 0), '9' = ninth board (index 8).
     const DIGIT_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'] as const
 
     for (const digit of DIGIT_KEYS) {
@@ -211,7 +190,7 @@ export function useShortcuts() {
       )
     }
 
-    // ─── g prefix — set pendingG on keydown ───────────────────────────────
+    // ─── g prefix ─────────────────────────────────────────────────────────
     watch(
       () => keys['g']?.value,
       (active) => {

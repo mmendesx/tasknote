@@ -7,6 +7,7 @@ import { useCurrentBoardStore } from '@/stores/currentBoard'
 import { useBoardsStore } from '@/stores/boards'
 import { useTagsStore } from '@/stores/tags'
 import { useIsDesktop } from '@/composables/useIsDesktop'
+import { Button } from '@tasknote/ui'
 import KanbanColumn from './KanbanColumn.vue'
 import TaskDrawer from './TaskDrawer.vue'
 import BoardTagFilter from '@/features/tags/BoardTagFilter.vue'
@@ -114,6 +115,26 @@ function handleDrawerClose(): void {
   selectedTaskId.value = null
 }
 
+// ─── Add task (board toolbar) ─────────────────────────────────────────────────
+
+const isAddingTask = ref(false)
+
+async function addTask(): Promise<void> {
+  if (isAddingTask.value || !currentBoardStore.board) return
+  const firstCol = currentBoardStore.board.columns[0]
+  if (!firstCol) return
+  isAddingTask.value = true
+  try {
+    await currentBoardStore.createTask(firstCol.id, {
+      title: 'New task',
+      priority: 'medium',
+      column_id: firstCol.id,
+    })
+  } finally {
+    isAddingTask.value = false
+  }
+}
+
 // ─── Create first board ───────────────────────────────────────────────────────
 
 const isCreatingBoard = ref(false)
@@ -148,6 +169,21 @@ async function createFirstBoard() {
 
     <!-- Tag filter bar -->
     <BoardTagFilter :board-id="boardId" />
+
+    <!-- Board toolbar -->
+    <div v-if="currentBoardStore.board" class="board-view__toolbar">
+      <Button
+        variant="primary"
+        size="sm"
+        :disabled="isAddingTask"
+        @click="addTask"
+      >
+        <svg viewBox="0 0 12 12" width="12" height="12" fill="none" aria-hidden="true">
+          <path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+        </svg>
+        Add task
+      </Button>
+    </div>
 
     <!-- Loading state -->
     <div v-if="currentBoardStore.loading" class="board-view__state" aria-live="polite">
@@ -290,6 +326,17 @@ async function createFirstBoard() {
 .board-create-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.board-view__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+  flex-shrink: 0;
+  gap: 8px;
 }
 
 :global(.col-ghost) {
