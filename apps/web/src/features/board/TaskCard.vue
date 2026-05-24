@@ -75,7 +75,7 @@ function handleClick() {
     class="task-card"
     :data-task-id="task.id"
     :aria-label="`${task.title} – priority ${priority.label}`"
-    :draggable="isDesktop"
+    draggable="true"
     @click="handleClick"
     @keydown.enter="handleClick"
     @keydown.space.prevent="handleClick"
@@ -87,7 +87,6 @@ function handleClick() {
     <span
       class="task-handle col-handle"
       :class="{ 'handle--hidden': !isDesktop }"
-      :draggable="isDesktop"
       :aria-hidden="!isDesktop ? 'true' : undefined"
       :aria-label="isDesktop ? 'Drag to reorder task' : undefined"
     >

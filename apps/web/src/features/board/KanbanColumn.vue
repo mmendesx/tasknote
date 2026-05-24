@@ -57,9 +57,7 @@ const taskListRef = ref<HTMLElement | null>(null)
 const { option: sortableOption } = useSortable(taskListRef, localTasks, {
   group: 'tasks',
   animation: 150,
-  handle: '.task-handle',
   draggable: '.task-card',
-  disabled: false, // reactive update below
   ghostClass: 'task-ghost',
   dragClass: 'task-dragging',
   onEnd: (evt) => {
@@ -71,13 +69,10 @@ const { option: sortableOption } = useSortable(taskListRef, localTasks, {
   },
 })
 
-// Keep Sortable disabled flag in sync with viewport width.
-// Must run after mount — sortableOption() is a no-op before tryOnMounted fires.
+// Disable on mobile after mount (sortable instance exists by then)
 onMounted(() => {
-  sortableOption('disabled', !isDesktop.value)
-  watch(isDesktop, (desktop) => {
-    sortableOption('disabled', !desktop)
-  })
+  if (!isDesktop.value) sortableOption('disabled', true)
+  watch(isDesktop, (desktop) => sortableOption('disabled', !desktop))
 })
 
 // Anime lift on drag start — list-level handler to avoid double-fire with TaskCard
