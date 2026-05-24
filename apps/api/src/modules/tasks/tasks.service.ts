@@ -63,6 +63,24 @@ export class TasksService {
     });
   }
 
+  // ─── listArchived ─────────────────────────────────────────────────────────────
+
+  async listArchived(boardId?: number): Promise<TaskEntity[]> {
+    this.logger.log(`listArchived: board_id=${boardId ?? 'all'}`);
+
+    const qb = this.tasksRepo
+      .createQueryBuilder('task')
+      .leftJoinAndSelect('task.column', 'column')
+      .where('task.archived_at IS NOT NULL')
+      .orderBy('task.archived_at', 'DESC');
+
+    if (boardId !== undefined) {
+      qb.andWhere('column.board_id = :boardId', { boardId });
+    }
+
+    return qb.getMany();
+  }
+
   // ─── getOne ──────────────────────────────────────────────────────────────────
 
   async getOne(id: number): Promise<TaskEntity> {

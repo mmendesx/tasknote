@@ -30,6 +30,12 @@ export class NotesController {
     return this.notesService.listNotes(taskId);
   }
 
+  /** GET /api/notes/archived — list archived notes; ordered by archived_at desc */
+  @Get('archived')
+  listArchived() {
+    return this.notesService.listArchived();
+  }
+
   /** GET /api/notes/:id — single note */
   @Get(':id')
   getNote(@Param('id', ParseIntPipe) id: number) {
@@ -63,5 +69,12 @@ export class NotesController {
   @Post(':id/restore')
   restoreNote(@Param('id', ParseIntPipe) id: number) {
     return this.notesService.restoreNote(id);
+  }
+
+  /** DELETE /api/notes/:id/permanent — hard delete; only allowed when archived_at is set */
+  @Delete(':id/permanent')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  permanentDeleteNote(@Param('id', ParseIntPipe) id: number) {
+    return this.notesService.permanentDeleteNote(id);
   }
 }

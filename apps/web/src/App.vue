@@ -31,6 +31,17 @@ watch(
   { immediate: true }
 )
 
+// Sync accent color CSS variable from settings so the stored hex is applied on
+// every load — AccentPicker sets it immediately on pick, but this handles initial
+// load and cross-tab sync.
+watch(
+  () => settingsStore.settings?.accent,
+  (hex) => {
+    if (hex) document.documentElement.style.setProperty('--color-accent', hex)
+  },
+  { immediate: true }
+)
+
 // When onboarding completes (isOnboarded flips true), fade the overlay out
 // then unmount it.
 watch(

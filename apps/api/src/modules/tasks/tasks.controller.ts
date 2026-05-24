@@ -9,6 +9,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   UsePipes,
 } from '@nestjs/common';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
@@ -39,6 +40,12 @@ export class TasksController {
   @UsePipes(new ZodValidationPipe(MoveTaskDtoSchema))
   moveTask(@Body() dto: MoveTaskDto) {
     return this.tasksService.moveTask(dto);
+  }
+
+  /** GET /api/tasks/archived?board_id=X — list archived tasks; filtered by board when provided */
+  @Get('archived')
+  listArchived(@Query('board_id', new ParseIntPipe({ optional: true })) boardId?: number) {
+    return this.tasksService.listArchived(boardId);
   }
 
   /** GET /api/tasks/:id — fetch a single task with column + tags relations */

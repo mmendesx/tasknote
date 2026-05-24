@@ -29,3 +29,8 @@ export function moveTask(dto: MoveTaskDto): Promise<Task> {
 export function permanentDeleteTask(id: number): Promise<void> {
   return http<void>(`/tasks/${id}/permanent`, { method: 'DELETE' })
 }
+
+export function listArchivedTasks(boardId?: number): Promise<Task[]> {
+  const query = boardId !== undefined ? `?board_id=${boardId}` : ''
+  return http<Task[]>(`/tasks/archived${query}`)
+}

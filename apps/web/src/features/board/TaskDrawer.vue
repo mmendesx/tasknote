@@ -12,9 +12,11 @@ import { useDebounceFn } from '@vueuse/core'
 import TaskDetailsTab from './TaskDetailsTab.vue'
 import TaskNotesTab from './TaskNotesTab.vue'
 import TaskFilesTab from './TaskFilesTab.vue'
+import TagPicker from '@/features/tags/TagPicker.vue'
 import { useCurrentBoardStore } from '@/stores/currentBoard'
 import { useNotesStore } from '@/stores/notes'
 import { useFileRefsStore } from '@/stores/fileRefs'
+import { useTagsStore } from '@/stores/tags'
 import * as api from '@/api'
 import type { Task, Note, FileRef, Priority } from '@tasknote/shared'
 
@@ -30,6 +32,7 @@ const emit = defineEmits<{
 const boardStore    = useCurrentBoardStore()
 const notesStore    = useNotesStore()
 const fileRefsStore = useFileRefsStore()
+const tagsStore     = useTagsStore()
 const toast         = useToast()
 
 // ─── Form state ────────────────────────────────────────────────────────────
@@ -47,6 +50,22 @@ const taskNotes = computed<Note[]>(() =>
 const fileRefs = computed<FileRef[]>(() =>
   props.taskId ? fileRefsStore.getFor('task', props.taskId) : []
 )
+
+// Resolve tag_ids from board store (optimistic) or fall back to drawer's loaded task
+const tagIds = computed<number[]>(() => {
+  if (!props.taskId) return []
+  for (const col of boardStore.board?.columns ?? []) {
+    const found = col.tasks.find((t) => t.id === props.taskId)
+    if (found) return found.tag_ids ?? []
+  }
+  return task.value?.tag_ids ?? []
+})
+
+function onTagIdsChange(ids: number[]): void {
+  // TagPicker already called boardStore.addTag / removeTag — tag_ids
+  // on the board task are already optimistically updated. No extra action needed.
+  void ids
+}
 
 // ─── Load on taskId change ─────────────────────────────────────────────────
 watch(
@@ -153,6 +172,13 @@ async function onArchive(): Promise<void> {
             @column-change="onColumnChange"
             @archive="onArchive"
           />
+          <div v-if="tagsStore.list.length" class="mt-4">
+            <TagPicker
+              :model-value="tagIds"
+              :task-id="task.id"
+              @update:model-value="onTagIdsChange"
+            />
+          </div>
         </TabsContent>
 
         <TabsContent value="notes" class="outline-none">

@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import type { CreateNoteDto, UpdateNoteDto } from '@tasknote/shared';
@@ -35,6 +35,16 @@ export class NotesService {
     @InjectRepository(TaskEntity)
     private readonly tasksRepo: Repository<TaskEntity>,
   ) {}
+
+  async listArchived(): Promise<NoteEntity[]> {
+    this.logger.log('listArchived: fetching archived notes');
+
+    return this.notesRepo
+      .createQueryBuilder('note')
+      .where('note.archived_at IS NOT NULL')
+      .orderBy('note.archived_at', 'DESC')
+      .getMany();
+  }
 
   async listNotes(taskId?: number): Promise<NoteEntity[]> {
     this.logger.log(
@@ -163,6 +173,29 @@ export class NotesService {
     const restored = await this.notesRepo.save(note);
     this.logger.log(`restoreNote: note id=${id} restored`);
     return restored;
+  }
+
+  async permanentDeleteNote(id: number): Promise<void> {
+    this.logger.log(`permanentDeleteNote: attempting hard delete note id=${id}`);
+
+    const note = await this.notesRepo.findOne({ where: { id } });
+    if (!note) {
+      this.logger.warn(`permanentDeleteNote: note id=${id} not found`);
+      throw new NotFoundException(`Note with id '${id}' not found`);
+    }
+
+    if (!note.archivedAt) {
+      this.logger.warn(
+        `permanentDeleteNote: note id=${id} is not archived — cannot permanently delete`,
+      );
+      throw new ConflictException({
+        code: 'NOT_ARCHIVED',
+        message: 'Note must be archived before permanent deletion',
+      });
+    }
+
+    await this.notesRepo.remove(note);
+    this.logger.log(`permanentDeleteNote: note id=${id} hard deleted`);
   }
 }
 

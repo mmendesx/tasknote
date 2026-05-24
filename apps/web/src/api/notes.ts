@@ -26,3 +26,11 @@ export function deleteNote(id: number): Promise<void> {
 export function restoreNote(id: number): Promise<Note> {
   return http<Note>(`/notes/${id}/restore`, { method: 'POST' })
 }
+
+export function permanentDeleteNote(id: number): Promise<void> {
+  return http<void>(`/notes/${id}/permanent`, { method: 'DELETE' })
+}
+
+export function listArchivedNotes(): Promise<Note[]> {
+  return http<Note[]>('/notes/archived')
+}

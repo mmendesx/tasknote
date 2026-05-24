@@ -9,6 +9,7 @@ import { useTagsStore } from '@/stores/tags'
 import { useIsDesktop } from '@/composables/useIsDesktop'
 import KanbanColumn from './KanbanColumn.vue'
 import TaskDrawer from './TaskDrawer.vue'
+import BoardTagFilter from '@/features/tags/BoardTagFilter.vue'
 
 const route = useRoute()
 const currentBoardStore = useCurrentBoardStore()
@@ -125,8 +126,8 @@ function handleDrawerClose(): void {
       Drag-and-drop available on desktop
     </aside>
 
-    <!-- Tag filter bar placeholder (ICT-23 wires it up) -->
-    <div class="board-view__filter-bar" aria-label="Tag filters" />
+    <!-- Tag filter bar -->
+    <BoardTagFilter :board-id="boardId" />
 
     <!-- Loading state -->
     <div v-if="currentBoardStore.loading" class="board-view__state" aria-live="polite">
@@ -197,7 +198,6 @@ function handleDrawerClose(): void {
   flex-shrink: 0;
 }
 
-.board-view__filter-bar { height: 0; flex-shrink: 0; /* expanded by ICT-23 */ }
 
 .board-view__canvas {
   display: flex;
