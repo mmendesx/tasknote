@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import BoardView from '@/views/BoardView.vue'
+import BoardView from '@/features/board/BoardView.vue'
 import NotesView from '@/views/NotesView.vue'
 import ArchiveView from '@/views/ArchiveView.vue'
 import SettingsView from '@/views/SettingsView.vue'

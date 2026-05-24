@@ -13,13 +13,27 @@ const props = withDefaults(defineProps<{
   open?: boolean
   title: string
   description?: string
+  /** Show the X close button in the top-right corner. Default: true */
+  closable?: boolean
+  /** Allow closing via Escape key or clicking the backdrop. Default: true */
+  dismissable?: boolean
 }>(), {
   open: false,
+  closable: true,
+  dismissable: true,
 })
 
 const emit = defineEmits<{
   'update:open': [value: boolean]
 }>()
+
+function handleEscapeKeyDown(event: KeyboardEvent) {
+  if (!props.dismissable) event.preventDefault()
+}
+
+function handlePointerDownOutside(event: Event) {
+  if (!props.dismissable) event.preventDefault()
+}
 </script>
 
 <template>
@@ -37,6 +51,8 @@ const emit = defineEmits<{
                -translate-x-1/2 -translate-y-1/2
                rounded-modal border border-border bg-surface-elevated p-6 shadow-xl
                focus:outline-none"
+        @escape-key-down="handleEscapeKeyDown"
+        @pointer-down-outside="handlePointerDownOutside"
       >
         <div class="mb-4">
           <DialogTitle class="text-base font-semibold text-text-primary leading-heading">
@@ -58,8 +74,9 @@ const emit = defineEmits<{
           <slot name="footer" />
         </div>
 
-        <!-- Default close button in top-right -->
+        <!-- Close button in top-right — gated by closable prop -->
         <DialogClose
+          v-if="closable"
           class="absolute right-4 top-4 rounded-control p-1
                  text-text-muted hover:text-text-primary transition-colors
                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
