@@ -117,7 +117,7 @@ export function useShortcuts() {
         if (firstCol) {
           currentBoardStore.createTask(firstCol.id, {
             title: 'New task',
-            priority: 'medium',
+            priority: 'low',
             column_id: firstCol.id,
           })
           triggerShortcut('quick-add')

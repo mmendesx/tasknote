@@ -128,11 +128,16 @@ async function addTask(): Promise<void> {
   if (!firstCol) return
   isAddingTask.value = true
   try {
-    await currentBoardStore.createTask(firstCol.id, {
+    const task = await currentBoardStore.createTask(firstCol.id, {
       title: 'New task',
-      priority: 'medium',
+      priority: 'low',
       column_id: firstCol.id,
     })
+    if (task) {
+      // Open drawer immediately so user fills in details
+      selectedTaskId.value = task.id
+      drawerOpen.value = true
+    }
   } finally {
     isAddingTask.value = false
   }
