@@ -1,13 +1,18 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 import { useTheme } from '@/composables/useTheme'
+import { useMediaQuery } from '@vueuse/core'
 
 const { theme, toggleTheme } = useTheme()
 const route = useRoute()
 
 // Sidebar drawer state — for <600px mobile
 const isDrawerOpen = ref(false)
+const sidebarRef = ref<HTMLElement | null>(null)
+
+// Track mobile viewport to determine when trap should be active
+const isMobile = useMediaQuery('(max-width: 599px)')
 
 function toggleDrawer() {
   isDrawerOpen.value = !isDrawerOpen.value
@@ -16,6 +21,53 @@ function toggleDrawer() {
 function closeDrawer() {
   isDrawerOpen.value = false
 }
+
+// ─── Native focus trap for mobile drawer ─────────────────────────────────────
+// focus-trap package is not installed; this implements the same constraint
+// natively: tab/shift-tab cycle within focusable sidebar elements when open.
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+function trapFocus(event: KeyboardEvent) {
+  if (!sidebarRef.value) return
+  const focusable = Array.from(sidebarRef.value.querySelectorAll<HTMLElement>(FOCUSABLE))
+  if (focusable.length === 0) return
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  if (event.key === 'Tab') {
+    if (event.shiftKey) {
+      if (document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      }
+    } else {
+      if (document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+  }
+  if (event.key === 'Escape') {
+    closeDrawer()
+  }
+}
+
+watch(
+  () => isDrawerOpen.value && isMobile.value,
+  (active) => {
+    if (active) {
+      // Focus the first focusable element in the sidebar
+      const first = sidebarRef.value?.querySelector<HTMLElement>(FOCUSABLE)
+      first?.focus()
+      window.addEventListener('keydown', trapFocus)
+    } else {
+      window.removeEventListener('keydown', trapFocus)
+    }
+  },
+)
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', trapFocus)
+})
 
 // Current route label for the topbar
 const routeLabel = computed(() => {
@@ -45,6 +97,8 @@ const routeLabel = computed(() => {
 
     <!-- Sidebar -->
     <aside
+      id="sidebar-nav"
+      ref="sidebarRef"
       class="sidebar"
       :class="{ 'sidebar--drawer-open': isDrawerOpen }"
       aria-label="Main navigation"
@@ -96,6 +150,7 @@ const routeLabel = computed(() => {
             to="/"
             class="nav-item focus-ring"
             :class="{ 'nav-item--active': route.name === 'board-default' || route.name === 'board' }"
+            :aria-current="(route.name === 'board-default' || route.name === 'board') ? 'page' : undefined"
             @click="closeDrawer"
           >
             <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" class="nav-item__icon">
@@ -111,6 +166,7 @@ const routeLabel = computed(() => {
             to="/notes"
             class="nav-item focus-ring"
             :class="{ 'nav-item--active': route.name === 'notes' || route.name === 'note-detail' }"
+            :aria-current="(route.name === 'notes' || route.name === 'note-detail') ? 'page' : undefined"
             @click="closeDrawer"
           >
             <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" class="nav-item__icon">
@@ -137,6 +193,7 @@ const routeLabel = computed(() => {
             to="/archive"
             class="nav-item focus-ring"
             :class="{ 'nav-item--active': route.name === 'archive' }"
+            :aria-current="route.name === 'archive' ? 'page' : undefined"
             @click="closeDrawer"
           >
             <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" class="nav-item__icon">
@@ -155,6 +212,7 @@ const routeLabel = computed(() => {
           to="/settings"
           class="nav-item focus-ring"
           :class="{ 'nav-item--active': route.name === 'settings' }"
+          :aria-current="route.name === 'settings' ? 'page' : undefined"
           @click="closeDrawer"
         >
           <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" class="nav-item__icon">
@@ -178,8 +236,9 @@ const routeLabel = computed(() => {
         <!-- Hamburger (mobile only) -->
         <button
           class="topbar__hamburger focus-ring"
-          aria-label="Open navigation"
+          :aria-label="isDrawerOpen ? 'Close navigation' : 'Open navigation'"
           :aria-expanded="isDrawerOpen"
+          aria-controls="sidebar-nav"
           @click="toggleDrawer"
         >
           <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" width="20" height="20">

@@ -68,24 +68,26 @@ function handleClick() {
 </script>
 
 <template>
+  <!-- role="article" per ICT-26 spec. The element remains keyboard-operable via
+       tabindex + keydown handlers. Long-term, role="button" with aria-label is
+       preferred for AT announcement of the interactive pattern. -->
   <article
     class="task-card"
     :data-task-id="task.id"
-    :aria-label="task.title"
+    :aria-label="`${task.title} – priority ${priority.label}`"
     @click="handleClick"
     @keydown.enter="handleClick"
     @keydown.space.prevent="handleClick"
     @dragstart="onDragStart"
     @dragend="onDragEnd"
     tabindex="0"
-    role="button"
   >
     <!-- Drag handle (desktop only) -->
     <span
       class="task-handle col-handle"
       :class="{ 'handle--hidden': !isDesktop }"
-      aria-hidden="true"
-      title="Drag to reorder"
+      :aria-hidden="!isDesktop ? 'true' : undefined"
+      :aria-label="isDesktop ? 'Drag to reorder task' : undefined"
     >
       <svg viewBox="0 0 10 14" width="10" height="14" fill="none">
         <circle cx="3" cy="2.5" r="1" fill="currentColor" />

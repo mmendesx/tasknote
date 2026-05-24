@@ -99,7 +99,7 @@ function onListDragEnd(evt: DragEvent) {
 <template>
   <section
     class="kanban-column"
-    :aria-label="`Column: ${column.name}`"
+    :aria-label="`${column.name} column, ${taskCount} tasks`"
   >
     <!-- Column header -->
     <header class="kanban-column__header">
@@ -107,10 +107,10 @@ function onListDragEnd(evt: DragEvent) {
       <span
         class="col-handle"
         :class="{ 'handle--hidden': !isDesktop }"
-        aria-hidden="true"
-        title="Drag to reorder column"
+        :aria-hidden="!isDesktop ? 'true' : undefined"
+        :aria-label="isDesktop ? 'Drag to reorder column' : undefined"
       >
-        <svg viewBox="0 0 6 14" width="6" height="14" fill="none">
+        <svg viewBox="0 0 6 14" width="6" height="14" fill="none" aria-hidden="true">
           <circle cx="2" cy="2.5" r="1" fill="currentColor" />
           <circle cx="2" cy="7" r="1" fill="currentColor" />
           <circle cx="2" cy="11.5" r="1" fill="currentColor" />

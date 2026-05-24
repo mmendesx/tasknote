@@ -52,6 +52,20 @@ button {
   border-radius: var(--radius-control);
 }
 
+/* ─── Baseline focus ring for all interactive elements ───────────── */
+/* Applied globally so any element without an explicit .focus-ring
+   class still receives a visible focus indicator. Component-level
+   :focus-visible rules override via higher specificity. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:not([tabindex="-1"]):focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
 /* ─── Scrollbar styling ───────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 6px;

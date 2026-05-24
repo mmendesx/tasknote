@@ -235,6 +235,10 @@ function handleDrawerClose(): void {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+@media (prefers-reduced-motion: reduce) {
+  .state-spinner { animation: none; }
+}
+
 :global(.col-ghost) {
   opacity: 0.35;
   border: 2px dashed var(--color-accent);

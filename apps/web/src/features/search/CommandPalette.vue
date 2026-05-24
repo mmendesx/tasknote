@@ -229,9 +229,11 @@ function priorityLabel(task: Task): string {
             spellcheck="false"
             class="flex-1 bg-transparent font-sans text-sm text-text-primary
                    placeholder:text-text-muted outline-none"
-            aria-label="Search"
+            role="combobox"
+            aria-label="Global search"
             aria-autocomplete="list"
             aria-controls="command-palette-results"
+            aria-expanded="true"
             :aria-activedescendant="
               flatResults[selectedIndex]
                 ? `cp-result-${flatResults[selectedIndex].kind}-${flatResults[selectedIndex].item.id}`

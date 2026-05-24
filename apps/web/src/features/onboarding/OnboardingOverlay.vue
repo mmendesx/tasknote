@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import { Dialog } from '@tasknote/ui'
 import { useSettingsStore } from '@/stores'
 import StepWelcome from './onboarding-steps/StepWelcome.vue'
@@ -27,13 +27,21 @@ function getSystemTimezone(): string {
 const stepTitles: Record<Step, string> = {
   1: 'Welcome to TaskNote',
   2: 'Your profile',
-  3: 'Getting started',
+  3: 'Get started',
 }
 
 const dialogTitle = computed(() => stepTitles[currentStep.value])
+const stepContentRef = ref<HTMLElement | null>(null)
 
 function goToStep(step: Step) {
   currentStep.value = step
+  // Focus first interactive element after the DOM updates
+  nextTick(() => {
+    const el = stepContentRef.value?.querySelector<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )
+    el?.focus()
+  })
 }
 
 function handleProfileNext(name: string, tz: string) {
@@ -75,32 +83,35 @@ async function handleFinish() {
         />
       </div>
 
-      <!-- Step 1: Welcome -->
-      <StepWelcome
-        v-if="currentStep === 1"
-        @next="goToStep(2)"
-      />
+      <!-- Step content wrapper — used to focus first element on step change -->
+      <div ref="stepContentRef">
+        <!-- Step 1: Welcome -->
+        <StepWelcome
+          v-if="currentStep === 1"
+          @next="goToStep(2)"
+        />
 
-      <!-- Step 2: Profile -->
-      <StepProfile
-        v-else-if="currentStep === 2"
-        :display-name="displayName"
-        :timezone="timezone"
-        @update:display-name="displayName = $event"
-        @update:timezone="timezone = $event"
-        @back="goToStep(1)"
-        @next="handleProfileNext"
-      />
+        <!-- Step 2: Profile -->
+        <StepProfile
+          v-else-if="currentStep === 2"
+          :display-name="displayName"
+          :timezone="timezone"
+          @update:display-name="displayName = $event"
+          @update:timezone="timezone = $event"
+          @back="goToStep(1)"
+          @next="handleProfileNext"
+        />
 
-      <!-- Step 3: Seed choice -->
-      <StepSeed
-        v-else-if="currentStep === 3"
-        :seed="seed"
-        :submitting="isSubmitting"
-        @update:seed="seed = $event"
-        @back="goToStep(2)"
-        @finish="handleFinish"
-      />
+        <!-- Step 3: Seed choice -->
+        <StepSeed
+          v-else-if="currentStep === 3"
+          :seed="seed"
+          :submitting="isSubmitting"
+          @update:seed="seed = $event"
+          @back="goToStep(2)"
+          @finish="handleFinish"
+        />
+      </div>
     </template>
   </Dialog>
 </template>
