@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useSortable } from '@vueuse/integrations/useSortable'
 import type { ColumnWithTasks } from '@tasknote/shared'
 import { useCurrentBoardStore } from '@/stores/currentBoard'
@@ -12,6 +12,7 @@ import TaskDrawer from './TaskDrawer.vue'
 import BoardTagFilter from '@/features/tags/BoardTagFilter.vue'
 
 const route = useRoute()
+const router = useRouter()
 const currentBoardStore = useCurrentBoardStore()
 const boardsStore = useBoardsStore()
 const tagsStore = useTagsStore()
@@ -77,16 +78,20 @@ const visibleColumns = computed(() => {
 
 const columnsContainerRef = ref<HTMLElement | null>(null)
 
-useSortable(columnsContainerRef, localColumns, {
+const { option: colSortableOption } = useSortable(columnsContainerRef, localColumns, {
   animation: 150,
   handle: '.col-handle',
-  disabled: !isDesktop.value,
+  disabled: false, // reactive update below
   ghostClass: 'col-ghost',
   filter: '.kanban-column__tasks',
   onEnd: () => {
     currentBoardStore.reorderColumns(localColumns.value.map((c) => c.id))
   },
 })
+
+watch(isDesktop, (desktop) => {
+  colSortableOption('disabled', !desktop)
+}, { immediate: true })
 
 // ─── Task move handler (from child) ──────────────────────────────────────────
 
@@ -107,6 +112,21 @@ function handleOpenTask(taskId: number): void {
 function handleDrawerClose(): void {
   drawerOpen.value = false
   selectedTaskId.value = null
+}
+
+// ─── Create first board ───────────────────────────────────────────────────────
+
+const isCreatingBoard = ref(false)
+
+async function createFirstBoard() {
+  if (isCreatingBoard.value) return
+  isCreatingBoard.value = true
+  try {
+    const board = await boardsStore.create({ name: 'My Board', position: 0 })
+    router.push(`/b/${board.id}`)
+  } finally {
+    isCreatingBoard.value = false
+  }
 }
 </script>
 
@@ -146,7 +166,19 @@ function handleDrawerClose(): void {
       class="board-view__state"
       aria-live="polite"
     >
-      <p>No board selected.</p>
+      <svg viewBox="0 0 48 48" fill="none" width="48" height="48" aria-hidden="true" style="color: var(--color-border)">
+        <rect x="2" y="2" width="18" height="44" rx="3" stroke="currentColor" stroke-width="2.5" />
+        <rect x="26" y="2" width="20" height="28" rx="3" stroke="currentColor" stroke-width="2.5" />
+      </svg>
+      <p style="font-weight: 600; color: var(--color-text-primary)">No board yet</p>
+      <p style="font-size: var(--text-xs)">Create your first board to get started</p>
+      <button
+        class="board-create-btn focus-ring"
+        :disabled="isCreatingBoard"
+        @click="createFirstBoard"
+      >
+        {{ isCreatingBoard ? 'Creating…' : '+ New board' }}
+      </button>
     </div>
 
     <!-- Board canvas -->
@@ -237,6 +269,27 @@ function handleDrawerClose(): void {
 
 @media (prefers-reduced-motion: reduce) {
   .state-spinner { animation: none; }
+}
+
+.board-create-btn {
+  margin-top: 4px;
+  padding: 8px 20px;
+  border-radius: var(--radius-control);
+  background-color: var(--color-accent);
+  color: var(--color-bg);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--motion-duration-fast);
+}
+
+.board-create-btn:hover:not(:disabled) {
+  background-color: var(--color-accent-hover);
+}
+
+.board-create-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 :global(.col-ghost) {

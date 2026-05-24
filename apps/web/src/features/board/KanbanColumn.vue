@@ -69,12 +69,12 @@ watch(isOverLimit, async (over) => {
 // Task list sortable
 const taskListRef = ref<HTMLElement | null>(null)
 
-useSortable(taskListRef, localTasks, {
+const { option: sortableOption } = useSortable(taskListRef, localTasks, {
   group: 'tasks',
   animation: 150,
   handle: '.task-handle',
   draggable: '.task-card',
-  disabled: !isDesktop.value,
+  disabled: false, // reactive update below
   ghostClass: 'task-ghost',
   dragClass: 'task-dragging',
   onEnd: (evt) => {
@@ -85,6 +85,11 @@ useSortable(taskListRef, localTasks, {
     emit('moveTask', taskId, toColumnId, toPosition)
   },
 })
+
+// Keep Sortable disabled flag in sync with viewport width
+watch(isDesktop, (desktop) => {
+  sortableOption('disabled', !desktop)
+}, { immediate: true })
 
 // Anime lift on drag start — list-level handler to avoid double-fire with TaskCard
 function onListDragStart(evt: DragEvent) {
