@@ -90,9 +90,13 @@ const { option: colSortableOption } = useSortable(columnsContainerRef, localColu
   },
 })
 
-watch(isDesktop, (desktop) => {
-  colSortableOption('disabled', !desktop)
-}, { immediate: true })
+// Must run after mount — colSortableOption() is a no-op before tryOnMounted fires.
+onMounted(() => {
+  colSortableOption('disabled', !isDesktop.value)
+  watch(isDesktop, (desktop) => {
+    colSortableOption('disabled', !desktop)
+  })
+})
 
 // ─── Task move handler (from child) ──────────────────────────────────────────
 

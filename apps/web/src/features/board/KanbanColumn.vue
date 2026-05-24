@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { useSortable } from '@vueuse/integrations/useSortable'
 import type { ColumnWithTasks, Task } from '@tasknote/shared'
 import { useIsDesktop } from '@/composables/useIsDesktop'
@@ -71,10 +71,14 @@ const { option: sortableOption } = useSortable(taskListRef, localTasks, {
   },
 })
 
-// Keep Sortable disabled flag in sync with viewport width
-watch(isDesktop, (desktop) => {
-  sortableOption('disabled', !desktop)
-}, { immediate: true })
+// Keep Sortable disabled flag in sync with viewport width.
+// Must run after mount — sortableOption() is a no-op before tryOnMounted fires.
+onMounted(() => {
+  sortableOption('disabled', !isDesktop.value)
+  watch(isDesktop, (desktop) => {
+    sortableOption('disabled', !desktop)
+  })
+})
 
 // Anime lift on drag start — list-level handler to avoid double-fire with TaskCard
 function onListDragStart(evt: DragEvent) {
