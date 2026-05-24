@@ -13,12 +13,7 @@ import {
   UsePipes,
 } from '@nestjs/common';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
-import {
-  CreateFileRefDto,
-  CreateFileRefDtoSchema,
-  UpdateFileRefDto,
-  UpdateFileRefDtoSchema,
-} from '@tasknote/shared';
+import * as shared from '@tasknote/shared';
 import { FileRefsService } from './file-refs.service';
 
 @Controller('file-refs')
@@ -45,8 +40,8 @@ export class FileRefsController {
    */
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @UsePipes(new ZodValidationPipe(CreateFileRefDtoSchema))
-  createFileRef(@Body() dto: CreateFileRefDto) {
+  @UsePipes(new ZodValidationPipe(shared.CreateFileRefDtoSchema))
+  createFileRef(@Body() dto: shared.CreateFileRefDto) {
     return this.fileRefsService.createFileRef(dto);
   }
 
@@ -55,10 +50,9 @@ export class FileRefsController {
    * If path is included, it is re-validated by the service layer.
    */
   @Patch(':id')
-  @UsePipes(new ZodValidationPipe(UpdateFileRefDtoSchema))
   updateFileRef(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateFileRefDto,
+    @Body(new ZodValidationPipe(shared.UpdateFileRefDtoSchema)) dto: shared.UpdateFileRefDto,
   ) {
     return this.fileRefsService.updateFileRef(id, dto);
   }

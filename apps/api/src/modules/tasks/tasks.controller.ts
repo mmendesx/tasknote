@@ -13,14 +13,7 @@ import {
   UsePipes,
 } from '@nestjs/common';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
-import {
-  CreateTaskDto,
-  CreateTaskDtoSchema,
-  UpdateTaskDto,
-  UpdateTaskDtoSchema,
-  MoveTaskDto,
-  MoveTaskDtoSchema,
-} from '@tasknote/shared';
+import * as shared from '@tasknote/shared';
 import { TasksService } from './tasks.service';
 
 @Controller('tasks')
@@ -30,15 +23,15 @@ export class TasksController {
   /** POST /api/tasks — create a task; position = max+1 within the column */
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @UsePipes(new ZodValidationPipe(CreateTaskDtoSchema))
-  createTask(@Body() dto: CreateTaskDto) {
+  @UsePipes(new ZodValidationPipe(shared.CreateTaskDtoSchema))
+  createTask(@Body() dto: shared.CreateTaskDto) {
     return this.tasksService.createTask(dto);
   }
 
   /** POST /api/tasks/move — move a task to a different column/position (transactional) */
   @Post('move')
-  @UsePipes(new ZodValidationPipe(MoveTaskDtoSchema))
-  moveTask(@Body() dto: MoveTaskDto) {
+  @UsePipes(new ZodValidationPipe(shared.MoveTaskDtoSchema))
+  moveTask(@Body() dto: shared.MoveTaskDto) {
     return this.tasksService.moveTask(dto);
   }
 
@@ -56,8 +49,10 @@ export class TasksController {
 
   /** PATCH /api/tasks/:id — partial update; if column_id changes, applies completed_at logic */
   @Patch(':id')
-  @UsePipes(new ZodValidationPipe(UpdateTaskDtoSchema))
-  updateTask(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateTaskDto) {
+  updateTask(
+    @Param('id', ParseIntPipe) id: number,
+    @Body(new ZodValidationPipe(shared.UpdateTaskDtoSchema)) dto: shared.UpdateTaskDto,
+  ) {
     return this.tasksService.updateTask(id, dto);
   }
 

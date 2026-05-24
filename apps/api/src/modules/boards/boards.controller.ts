@@ -12,12 +12,7 @@ import {
   UsePipes,
 } from '@nestjs/common';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
-import {
-  CreateBoardDto,
-  CreateBoardDtoSchema,
-  UpdateBoardDto,
-  UpdateBoardDtoSchema,
-} from '@tasknote/shared';
+import * as shared from '@tasknote/shared';
 import { BoardsService } from './boards.service';
 
 @Controller('boards')
@@ -33,8 +28,8 @@ export class BoardsController {
   /** POST /api/boards — create a new board with 4 default columns */
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @UsePipes(new ZodValidationPipe(CreateBoardDtoSchema))
-  createBoard(@Body() dto: CreateBoardDto) {
+  @UsePipes(new ZodValidationPipe(shared.CreateBoardDtoSchema))
+  createBoard(@Body() dto: shared.CreateBoardDto) {
     return this.boardsService.createBoard(dto);
   }
 
@@ -46,8 +41,10 @@ export class BoardsController {
 
   /** PATCH /api/boards/:id — partial update */
   @Patch(':id')
-  @UsePipes(new ZodValidationPipe(UpdateBoardDtoSchema))
-  updateBoard(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateBoardDto) {
+  updateBoard(
+    @Param('id', ParseIntPipe) id: number,
+    @Body(new ZodValidationPipe(shared.UpdateBoardDtoSchema)) dto: shared.UpdateBoardDto,
+  ) {
     return this.boardsService.updateBoard(id, dto);
   }
 
