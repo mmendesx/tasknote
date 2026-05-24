@@ -14,9 +14,15 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   select: [id: number]
+  deleted: [id: number]
 }>()
 
 const notesStore = useNotesStore()
+
+async function handleDelete(id: number): Promise<void> {
+  await notesStore.softDelete(id)
+  emit('deleted', id)
+}
 
 onMounted(() => {
   notesStore.load()
@@ -44,14 +50,15 @@ function stripMarkdown(md: string): string {
 
 function deriveTitle(note: Note): string {
   if (note.title) return note.title
-  const firstHeading = note.body_md.match(/^#{1,6}\s+(.+)$/m)
+  const body = note.body_md ?? ''
+  const firstHeading = body.match(/^#{1,6}\s+(.+)$/m)
   if (firstHeading) return firstHeading[1].trim()
-  const firstLine = note.body_md.split('\n').find((l) => l.trim())
+  const firstLine = body.split('\n').find((l) => l.trim())
   return firstLine ? stripMarkdown(firstLine).slice(0, 60) || 'Untitled' : 'Untitled'
 }
 
 function getPreview(note: Note): string {
-  return stripMarkdown(note.body_md).slice(0, 80)
+  return stripMarkdown(note.body_md ?? '').slice(0, 80)
 }
 </script>
 
@@ -74,11 +81,20 @@ function getPreview(note: Note): string {
           aria-label="Pinned"
           title="Pinned"
         >
-          <!-- pin icon: simple SVG -->
           <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path d="M16 3v2l-1 1v5l3 2v2h-5v6l-1 1-1-1v-6H6v-2l3-2V6L8 5V3z"/>
           </svg>
         </span>
+        <button
+          class="note-item__del"
+          aria-label="Delete note"
+          title="Delete note"
+          @click.stop="handleDelete(note.id)"
+        >
+          <svg viewBox="0 0 12 12" width="12" height="12" fill="none" aria-hidden="true">
+            <path d="M1 3h10M4 3V2h4v1M5 5.5v3M7 5.5v3M2 3l.8 7.2A.9.9 0 0 0 3.7 11h4.6a.9.9 0 0 0 .9-.8L10 3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
       </div>
       <p class="note-item__preview">{{ getPreview(note) }}</p>
       <time class="note-item__time" :datetime="String(note.updated_at)">
@@ -136,6 +152,32 @@ function getPreview(note: Note): string {
 .note-item__pin {
   color: var(--color-accent);
   flex-shrink: 0;
+}
+
+.note-item__del {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: color var(--motion-duration-fast), opacity var(--motion-duration-fast), background-color var(--motion-duration-fast);
+}
+
+.note-item:hover .note-item__del {
+  opacity: 1;
+}
+
+.note-item__del:hover {
+  color: var(--color-status-blocked);
+  background-color: color-mix(in srgb, var(--color-status-blocked) 12%, transparent);
 }
 
 .note-item__preview {

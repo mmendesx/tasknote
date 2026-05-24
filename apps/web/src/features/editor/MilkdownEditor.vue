@@ -10,6 +10,7 @@
  * ICT-19 (TaskDrawer) should import from here; the board/ copy is kept as a
  * re-export shim to avoid breaking ICT-19 if it ran before this move.
  */
+import '@milkdown/theme-nord/style.css'
 import { defineComponent, h } from 'vue'
 import { Milkdown as MilkdownComp, MilkdownProvider, useEditor } from '@milkdown/vue'
 import { Editor, rootCtx, defaultValueCtx, editorViewOptionsCtx } from '@milkdown/core'
@@ -18,7 +19,6 @@ import { gfm } from '@milkdown/preset-gfm'
 import { listener, listenerCtx } from '@milkdown/plugin-listener'
 import { history } from '@milkdown/plugin-history'
 import { clipboard } from '@milkdown/plugin-clipboard'
-import { prism } from '@milkdown/plugin-prism'
 
 const props = withDefaults(defineProps<{
   modelValue?: string
@@ -60,7 +60,6 @@ const EditorInner = defineComponent({
         .use(listener)
         .use(history)
         .use(clipboard)
-        .use(prism)
     )
 
     return () => h(MilkdownComp)
@@ -82,6 +81,21 @@ const EditorInner = defineComponent({
     </MilkdownProvider>
   </div>
 </template>
+
+<!-- Override Milkdown theme-nord CSS vars to match TaskNote design tokens -->
+<style>
+.milkdown {
+  --nord0: var(--color-surface);
+  --nord1: var(--color-surface-elevated);
+  --nord3: var(--color-border);
+  --nord4: var(--color-text-secondary);
+  --nord6: var(--color-text-primary);
+  --nord8: var(--color-accent);
+  --nord10: var(--color-accent);
+  background: transparent !important;
+  color: var(--color-text-primary) !important;
+}
+</style>
 
 <style scoped>
 .milkdown-host {

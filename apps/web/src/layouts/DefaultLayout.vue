@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from 'vue'
-import { useRoute, RouterLink } from 'vue-router'
+import { ref, computed, watch, onUnmounted, onMounted, nextTick } from 'vue'
+import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { useTheme } from '@/composables/useTheme'
 import { useMediaQuery } from '@vueuse/core'
+import { useBoardsStore } from '@/stores/boards'
 
 const { theme, toggleTheme } = useTheme()
 const route = useRoute()
+const router = useRouter()
+const boardsStore = useBoardsStore()
 
 // Sidebar drawer state — for <600px mobile
 const isDrawerOpen = ref(false)
@@ -69,6 +72,105 @@ onUnmounted(() => {
   window.removeEventListener('keydown', trapFocus)
 })
 
+// ─── Boards ───────────────────────────────────────────────────────────────────
+
+onMounted(() => {
+  if (boardsStore.list.length === 0) {
+    boardsStore.load()
+  }
+})
+
+const sortedBoards = computed(() =>
+  [...boardsStore.list].sort((a, b) => a.position - b.position)
+)
+
+const isCreatingBoard = ref(false)
+
+async function createBoard() {
+  if (isCreatingBoard.value) return
+  isCreatingBoard.value = true
+  try {
+    const name = `Board ${boardsStore.list.length + 1}`
+    const board = await boardsStore.create({ name, position: boardsStore.list.length })
+    router.push(`/b/${board.id}`)
+    closeDrawer()
+  } finally {
+    isCreatingBoard.value = false
+  }
+}
+
+// ─── Delete board ─────────────────────────────────────────────────────────────
+
+const deletingBoardId = ref<number | null>(null)
+
+async function deleteBoard(boardId: number): Promise<void> {
+  const currentRoute = route.name as string
+  const currentBoardRouteId = String(route.params.id ?? '')
+  // Snapshot before remove — defaultBoardId changes once the board is gone
+  const wasDefault = boardId === boardsStore.defaultBoardId.value
+  const nextId = boardsStore.list.find((b) => b.id !== boardId)?.id ?? null
+  try {
+    await boardsStore.remove(boardId)
+  } catch {
+    deletingBoardId.value = null
+    return
+  }
+  deletingBoardId.value = null
+  // Redirect if we just deleted the active board
+  const wasActive =
+    (currentRoute === 'board' && currentBoardRouteId === String(boardId)) ||
+    (currentRoute === 'board-default' && wasDefault)
+  if (wasActive) {
+    router.push(nextId ? `/b/${nextId}` : '/')
+  }
+}
+
+// ─── Rename board ─────────────────────────────────────────────────────────────
+
+const editingBoardId = ref<number | null>(null)
+const editingBoardName = ref('')
+// Array ref — v-for template refs become arrays in Vue 3
+const boardNameInputRef = ref<HTMLInputElement[]>([])
+
+async function startRenamingBoard(boardId: number, currentName: string): Promise<void> {
+  editingBoardId.value = boardId
+  editingBoardName.value = currentName
+  await nextTick()
+  const input = boardNameInputRef.value[0]
+  input?.focus()
+  input?.select()
+}
+
+async function saveRenameBoard(): Promise<void> {
+  if (!editingBoardId.value) return
+  const trimmed = editingBoardName.value.trim()
+  if (trimmed) {
+    try {
+      await boardsStore.update(editingBoardId.value, { name: trimmed })
+    } catch {
+      // silently revert on error
+    }
+  }
+  editingBoardId.value = null
+}
+
+function cancelRenameBoard(): void {
+  editingBoardId.value = null
+}
+
+function navigateToBoard(boardId: number): void {
+  router.push(`/b/${boardId}`)
+  closeDrawer()
+}
+
+// ─── Sidebar collapse (desktop) ───────────────────────────────────────────────
+
+const isSidebarCollapsed = ref(false)
+
+function toggleSidebar() {
+  isSidebarCollapsed.value = !isSidebarCollapsed.value
+}
+
 // Current route label for the topbar
 const routeLabel = computed(() => {
   const name = route.name as string | undefined
@@ -86,7 +188,7 @@ const routeLabel = computed(() => {
 </script>
 
 <template>
-  <div class="app-shell">
+  <div class="app-shell" :class="{ 'app-shell--sidebar-collapsed': isSidebarCollapsed }">
     <!-- Mobile drawer backdrop -->
     <div
       v-if="isDrawerOpen"
@@ -100,10 +202,10 @@ const routeLabel = computed(() => {
       id="sidebar-nav"
       ref="sidebarRef"
       class="sidebar"
-      :class="{ 'sidebar--drawer-open': isDrawerOpen }"
+      :class="{ 'sidebar--drawer-open': isDrawerOpen, 'sidebar--collapsed': isSidebarCollapsed }"
       aria-label="Main navigation"
     >
-      <!-- Logo -->
+      <!-- Logo + collapse toggle -->
       <div class="sidebar__logo">
         <RouterLink to="/" class="logo-link focus-ring" @click="closeDrawer">
           <!-- Inline logo mark SVG -->
@@ -138,27 +240,127 @@ const routeLabel = computed(() => {
           </svg>
           <span class="logo-wordmark">tasknote</span>
         </RouterLink>
+        <button
+          class="sidebar__collapse-btn focus-ring"
+          :aria-label="isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+          :title="isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+          @click="toggleSidebar"
+        >
+          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" width="16" height="16">
+            <path
+              :d="isSidebarCollapsed ? 'M6 3l5 5-5 5' : 'M10 3L5 8l5 5'"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
       </div>
 
       <!-- Navigation -->
       <nav class="sidebar__nav">
-        <!-- Boards section placeholder -->
         <div class="nav-section">
-          <p class="nav-section__label">Boards</p>
-          <!-- Board list populated in ICT-16/ICT-18 -->
-          <RouterLink
-            to="/"
-            class="nav-item focus-ring"
-            :class="{ 'nav-item--active': route.name === 'board-default' || route.name === 'board' }"
-            :aria-current="(route.name === 'board-default' || route.name === 'board') ? 'page' : undefined"
-            @click="closeDrawer"
+          <div class="nav-section__header">
+            <p class="nav-section__label">Boards</p>
+            <button
+              class="nav-section__add focus-ring"
+              aria-label="New board"
+              title="New board"
+              :disabled="isCreatingBoard"
+              @click="createBoard"
+            >
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" width="14" height="14">
+                <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+              </svg>
+            </button>
+          </div>
+
+          <!-- Board list -->
+          <div
+            v-for="board in sortedBoards"
+            :key="board.id"
+            class="nav-item nav-item--board focus-ring"
+            :class="{ 'nav-item--active': (route.name === 'board' && String(route.params.id) === String(board.id)) || (route.name === 'board-default' && board.id === boardsStore.defaultBoardId) }"
+            :aria-current="((route.name === 'board' && String(route.params.id) === String(board.id)) || (route.name === 'board-default' && board.id === boardsStore.defaultBoardId)) ? 'page' : undefined"
+            role="link"
+            tabindex="0"
+            @click="editingBoardId !== board.id && navigateToBoard(board.id)"
+            @keydown.enter="editingBoardId !== board.id && navigateToBoard(board.id)"
           >
-            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" class="nav-item__icon">
+            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" class="nav-item__icon" style="flex-shrink:0">
               <rect x="1" y="1" width="6" height="14" rx="1" stroke="currentColor" stroke-width="1.5" />
               <rect x="9" y="1" width="6" height="9" rx="1" stroke="currentColor" stroke-width="1.5" />
             </svg>
-            <span class="nav-item__label">Default board</span>
-          </RouterLink>
+
+            <!-- Inline rename input OR static name -->
+            <input
+              v-if="editingBoardId === board.id"
+              ref="boardNameInputRef"
+              v-model="editingBoardName"
+              class="nav-item__rename-input"
+              type="text"
+              maxlength="100"
+              @click.stop
+              @keydown.enter.stop="saveRenameBoard"
+              @keydown.escape.stop="cancelRenameBoard"
+              @blur="saveRenameBoard"
+            />
+            <span v-else class="nav-item__label">{{ board.name }}</span>
+
+            <!-- Board action buttons (visible on row hover) -->
+            <div class="nav-item__actions" @click.stop>
+              <!-- Delete confirm state -->
+              <template v-if="deletingBoardId === board.id">
+                <button
+                  class="nav-item__action-btn nav-item__action-btn--danger"
+                  title="Confirm delete"
+                  aria-label="Confirm delete board"
+                  @click.stop="deleteBoard(board.id)"
+                >
+                  <svg viewBox="0 0 12 12" width="12" height="12" fill="none" aria-hidden="true">
+                    <path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </button>
+                <button
+                  class="nav-item__action-btn"
+                  title="Cancel delete"
+                  aria-label="Cancel delete board"
+                  @click.stop="deletingBoardId = null"
+                >
+                  <svg viewBox="0 0 12 12" width="12" height="12" fill="none" aria-hidden="true">
+                    <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                  </svg>
+                </button>
+              </template>
+              <!-- Rename + trash icons (default) -->
+              <template v-else>
+                <button
+                  class="nav-item__action-btn"
+                  title="Rename board"
+                  aria-label="Rename board"
+                  @click.stop="startRenamingBoard(board.id, board.name)"
+                >
+                  <svg viewBox="0 0 12 12" width="12" height="12" fill="none" aria-hidden="true">
+                    <path d="M8 2l2 2-6 6H2V8z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </button>
+                <button
+                  class="nav-item__action-btn nav-item__del-btn"
+                  title="Delete board"
+                  aria-label="Delete board"
+                  @click.stop="deletingBoardId = board.id"
+                >
+                  <svg viewBox="0 0 12 12" width="12" height="12" fill="none" aria-hidden="true">
+                    <path d="M1 3h10M4 3V2h4v1M5 5.5v3M7 5.5v3M2 3l.8 7.2A.9.9 0 0 0 3.7 11h4.6a.9.9 0 0 0 .9-.8L10 3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </button>
+              </template>
+            </div>
+          </div>
+
+          <!-- Fallback when no boards yet -->
+          <p v-if="boardsStore.list.length === 0" class="nav-section__empty">No boards yet</p>
         </div>
 
         <div class="nav-section">
@@ -227,6 +429,7 @@ const routeLabel = computed(() => {
           <span class="nav-item__label">Settings</span>
         </RouterLink>
       </div>
+
     </aside>
 
     <!-- Main area: topbar + content -->
@@ -354,6 +557,10 @@ const routeLabel = computed(() => {
   padding: 20px 16px 16px;
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .logo-link {
@@ -536,6 +743,167 @@ const routeLabel = computed(() => {
 /* ─── Mobile drawer backdrop ──────────────────────────────────────── */
 .drawer-backdrop {
   display: none;
+}
+
+/* ─── Nav section header (boards) ────────────────────────────────── */
+.nav-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 4px;
+}
+
+.nav-section__add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-control);
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+  transition: color var(--motion-duration-fast), background-color var(--motion-duration-fast);
+}
+
+.nav-section__add:hover:not(:disabled) {
+  color: var(--color-text-primary);
+  background-color: var(--color-surface-elevated);
+}
+
+.nav-section__add:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.nav-section__empty {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  padding: 4px 8px;
+  margin: 0;
+}
+
+/* ─── Board row actions (delete / rename) ────────────────────────── */
+.nav-item--board {
+  cursor: pointer;
+  position: relative;
+}
+
+.nav-item__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity var(--motion-duration-fast);
+}
+
+.nav-item--board:hover .nav-item__actions,
+.nav-item--board:focus-within .nav-item__actions {
+  opacity: 1;
+}
+
+.nav-item__action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: color var(--motion-duration-fast), background-color var(--motion-duration-fast);
+  flex-shrink: 0;
+}
+
+.nav-item__action-btn:hover {
+  color: var(--color-text-primary);
+  background-color: color-mix(in srgb, var(--color-text-primary) 10%, transparent);
+}
+
+.nav-item__del-btn:hover {
+  color: var(--color-status-blocked);
+  background-color: color-mix(in srgb, var(--color-status-blocked) 12%, transparent);
+}
+
+.nav-item__action-btn--danger {
+  color: var(--color-status-blocked);
+}
+
+.nav-item__action-btn--danger:hover {
+  background-color: color-mix(in srgb, var(--color-status-blocked) 12%, transparent);
+}
+
+.nav-item__rename-input {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text-primary);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-accent);
+  border-radius: 4px;
+  padding: 1px 6px;
+  outline: none;
+  line-height: 1.4;
+}
+
+/* ─── Sidebar collapse button ─────────────────────────────────────── */
+.sidebar__collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-control);
+  color: var(--color-text-muted);
+  transition: color var(--motion-duration-fast), background-color var(--motion-duration-fast);
+  flex-shrink: 0;
+}
+
+.sidebar__collapse-btn:hover {
+  color: var(--color-text-primary);
+  background-color: var(--color-surface-elevated);
+}
+
+/* ─── Collapsed sidebar (desktop) ────────────────────────────────── */
+@media (min-width: 600px) {
+  .app-shell--sidebar-collapsed {
+    grid-template-columns: 64px 1fr;
+  }
+
+  .sidebar--collapsed {
+    width: 64px !important;
+  }
+
+  .sidebar--collapsed .logo-wordmark,
+  .sidebar--collapsed .nav-item__label,
+  .sidebar--collapsed .nav-section__label,
+  .sidebar--collapsed .nav-section__header p,
+  .sidebar--collapsed .nav-section__add,
+  .sidebar--collapsed .nav-section__empty,
+  .sidebar--collapsed .nav-item__actions,
+  .sidebar--collapsed .nav-item__rename-input {
+    display: none;
+  }
+
+  .sidebar--collapsed .logo-link {
+    display: none;
+  }
+
+  .sidebar--collapsed .sidebar__logo {
+    justify-content: center;
+    padding: 12px 8px;
+  }
+
+  .sidebar--collapsed .nav-item {
+    justify-content: center;
+    padding: 8px;
+  }
 }
 
 /* ─── Responsive: icon-rail at <900px ────────────────────────────── */

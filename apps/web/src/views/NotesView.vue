@@ -6,7 +6,7 @@
  */
 import { computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Button } from '@tasknote/ui'
+import { Button, useToast } from '@tasknote/ui'
 import NoteList from '@/features/notes/NoteList.vue'
 import NoteEditor from '@/features/notes/NoteEditor.vue'
 import { useNotesStore } from '@/stores/notes'
@@ -14,6 +14,7 @@ import { useNotesStore } from '@/stores/notes'
 const router = useRouter()
 const route = useRoute()
 const notesStore = useNotesStore()
+const toast = useToast()
 
 // Selected note id is driven by the URL param
 const selectedId = computed<number | null>(() => {
@@ -28,8 +29,12 @@ function selectNote(id: number): void {
 }
 
 async function createNote(): Promise<void> {
-  const note = await notesStore.create({ body_md: '', title: '' })
-  router.push({ name: 'note-detail', params: { id: note.id } })
+  try {
+    const note = await notesStore.create({ body_md: '', title: '' })
+    router.push({ name: 'note-detail', params: { id: note.id } })
+  } catch {
+    toast.error('Failed to create note', 'Please try again.')
+  }
 }
 
 function handleDeleted(id: number): void {
@@ -53,6 +58,7 @@ function handleDeleted(id: number): void {
       <NoteList
         :selected-id="selectedId"
         @select="selectNote"
+        @deleted="handleDeleted"
       />
     </aside>
 
