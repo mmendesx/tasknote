@@ -1,9 +1,10 @@
 <script setup lang="ts">
 /**
  * TaskDrawer — right-side drawer for task detail, notes, and file refs.
- * Props: open (v-model:open), taskId (number | null)
+ * Props: open (v-model:open), taskId (number | null), newTaskDefaults (optional)
  * Tabs: Details | Notes | Files
  * Auto-patches on field change (debounced 500ms).
+ * When newTaskDefaults is set and taskId is null, renders a create form instead.
  */
 import { ref, watch, computed } from 'vue'
 import { TabsRoot, TabsList, TabsTrigger, TabsContent } from 'reka-ui'
@@ -23,10 +24,15 @@ import type { Task, Note, FileRef, Priority } from '@tasknote/shared'
 const props = defineProps<{
   open: boolean
   taskId: number | null
+  newTaskDefaults?: {
+    columnId: number
+    priority: Priority
+  }
 }>()
 
 const emit = defineEmits<{
   'update:open': [value: boolean]
+  'created': [taskId: number]
 }>()
 
 const boardStore    = useCurrentBoardStore()
@@ -35,7 +41,44 @@ const fileRefsStore = useFileRefsStore()
 const tagsStore     = useTagsStore()
 const toast         = useToast()
 
-// ─── Form state ────────────────────────────────────────────────────────────
+// ─── Create mode ───────────────────────────────────────────────────────────
+const isCreateMode = computed(() => props.taskId === null && props.newTaskDefaults != null)
+
+// Separate state for create form — avoids cross-contamination with edit state
+const createTitle      = ref('')
+const createPriority   = ref<Priority>('low')
+const createColumnId   = ref<number>(0)
+const isSavingCreate   = ref(false)
+
+// Seed create form fields when entering create mode
+watch(isCreateMode, (entering) => {
+  if (entering && props.newTaskDefaults) {
+    createTitle.value    = ''
+    createPriority.value = props.newTaskDefaults.priority
+    createColumnId.value = props.newTaskDefaults.columnId
+  }
+}, { immediate: true })
+
+async function saveNewTask(): Promise<void> {
+  if (!createTitle.value.trim() || isSavingCreate.value) return
+  isSavingCreate.value = true
+  try {
+    const created = await boardStore.createTask(createColumnId.value, {
+      title: createTitle.value.trim(),
+      priority: createPriority.value,
+      column_id: createColumnId.value,
+    })
+    if (created) {
+      emit('created', created.id)
+    }
+  } catch {
+    // boardStore handles toast
+  } finally {
+    isSavingCreate.value = false
+  }
+}
+
+// ─── Edit form state ───────────────────────────────────────────────────────
 const task      = ref<Task | null>(null)
 const title     = ref('')
 const descMd    = ref('')
@@ -43,7 +86,8 @@ const priority  = ref<Priority>('medium')
 const dueDate   = ref('')
 const loading   = ref(false)
 
-const columns   = computed(() => boardStore.board?.columns ?? [])
+const columns        = computed(() => boardStore.board?.columns ?? [])
+const drawerTitle    = computed(() => isCreateMode.value ? 'New task' : (task.value?.title ?? 'Task'))
 const taskNotes = computed<Note[]>(() =>
   notesStore.list.filter((n) => n.task_id === props.taskId)
 )
@@ -123,11 +167,63 @@ async function onArchive(): Promise<void> {
 <template>
   <Drawer
     :open="open"
-    :title="task?.title ?? 'Task'"
+    :title="drawerTitle"
     width="32rem"
     @update:open="emit('update:open', $event)"
   >
-    <div v-if="loading" class="flex items-center justify-center py-12 text-text-muted text-sm">
+    <!-- Create mode form -->
+    <template v-if="isCreateMode">
+      <form class="create-form" @submit.prevent="saveNewTask">
+        <div class="create-form__field">
+          <label for="create-title" class="create-form__label">Title</label>
+          <input
+            id="create-title"
+            v-model="createTitle"
+            type="text"
+            class="create-form__input"
+            placeholder="Task title"
+            required
+            autofocus
+          />
+        </div>
+
+        <div class="create-form__field">
+          <label for="create-priority" class="create-form__label">Priority</label>
+          <select id="create-priority" v-model="createPriority" class="create-form__select">
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="urgent">Urgent</option>
+          </select>
+        </div>
+
+        <div class="create-form__field">
+          <label for="create-column" class="create-form__label">Column</label>
+          <select id="create-column" v-model="createColumnId" class="create-form__select">
+            <option v-for="col in columns" :key="col.id" :value="col.id">{{ col.name }}</option>
+          </select>
+        </div>
+
+        <div class="create-form__actions">
+          <button
+            type="submit"
+            class="create-form__btn create-form__btn--primary"
+            :disabled="!createTitle.trim() || isSavingCreate"
+          >
+            {{ isSavingCreate ? 'Saving…' : 'Save task' }}
+          </button>
+          <button
+            type="button"
+            class="create-form__btn create-form__btn--ghost"
+            @click="emit('update:open', false)"
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
+    </template>
+
+    <div v-else-if="loading" class="flex items-center justify-center py-12 text-text-muted text-sm">
       Loading…
     </div>
 
@@ -196,3 +292,84 @@ async function onArchive(): Promise<void> {
     </div>
   </Drawer>
 </template>
+
+<style scoped>
+.create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.create-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.create-form__label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.create-form__input,
+.create-form__select {
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  width: 100%;
+  transition: border-color var(--motion-duration-fast);
+}
+
+.create-form__input:focus,
+.create-form__select:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 20%, transparent);
+}
+
+.create-form__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.create-form__btn {
+  padding: 8px 16px;
+  border-radius: var(--radius-control);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--motion-duration-fast), opacity var(--motion-duration-fast);
+}
+
+.create-form__btn--primary {
+  background-color: var(--color-accent);
+  color: var(--color-bg);
+  border: none;
+}
+
+.create-form__btn--primary:hover:not(:disabled) {
+  background-color: var(--color-accent-hover);
+}
+
+.create-form__btn--primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.create-form__btn--ghost {
+  background: transparent;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+}
+
+.create-form__btn--ghost:hover {
+  background-color: var(--color-surface-hover, color-mix(in srgb, var(--color-border) 40%, transparent));
+  color: var(--color-text-primary);
+}
+</style>

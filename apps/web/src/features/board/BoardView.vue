@@ -120,27 +120,12 @@ function handleDrawerClose(): void {
 
 // ─── Add task (board toolbar) ─────────────────────────────────────────────────
 
-const isAddingTask = ref(false)
+const firstColumnId = computed(() => currentBoardStore.board?.columns[0]?.id ?? 0)
 
-async function addTask(): Promise<void> {
-  if (isAddingTask.value || !currentBoardStore.board) return
-  const firstCol = currentBoardStore.board.columns[0]
-  if (!firstCol) return
-  isAddingTask.value = true
-  try {
-    const task = await currentBoardStore.createTask(firstCol.id, {
-      title: 'New task',
-      priority: 'low',
-      column_id: firstCol.id,
-    })
-    if (task) {
-      // Open drawer immediately so user fills in details
-      selectedTaskId.value = task.id
-      drawerOpen.value = true
-    }
-  } finally {
-    isAddingTask.value = false
-  }
+function addTask(): void {
+  if (!currentBoardStore.board) return
+  selectedTaskId.value = null
+  drawerOpen.value = true
 }
 
 // ─── Create first board ───────────────────────────────────────────────────────
@@ -183,7 +168,6 @@ async function createFirstBoard() {
       <Button
         variant="primary"
         size="sm"
-        :disabled="isAddingTask"
         @click="addTask"
       >
         <svg viewBox="0 0 12 12" width="12" height="12" fill="none" aria-hidden="true">
@@ -248,7 +232,9 @@ async function createFirstBoard() {
     <TaskDrawer
       v-model:open="drawerOpen"
       :task-id="selectedTaskId"
+      :new-task-defaults="selectedTaskId === null && drawerOpen ? { columnId: firstColumnId, priority: 'low' } : undefined"
       @update:open="(v) => { if (!v) handleDrawerClose() }"
+      @created="(id) => { selectedTaskId = id }"
     />
   </div>
 </template>
