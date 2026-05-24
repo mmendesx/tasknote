@@ -81,7 +81,6 @@ const columnsContainerRef = ref<HTMLElement | null>(null)
 
 const { option: colSortableOption } = useSortable(columnsContainerRef, localColumns, {
   animation: 150,
-  handle: '.col-handle',
   ghostClass: 'col-ghost',
   filter: '.kanban-column__tasks',
   preventOnFilter: false,

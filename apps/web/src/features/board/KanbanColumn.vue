@@ -106,20 +106,6 @@ function onListDragEnd(evt: DragEvent) {
   >
     <!-- Column header -->
     <header class="kanban-column__header">
-      <!-- Drag handle for column reorder (desktop only) -->
-      <span
-        class="col-handle"
-        :class="{ 'handle--hidden': !isDesktop }"
-        :aria-hidden="!isDesktop ? 'true' : undefined"
-        :aria-label="isDesktop ? 'Drag to reorder column' : undefined"
-      >
-        <svg viewBox="0 0 6 14" width="6" height="14" fill="none" aria-hidden="true">
-          <circle cx="2" cy="2.5" r="1" fill="currentColor" />
-          <circle cx="2" cy="7" r="1" fill="currentColor" />
-          <circle cx="2" cy="11.5" r="1" fill="currentColor" />
-        </svg>
-      </span>
-
       <h2 class="kanban-column__name">{{ column.name }}</h2>
 
       <!-- Task count + WIP indicator -->
@@ -185,20 +171,6 @@ function onListDragEnd(evt: DragEvent) {
   flex-shrink: 0;
 }
 
-.col-handle {
-  color: var(--color-text-muted);
-  cursor: grab;
-  display: flex;
-  align-items: center;
-  padding: 3px;
-  border-radius: 3px;
-  flex-shrink: 0;
-  transition: color var(--motion-duration-fast) var(--motion-easing);
-}
-
-.col-handle:hover { color: var(--color-text-secondary); }
-.col-handle:active { cursor: grabbing; }
-.handle--hidden { display: none; }
 
 .kanban-column__name {
   flex: 1;
