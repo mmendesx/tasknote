@@ -967,25 +967,62 @@ const routeLabel = computed(() => {
   background: transparent;
 }
 
-/* Sublist: left border rail + compact items */
+/* Sublist — no border rail, indent only */
 .nav-notes__panel :deep(.note-list) {
-  border-left: 1.5px solid var(--color-border);
   padding-left: 0;
 }
 
 .nav-notes__panel :deep(.note-item) {
-  padding: 4px 8px;
+  padding: 3px 8px;
   border-bottom: none;
   border-radius: var(--radius-control);
+  position: relative;
+}
+
+/* Dim dash prefix — brightens on hover/active */
+.nav-notes__panel :deep(.note-item)::before {
+  content: '–';
+  position: absolute;
+  left: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: var(--color-text-muted);
+  opacity: 0.4;
+  transition: opacity var(--motion-duration-fast);
+  pointer-events: none;
+  line-height: 1;
+}
+
+.nav-notes__panel :deep(.note-item:hover)::before,
+.nav-notes__panel :deep(.note-item--selected)::before {
+  opacity: 1;
 }
 
 .nav-notes__panel :deep(.note-item__title) {
   font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  transition: color var(--motion-duration-fast);
+}
+
+.nav-notes__panel :deep(.note-item:hover .note-item__title) {
+  color: var(--color-text-primary);
+}
+
+.nav-notes__panel :deep(.note-item--selected .note-item__title) {
+  color: var(--color-text-primary);
+}
+
+.nav-notes__panel :deep(.note-item--selected) {
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+  border-left: none;
 }
 
 /* Hide preview and timestamp in sidebar — title only */
 .nav-notes__panel :deep(.note-item__preview),
-.nav-notes__panel :deep(.note-item__time) {
+.nav-notes__panel :deep(.note-item__time),
+.nav-notes__panel :deep(.note-item__pin),
+.nav-notes__panel :deep(.note-item__del) {
   display: none;
 }
 
