@@ -125,8 +125,13 @@ const EditorInner = defineComponent({
   font-size: 0.875rem;
   color: var(--color-text-primary);
   line-height: 1.6;
+  cursor: text;
+}
+
+.milkdown-host :deep(.ProseMirror) {
   min-height: 6rem;
   cursor: text;
+  outline: none;
 }
 
 .milkdown-host :deep(.milkdown p) {
