@@ -11,11 +11,11 @@
  * re-export shim to avoid breaking ICT-19 if it ran before this move.
  */
 import '@milkdown/theme-nord/style.css'
-import { defineComponent, h } from 'vue'
-import { Milkdown as MilkdownComp, MilkdownProvider, useEditor } from '@milkdown/vue'
-import { Editor, rootCtx, defaultValueCtx, editorViewOptionsCtx } from '@milkdown/core'
-import { commonmark } from '@milkdown/preset-commonmark'
-import { gfm } from '@milkdown/preset-gfm'
+import { defineComponent, h, ref, onMounted, onUnmounted, Teleport } from 'vue'
+import { Milkdown as MilkdownComp, MilkdownProvider, useEditor, useInstance } from '@milkdown/vue'
+import { Editor, rootCtx, defaultValueCtx, editorViewOptionsCtx, commandsCtx, editorViewCtx } from '@milkdown/core'
+import { commonmark, toggleStrongCommand, toggleEmphasisCommand, toggleInlineCodeCommand } from '@milkdown/preset-commonmark'
+import { gfm, toggleStrikethroughCommand } from '@milkdown/preset-gfm'
 import { listener, listenerCtx } from '@milkdown/plugin-listener'
 import { history } from '@milkdown/plugin-history'
 import { clipboard } from '@milkdown/plugin-clipboard'
@@ -32,8 +32,7 @@ const emit = defineEmits<{
   'update:modelValue': [value: string]
 }>()
 
-// Inner component must be defined inside the setup to close over emit/props.
-// MilkdownProvider wraps the component that calls useEditor().
+// ─── Inner component — has access to Milkdown context ─────────────────────────
 const EditorInner = defineComponent({
   name: 'MilkdownEditorInner',
   props: {
@@ -62,7 +61,128 @@ const EditorInner = defineComponent({
         .use(clipboard)
     )
 
-    return () => h(MilkdownComp)
+    // ─── Floating toolbar state ────────────────────────────────────────────
+    const [, getInstance] = useInstance()
+
+    const toolbarVisible = ref(false)
+    const toolbarX      = ref(0)
+    const toolbarY      = ref(0)
+    const activeMarks   = ref({ bold: false, italic: false, strike: false, code: false })
+
+    function runCommand(cmd: { key: string }) {
+      const editor = getInstance()
+      if (!editor) return
+      editor.action((ctx) => {
+        ctx.get(commandsCtx).call(cmd.key)
+      })
+      // Re-check marks after toggle
+      requestAnimationFrame(updateActiveMarks)
+    }
+
+    function updateActiveMarks() {
+      const editor = getInstance()
+      if (!editor) return
+      try {
+        editor.action((ctx) => {
+          const view  = ctx.get(editorViewCtx)
+          const state = view.state
+          const { from, to, empty } = state.selection
+          if (empty) { activeMarks.value = { bold: false, italic: false, strike: false, code: false }; return }
+
+          const schema = state.schema
+          const strongMark  = schema.marks['strong']
+          const emMark      = schema.marks['emphasis']
+          const strikeMark  = schema.marks['strike_through']
+          const codeMark    = schema.marks['code']
+
+          activeMarks.value = {
+            bold:   strongMark ? state.doc.rangeHasMark(from, to, strongMark)   : false,
+            italic: emMark     ? state.doc.rangeHasMark(from, to, emMark)       : false,
+            strike: strikeMark ? state.doc.rangeHasMark(from, to, strikeMark)   : false,
+            code:   codeMark   ? state.doc.rangeHasMark(from, to, codeMark)     : false,
+          }
+        })
+      } catch {
+        // editor not ready yet
+      }
+    }
+
+    function onSelectionChange() {
+      const sel = window.getSelection()
+      if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
+        toolbarVisible.value = false
+        return
+      }
+
+      const range    = sel.getRangeAt(0)
+      const anchorEl = sel.anchorNode?.parentElement
+
+      // Only show toolbar when selection is inside a ProseMirror editor
+      if (!anchorEl?.closest('.ProseMirror')) {
+        toolbarVisible.value = false
+        return
+      }
+
+      const rect = range.getBoundingClientRect()
+      if (rect.width === 0) { toolbarVisible.value = false; return }
+
+      // Position: centred above selection, 8px gap
+      toolbarX.value = rect.left + rect.width / 2
+      toolbarY.value = rect.top - 8
+      toolbarVisible.value = true
+      updateActiveMarks()
+    }
+
+    onMounted(() => {
+      document.addEventListener('selectionchange', onSelectionChange)
+    })
+    onUnmounted(() => {
+      document.removeEventListener('selectionchange', onSelectionChange)
+    })
+
+    return () => [
+      h(MilkdownComp),
+      h(Teleport, { to: 'body' },
+        toolbarVisible.value && !innerProps.readOnly
+          ? [h('div', {
+              class: 'milkdown-toolbar',
+              style: {
+                position: 'fixed',
+                left:    `${toolbarX.value}px`,
+                top:     `${toolbarY.value}px`,
+                transform: 'translate(-50%, -100%)',
+                zIndex: 9999,
+              },
+              onMousedown: (e: MouseEvent) => e.preventDefault(), // keep selection
+            }, [
+              h('button', {
+                type: 'button',
+                class: ['milkdown-toolbar__btn', { 'milkdown-toolbar__btn--active': activeMarks.value.bold }],
+                title: 'Bold (Ctrl+B)',
+                onMousedown: (e: MouseEvent) => { e.preventDefault(); runCommand(toggleStrongCommand) },
+              }, h('strong', 'B')),
+              h('button', {
+                type: 'button',
+                class: ['milkdown-toolbar__btn', { 'milkdown-toolbar__btn--active': activeMarks.value.italic }],
+                title: 'Italic (Ctrl+I)',
+                onMousedown: (e: MouseEvent) => { e.preventDefault(); runCommand(toggleEmphasisCommand) },
+              }, h('em', 'I')),
+              h('button', {
+                type: 'button',
+                class: ['milkdown-toolbar__btn', { 'milkdown-toolbar__btn--active': activeMarks.value.strike }],
+                title: 'Strikethrough',
+                onMousedown: (e: MouseEvent) => { e.preventDefault(); runCommand(toggleStrikethroughCommand) },
+              }, h('s', 'S')),
+              h('button', {
+                type: 'button',
+                class: ['milkdown-toolbar__btn', { 'milkdown-toolbar__btn--active': activeMarks.value.code }],
+                title: 'Inline code',
+                onMousedown: (e: MouseEvent) => { e.preventDefault(); runCommand(toggleInlineCodeCommand) },
+              }, h('code', '</>'))
+            ])]
+          : []
+      )
+    ]
   },
 })
 </script>
@@ -95,6 +215,49 @@ const EditorInner = defineComponent({
   --nord10: var(--color-accent);
   background: transparent !important;
   color: var(--color-text-primary) !important;
+}
+
+/* ─── Floating selection toolbar ─────────────────────────────────────────── */
+.milkdown-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  background: var(--color-text-primary, #1a1a1a);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  pointer-events: auto;
+  white-space: nowrap;
+}
+
+.milkdown-toolbar__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-bg, #fff);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.1s;
+  border: none;
+}
+
+.milkdown-toolbar__btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.milkdown-toolbar__btn--active {
+  background: var(--color-accent, #6c6ef5);
+  color: #fff;
+}
+
+.milkdown-toolbar__btn code {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
 }
 </style>
 
