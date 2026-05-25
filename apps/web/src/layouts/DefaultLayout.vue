@@ -963,9 +963,30 @@ const routeLabel = computed(() => {
   max-height: 300px;
   overflow-y: auto;
   margin-top: 2px;
+  padding-left: 22px;
+  background: transparent;
+}
+
+/* Sublist: left border rail + compact items */
+.nav-notes__panel :deep(.note-list) {
+  border-left: 1.5px solid var(--color-border);
+  padding-left: 0;
+}
+
+.nav-notes__panel :deep(.note-item) {
+  padding: 4px 8px;
+  border-bottom: none;
   border-radius: var(--radius-control);
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
+}
+
+.nav-notes__panel :deep(.note-item__title) {
+  font-size: var(--text-xs);
+}
+
+/* Hide preview and timestamp in sidebar — title only */
+.nav-notes__panel :deep(.note-item__preview),
+.nav-notes__panel :deep(.note-item__time) {
+  display: none;
 }
 
 /* ─── Sidebar collapse button ─────────────────────────────────────── */
