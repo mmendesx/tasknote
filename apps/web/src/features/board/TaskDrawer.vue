@@ -14,6 +14,7 @@ import TaskDetailsTab from './TaskDetailsTab.vue'
 import TaskNotesTab from './TaskNotesTab.vue'
 import TaskFilesTab from './TaskFilesTab.vue'
 import TagPicker from '@/features/tags/TagPicker.vue'
+import MilkdownEditor from '@/features/editor/MilkdownEditor.vue'
 import { useCurrentBoardStore } from '@/stores/currentBoard'
 import { useNotesStore } from '@/stores/notes'
 import { useFileRefsStore } from '@/stores/fileRefs'
@@ -46,16 +47,20 @@ const isCreateMode = computed(() => props.taskId === null && props.newTaskDefaul
 
 // Separate state for create form — avoids cross-contamination with edit state
 const createTitle      = ref('')
+const createDescMd     = ref('')
 const createPriority   = ref<Priority>('low')
 const createColumnId   = ref<number>(0)
+const createDueDate    = ref('')
 const isSavingCreate   = ref(false)
 
 // Seed create form fields when entering create mode
 watch(isCreateMode, (entering) => {
   if (entering && props.newTaskDefaults) {
     createTitle.value    = ''
+    createDescMd.value   = ''
     createPriority.value = props.newTaskDefaults.priority
     createColumnId.value = props.newTaskDefaults.columnId
+    createDueDate.value  = ''
   }
 }, { immediate: true })
 
@@ -64,9 +69,13 @@ async function saveNewTask(): Promise<void> {
   isSavingCreate.value = true
   try {
     const created = await boardStore.createTask(createColumnId.value, {
-      title: createTitle.value.trim(),
-      priority: createPriority.value,
-      column_id: createColumnId.value,
+      title:          createTitle.value.trim(),
+      priority:       createPriority.value,
+      column_id:      createColumnId.value,
+      description_md: createDescMd.value.trim() || null,
+      due_date:       createDueDate.value
+        ? new Date(createDueDate.value).toISOString()
+        : null,
     })
     if (created) {
       emit('created', created.id)
@@ -175,7 +184,7 @@ async function onArchive(): Promise<void> {
     <template v-if="isCreateMode">
       <form class="create-form" @submit.prevent="saveNewTask">
         <div class="create-form__field">
-          <label for="create-title" class="create-form__label">Title</label>
+          <label for="create-title" class="create-form__label">Title <span class="create-form__required">*</span></label>
           <input
             id="create-title"
             v-model="createTitle"
@@ -187,21 +196,38 @@ async function onArchive(): Promise<void> {
           />
         </div>
 
-        <div class="create-form__field">
-          <label for="create-priority" class="create-form__label">Priority</label>
-          <select id="create-priority" v-model="createPriority" class="create-form__select">
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-            <option value="urgent">Urgent</option>
-          </select>
+        <div class="create-form__field create-form__field--desc">
+          <label class="create-form__label">Description</label>
+          <MilkdownEditor v-model="createDescMd" />
+        </div>
+
+        <div class="create-form__row">
+          <div class="create-form__field">
+            <label for="create-priority" class="create-form__label">Priority</label>
+            <select id="create-priority" v-model="createPriority" class="create-form__select">
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </div>
+
+          <div class="create-form__field">
+            <label for="create-column" class="create-form__label">Column</label>
+            <select id="create-column" v-model="createColumnId" class="create-form__select">
+              <option v-for="col in columns" :key="col.id" :value="col.id">{{ col.name }}</option>
+            </select>
+          </div>
         </div>
 
         <div class="create-form__field">
-          <label for="create-column" class="create-form__label">Column</label>
-          <select id="create-column" v-model="createColumnId" class="create-form__select">
-            <option v-for="col in columns" :key="col.id" :value="col.id">{{ col.name }}</option>
-          </select>
+          <label for="create-due-date" class="create-form__label">Due date</label>
+          <input
+            id="create-due-date"
+            v-model="createDueDate"
+            type="date"
+            class="create-form__input"
+          />
         </div>
 
         <div class="create-form__actions">
@@ -310,6 +336,25 @@ async function onArchive(): Promise<void> {
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--color-text-secondary);
+}
+
+.create-form__required {
+  color: var(--color-status-blocked);
+}
+
+/* Compact the description editor height in create mode */
+.create-form__field--desc :deep(.milkdown-host) {
+  min-height: 5rem;
+}
+
+.create-form__field--desc :deep(.ProseMirror) {
+  min-height: 3.5rem;
+}
+
+.create-form__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
 }
 
 .create-form__input,
