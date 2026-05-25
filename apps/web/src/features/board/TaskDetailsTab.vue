@@ -4,7 +4,7 @@
  * Handles title, description, priority, due-date, column, timestamps, and archive.
  */
 import { ref, computed } from 'vue'
-import { Button, Input } from '@tasknote/ui'
+import { Button, Input, DatePicker } from '@tasknote/ui'
 import MilkdownEditor from './MilkdownEditor.vue'
 import type { Task, ColumnWithTasks, Priority } from '@tasknote/shared'
 
@@ -69,10 +69,9 @@ function formatDate(d: Date | string | null | undefined): string {
       </select>
     </div>
 
-    <Input
+    <DatePicker
       :model-value="dueDate"
       label="Due date"
-      type="date"
       @update:model-value="emit('update:dueDate', $event)"
     />
 

@@ -8,7 +8,7 @@
  */
 import { ref, watch, computed } from 'vue'
 import { TabsRoot, TabsList, TabsTrigger, TabsContent } from 'reka-ui'
-import { Drawer, useToast } from '@tasknote/ui'
+import { Drawer, DatePicker, useToast } from '@tasknote/ui'
 import { useDebounceFn } from '@vueuse/core'
 import TaskDetailsTab from './TaskDetailsTab.vue'
 import TaskNotesTab from './TaskNotesTab.vue'
@@ -221,12 +221,9 @@ async function onArchive(): Promise<void> {
         </div>
 
         <div class="create-form__field">
-          <label for="create-due-date" class="create-form__label">Due date</label>
-          <input
-            id="create-due-date"
+          <DatePicker
             v-model="createDueDate"
-            type="date"
-            class="create-form__input"
+            label="Due date"
           />
         </div>
 
