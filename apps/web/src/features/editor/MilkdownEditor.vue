@@ -71,6 +71,7 @@ const EditorInner = defineComponent({
   <div
     class="milkdown-host"
     :class="{ 'milkdown-readonly': readOnly }"
+    @click.self="($event.currentTarget as HTMLElement).querySelector<HTMLElement>('.milkdown')?.focus()"
   >
     <MilkdownProvider>
       <EditorInner
@@ -104,6 +105,7 @@ const EditorInner = defineComponent({
   background: var(--color-surface);
   padding: 0.5rem 0.75rem;
   min-height: 8rem;
+  cursor: text;
   transition: border-color var(--motion-duration-fast);
 }
 
@@ -123,6 +125,8 @@ const EditorInner = defineComponent({
   font-size: 0.875rem;
   color: var(--color-text-primary);
   line-height: 1.6;
+  min-height: 6rem;
+  cursor: text;
 }
 
 .milkdown-host :deep(.milkdown p) {
