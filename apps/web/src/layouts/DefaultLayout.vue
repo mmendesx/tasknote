@@ -1018,11 +1018,10 @@ const routeLabel = computed(() => {
   border-left: none;
 }
 
-/* Hide preview and timestamp in sidebar — title only */
+/* Hide preview, timestamp and pin in sidebar — title + delete only */
 .nav-notes__panel :deep(.note-item__preview),
 .nav-notes__panel :deep(.note-item__time),
-.nav-notes__panel :deep(.note-item__pin),
-.nav-notes__panel :deep(.note-item__del) {
+.nav-notes__panel :deep(.note-item__pin) {
   display: none;
 }
 
