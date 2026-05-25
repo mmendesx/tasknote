@@ -172,6 +172,12 @@ function toggleSidebar() {
   isSidebarCollapsed.value = !isSidebarCollapsed.value
 }
 
+// ─── Navigation progress bar ──────────────────────────────────────────────────
+
+const isNavigating = ref(false)
+router.beforeEach(() => { isNavigating.value = true })
+router.afterEach(() => { isNavigating.value = false })
+
 // ─── Notes sidebar panel ──────────────────────────────────────────────────────
 
 const notesExpanded = ref(false)
@@ -204,7 +210,7 @@ const routeLabel = computed(() => {
   <div class="app-shell" :class="{ 'app-shell--sidebar-collapsed': isSidebarCollapsed }">
     <!-- Mobile drawer backdrop -->
     <div
-      v-if="isDrawerOpen"
+      v-show="isDrawerOpen"
       class="drawer-backdrop"
       aria-hidden="true"
       @click="closeDrawer"
@@ -484,6 +490,9 @@ const routeLabel = computed(() => {
 
     <!-- Main area: topbar + content -->
     <div class="main-area">
+      <!-- Navigation progress bar -->
+      <div v-show="isNavigating" class="nav-progress" aria-hidden="true" />
+
       <!-- Top bar -->
       <header class="topbar" role="banner">
         <!-- Hamburger (mobile only) -->
@@ -590,6 +599,7 @@ const routeLabel = computed(() => {
   height: 100dvh;
   overflow: hidden;
   background-color: var(--color-bg);
+  transition: grid-template-columns var(--motion-duration-base) var(--motion-easing);
 }
 
 /* ─── Sidebar ─────────────────────────────────────────────────────── */
@@ -604,7 +614,9 @@ const routeLabel = computed(() => {
 }
 
 .sidebar__logo {
-  padding: 20px 16px 16px;
+  height: 52px;
+  padding: 0 16px;
+  box-sizing: border-box;
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
   display: flex;
@@ -635,6 +647,8 @@ const routeLabel = computed(() => {
   color: var(--color-text-primary);
   white-space: nowrap;
   overflow: hidden;
+  opacity: 1;
+  transition: opacity var(--motion-duration-fast) var(--motion-easing), width var(--motion-duration-fast) var(--motion-easing);
 }
 
 .sidebar__nav {
@@ -663,6 +677,8 @@ const routeLabel = computed(() => {
   margin: 0 0 4px;
   white-space: nowrap;
   overflow: hidden;
+  opacity: 1;
+  transition: opacity var(--motion-duration-fast) var(--motion-easing), width var(--motion-duration-fast) var(--motion-easing);
 }
 
 .nav-item {
@@ -701,6 +717,9 @@ const routeLabel = computed(() => {
 .nav-item__label {
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 1;
+  transition: opacity var(--motion-duration-fast) var(--motion-easing), width var(--motion-duration-fast) var(--motion-easing);
 }
 
 .sidebar__footer {
@@ -714,6 +733,30 @@ const routeLabel = computed(() => {
   display: grid;
   grid-template-rows: auto 1fr;
   overflow: hidden;
+  position: relative;
+}
+
+/* ─── Navigation progress bar ─────────────────────────────────────── */
+.nav-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--color-accent);
+  animation: progress-slide var(--motion-duration-base) ease-out forwards;
+  z-index: 10;
+}
+
+@keyframes progress-slide {
+  from {
+    transform: scaleX(0);
+    transform-origin: left;
+  }
+  to {
+    transform: scaleX(1);
+    transform-origin: left;
+  }
 }
 
 /* ─── Top bar ─────────────────────────────────────────────────────── */
@@ -793,6 +836,8 @@ const routeLabel = computed(() => {
 /* ─── Mobile drawer backdrop ──────────────────────────────────────── */
 .drawer-backdrop {
   display: none;
+  opacity: 0;
+  transition: opacity var(--motion-duration-base) var(--motion-easing);
 }
 
 /* ─── Nav section header (boards) ────────────────────────────────── */
@@ -1054,9 +1099,16 @@ const routeLabel = computed(() => {
     width: 64px !important;
   }
 
+  /* Fade out labels — use opacity so the transition plays */
   .sidebar--collapsed .logo-wordmark,
   .sidebar--collapsed .nav-item__label,
-  .sidebar--collapsed .nav-section__label,
+  .sidebar--collapsed .nav-section__label {
+    opacity: 0;
+    width: 0;
+    pointer-events: none;
+  }
+
+  /* These elements have no meaningful collapsed state — hide instantly */
   .sidebar--collapsed .nav-section__header p,
   .sidebar--collapsed .nav-section__add,
   .sidebar--collapsed .nav-section__empty,
@@ -1067,13 +1119,9 @@ const routeLabel = computed(() => {
     display: none;
   }
 
-  .sidebar--collapsed .logo-link {
-    display: none;
-  }
-
   .sidebar--collapsed .sidebar__logo {
     justify-content: center;
-    padding: 12px 8px;
+    padding: 0 8px;
   }
 
   .sidebar--collapsed .nav-item {
@@ -1138,6 +1186,9 @@ const routeLabel = computed(() => {
   .nav-item__label,
   .nav-section__label {
     display: block;
+    opacity: 1;
+    width: auto;
+    pointer-events: auto;
   }
 
   .nav-notes__toggle {
@@ -1163,6 +1214,7 @@ const routeLabel = computed(() => {
     inset: 0;
     background-color: rgba(0, 0, 0, 0.5);
     z-index: 49;
+    opacity: 1;
   }
 }
 </style>

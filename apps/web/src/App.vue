@@ -115,6 +115,29 @@ const { open: paletteOpen } = useCommandPalette()
 
   <!-- All views render inside the shell layout -->
   <DefaultLayout>
-    <RouterView />
+    <RouterView v-slot="{ Component }">
+      <Transition name="page" mode="out-in">
+        <component :is="Component" :key="$route.name" />
+      </Transition>
+    </RouterView>
   </DefaultLayout>
 </template>
+
+<style>
+.page-enter-active,
+.page-leave-active {
+  transition:
+    opacity var(--motion-duration-fast) var(--motion-easing),
+    transform var(--motion-duration-fast) var(--motion-easing);
+}
+
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.page-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+</style>
