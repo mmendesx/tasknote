@@ -1,13 +1,12 @@
 <script setup lang="ts">
 /**
- * NotesView — two-pane notes layout at /notes and /notes/:id.
- * Left: 320px NoteList. Right: NoteEditor (or empty state).
- * URL param :id keeps editor in sync with router.
+ * NotesView — full-width notes editor at /notes and /notes/:id.
+ * The NoteList is rendered in the sidebar via DefaultLayout.
+ * This view owns only the editor pane and the "New note" toolbar action.
  */
-import { computed, watch } from 'vue'
+import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Button, useToast } from '@tasknote/ui'
-import NoteList from '@/features/notes/NoteList.vue'
 import NoteEditor from '@/features/notes/NoteEditor.vue'
 import { useNotesStore } from '@/stores/notes'
 
@@ -23,10 +22,6 @@ const selectedId = computed<number | null>(() => {
   const parsed = id ? parseInt(id, 10) : NaN
   return isNaN(parsed) ? null : parsed
 })
-
-function selectNote(id: number): void {
-  router.push({ name: 'note-detail', params: { id } })
-}
 
 async function createNote(): Promise<void> {
   try {
@@ -47,22 +42,14 @@ function handleDeleted(id: number): void {
 
 <template>
   <div class="notes-view">
-    <!-- ── Left panel: list ───────────────────────────────────────── -->
-    <aside class="notes-view__sidebar" aria-label="Notes list">
-      <div class="notes-view__sidebar-header">
-        <h1 class="notes-view__heading">Notes</h1>
-        <Button variant="primary" size="sm" @click="createNote">
-          + New note
-        </Button>
-      </div>
-      <NoteList
-        :selected-id="selectedId"
-        @select="selectNote"
-        @deleted="handleDeleted"
-      />
-    </aside>
+    <!-- ── Toolbar ────────────────────────────────────────────────── -->
+    <div class="notes-view__toolbar" role="toolbar" aria-label="Notes actions">
+      <Button variant="primary" size="sm" @click="createNote">
+        + New note
+      </Button>
+    </div>
 
-    <!-- ── Right panel: editor ───────────────────────────────────── -->
+    <!-- ── Editor ────────────────────────────────────────────────── -->
     <main class="notes-view__editor" aria-label="Note editor">
       <NoteEditor
         :note-id="selectedId"
@@ -75,58 +62,23 @@ function handleDeleted(id: number): void {
 <style scoped>
 .notes-view {
   display: flex;
+  flex-direction: column;
   height: 100%;
   overflow: hidden;
   background: var(--color-bg);
 }
 
-.notes-view__sidebar {
-  width: 320px;
-  flex-shrink: 0;
+.notes-view__toolbar {
   display: flex;
-  flex-direction: column;
-  border-right: 1px solid var(--color-border);
-  background: var(--color-surface);
-  overflow: hidden;
-}
-
-.notes-view__sidebar-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.75rem 0.75rem 0.625rem;
+  justify-content: flex-end;
+  padding: 8px 16px;
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
-}
-
-.notes-view__heading {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  margin: 0;
 }
 
 .notes-view__editor {
   flex: 1;
   overflow: hidden;
   background: var(--color-bg);
-}
-
-/* ── Responsive: below 640px stack vertically ─────────────────── */
-@media (max-width: 639px) {
-  .notes-view {
-    flex-direction: column;
-  }
-
-  .notes-view__sidebar {
-    width: 100%;
-    height: 40%;
-    border-right: none;
-    border-bottom: 1px solid var(--color-border);
-  }
-
-  .notes-view__editor {
-    height: 60%;
-  }
 }
 </style>

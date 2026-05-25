@@ -4,6 +4,7 @@ import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { useTheme } from '@/composables/useTheme'
 import { useMediaQuery } from '@vueuse/core'
 import { useBoardsStore } from '@/stores/boards'
+import NoteList from '@/features/notes/NoteList.vue'
 
 const { theme, toggleTheme } = useTheme()
 const route = useRoute()
@@ -170,6 +171,18 @@ const isSidebarCollapsed = ref(false)
 function toggleSidebar() {
   isSidebarCollapsed.value = !isSidebarCollapsed.value
 }
+
+// ─── Notes sidebar panel ──────────────────────────────────────────────────────
+
+const notesExpanded = ref(false)
+
+const currentNoteId = computed<number | null>(() => {
+  if (route.name !== 'note-detail') return null
+  const raw = route.params.id
+  const id = Array.isArray(raw) ? raw[0] : raw
+  const parsed = id ? parseInt(String(id), 10) : NaN
+  return isNaN(parsed) ? null : parsed
+})
 
 // Current route label for the topbar
 const routeLabel = computed(() => {
@@ -364,32 +377,69 @@ const routeLabel = computed(() => {
         </div>
 
         <div class="nav-section">
-          <RouterLink
-            to="/notes"
-            class="nav-item focus-ring"
-            :class="{ 'nav-item--active': route.name === 'notes' || route.name === 'note-detail' }"
-            :aria-current="(route.name === 'notes' || route.name === 'note-detail') ? 'page' : undefined"
-            @click="closeDrawer"
+          <!-- Notes row: link + toggle for inline NoteList -->
+          <div
+            class="nav-notes"
+            :class="{ 'nav-notes--active': route.name === 'notes' || route.name === 'note-detail' }"
           >
-            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" class="nav-item__icon">
-              <path
-                d="M2 1H11L14 4V15H2Z"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linejoin="round"
-                stroke-linecap="round"
+            <div class="nav-notes__row">
+              <RouterLink
+                to="/notes"
+                class="nav-item nav-notes__link focus-ring"
+                :aria-current="(route.name === 'notes' || route.name === 'note-detail') ? 'page' : undefined"
+                @click="closeDrawer"
+              >
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" class="nav-item__icon">
+                  <path
+                    d="M2 1H11L14 4V15H2Z"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linejoin="round"
+                    stroke-linecap="round"
+                  />
+                  <path
+                    d="M11 1V4H14"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linejoin="round"
+                    stroke-linecap="round"
+                  />
+                  <path d="M4 7H10M4 10H8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                </svg>
+                <span class="nav-item__label">Notes</span>
+              </RouterLink>
+              <button
+                class="nav-notes__toggle focus-ring"
+                :aria-expanded="notesExpanded"
+                aria-controls="sidebar-notes-list"
+                :aria-label="notesExpanded ? 'Collapse notes list' : 'Expand notes list'"
+                :title="notesExpanded ? 'Collapse notes list' : 'Expand notes list'"
+                @click="notesExpanded = !notesExpanded"
+              >
+                <!-- chevron-right when collapsed, chevron-down when expanded -->
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" width="12" height="12">
+                  <path
+                    :d="notesExpanded ? 'M3 6l5 5 5-5' : 'M6 3l5 5-5 5'"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div
+              v-if="notesExpanded"
+              id="sidebar-notes-list"
+              class="nav-notes__panel"
+            >
+              <NoteList
+                :selected-id="currentNoteId"
+                @select="(id) => { router.push({ name: 'note-detail', params: { id } }); closeDrawer() }"
+                @deleted="(id) => { if (currentNoteId === id) router.push({ name: 'notes' }) }"
               />
-              <path
-                d="M11 1V4H14"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linejoin="round"
-                stroke-linecap="round"
-              />
-              <path d="M4 7H10M4 10H8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-            </svg>
-            <span class="nav-item__label">Notes</span>
-          </RouterLink>
+            </div>
+          </div>
 
           <RouterLink
             to="/archive"
@@ -851,6 +901,73 @@ const routeLabel = computed(() => {
   line-height: 1.4;
 }
 
+/* ─── Notes nav section (link + toggle + panel) ──────────────────── */
+.nav-notes {
+  display: flex;
+  flex-direction: column;
+}
+
+.nav-notes__row {
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-control);
+  transition:
+    background-color var(--motion-duration-fast) var(--motion-easing),
+    color var(--motion-duration-fast) var(--motion-easing);
+}
+
+.nav-notes--active .nav-notes__row {
+  background-color: var(--color-surface-elevated);
+}
+
+.nav-notes__row:has(.nav-notes__link:hover),
+.nav-notes__row:has(.nav-notes__toggle:hover) {
+  background-color: var(--color-surface-elevated);
+}
+
+.nav-notes__link {
+  flex: 1;
+  border-radius: var(--radius-control);
+  /* Override the nav-item background hover — handled by the row wrapper */
+  background-color: transparent !important;
+}
+
+.nav-notes__link:hover {
+  background-color: transparent !important;
+  color: var(--color-text-primary);
+}
+
+.nav-notes--active .nav-notes__link {
+  color: var(--color-text-primary);
+}
+
+.nav-notes__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-control);
+  color: var(--color-text-muted);
+  margin-right: 4px;
+  transition: color var(--motion-duration-fast), background-color var(--motion-duration-fast);
+}
+
+.nav-notes__toggle:hover {
+  color: var(--color-text-primary);
+  background-color: color-mix(in srgb, var(--color-text-primary) 10%, transparent);
+}
+
+.nav-notes__panel {
+  max-height: 300px;
+  overflow-y: auto;
+  margin-top: 2px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
 /* ─── Sidebar collapse button ─────────────────────────────────────── */
 .sidebar__collapse-btn {
   display: flex;
@@ -887,7 +1004,9 @@ const routeLabel = computed(() => {
   .sidebar--collapsed .nav-section__add,
   .sidebar--collapsed .nav-section__empty,
   .sidebar--collapsed .nav-item__actions,
-  .sidebar--collapsed .nav-item__rename-input {
+  .sidebar--collapsed .nav-item__rename-input,
+  .sidebar--collapsed .nav-notes__toggle,
+  .sidebar--collapsed .nav-notes__panel {
     display: none;
   }
 
@@ -915,7 +1034,9 @@ const routeLabel = computed(() => {
   .logo-wordmark,
   .nav-item__label,
   .nav-section__label,
-  .topbar__kbd {
+  .topbar__kbd,
+  .nav-notes__toggle,
+  .nav-notes__panel {
     display: none;
   }
 
@@ -955,11 +1076,15 @@ const routeLabel = computed(() => {
     box-shadow: 8px 0 32px rgba(0, 0, 0, 0.4);
   }
 
-  /* Restore text labels in full drawer mode */
+  /* Restore text labels and notes controls in full drawer mode */
   .logo-wordmark,
   .nav-item__label,
   .nav-section__label {
     display: block;
+  }
+
+  .nav-notes__toggle {
+    display: flex;
   }
 
   .logo-link {
