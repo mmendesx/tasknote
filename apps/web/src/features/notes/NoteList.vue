@@ -1,8 +1,5 @@
 <script setup lang="ts">
-/**
- * NoteList — left-panel list of all notes, ordered pinned-first then updated_at desc.
- * Emits 'select' with the note id when a row is clicked.
- */
+
 import { computed, onMounted } from 'vue'
 import { useTimeAgo } from '@vueuse/core'
 import { useNotesStore } from '@/stores/notes'
@@ -28,7 +25,6 @@ onMounted(() => {
   notesStore.load()
 })
 
-// Pinned first (desc), then updated_at desc
 const sortedNotes = computed<Note[]>(() =>
   [...notesStore.list].sort((a, b) => {
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
@@ -63,43 +59,52 @@ function getPreview(note: Note): string {
 </script>
 
 <template>
-  <ul class="note-list" role="listbox" aria-label="Notes">
+  <ul class="note-list" aria-label="Notes">
     <li
       v-for="note in sortedNotes"
       :key="note.id"
-      role="option"
-      :aria-selected="note.id === selectedId"
       class="note-item"
       :class="{ 'note-item--selected': note.id === selectedId }"
-      @click="emit('select', note.id)"
     >
-      <div class="note-item__header">
-        <span class="note-item__title">{{ deriveTitle(note) }}</span>
-        <span
-          v-if="note.pinned"
-          class="note-item__pin"
-          aria-label="Pinned"
-          title="Pinned"
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M16 3v2l-1 1v5l3 2v2h-5v6l-1 1-1-1v-6H6v-2l3-2V6L8 5V3z"/>
-          </svg>
-        </span>
-        <button
-          class="note-item__del"
-          aria-label="Delete note"
-          title="Delete note"
-          @click.stop="handleDelete(note.id)"
-        >
-          <svg viewBox="0 0 12 12" width="12" height="12" fill="none" aria-hidden="true">
-            <path d="M1 3h10M4 3V2h4v1M5 5.5v3M7 5.5v3M2 3l.8 7.2A.9.9 0 0 0 3.7 11h4.6a.9.9 0 0 0 .9-.8L10 3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-        </button>
-      </div>
-      <p class="note-item__preview">{{ getPreview(note) }}</p>
-      <time class="note-item__time" :datetime="String(note.updated_at)">
-        {{ useTimeAgo(new Date(note.updated_at)).value }}
-      </time>
+      <!-- FR-8c: inner button is the keyboard activator for each note item -->
+      <button
+        type="button"
+        class="note-item__open"
+        :aria-label="`Open note: ${deriveTitle(note)}`"
+        :aria-current="note.id === selectedId ? 'true' : undefined"
+        @click="emit('select', note.id)"
+      >
+        <div class="note-item__header">
+          <span class="note-item__title">{{ deriveTitle(note) }}</span>
+          <span
+            v-if="note.pinned"
+            class="note-item__pin"
+            aria-label="Pinned"
+            title="Pinned"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M16 3v2l-1 1v5l3 2v2h-5v6l-1 1-1-1v-6H6v-2l3-2V6L8 5V3z"/>
+            </svg>
+          </span>
+        </div>
+        <p class="note-item__preview">{{ getPreview(note) }}</p>
+        <time class="note-item__time" :datetime="String(note.updated_at)">
+          {{ useTimeAgo(new Date(note.updated_at)).value }}
+        </time>
+      </button>
+
+      <!-- Delete button is a sibling outside the open button — revealed on hover/focus-within -->
+      <button
+        type="button"
+        class="note-item__del"
+        :aria-label="`Delete note: ${deriveTitle(note)}`"
+        title="Delete note"
+        @click="handleDelete(note.id)"
+      >
+        <svg viewBox="0 0 12 12" width="12" height="12" fill="none" aria-hidden="true">
+          <path d="M1 3h10M4 3V2h4v1M5 5.5v3M7 5.5v3M2 3l.8 7.2A.9.9 0 0 0 3.7 11h4.6a.9.9 0 0 0 .9-.8L10 3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </button>
     </li>
 
     <li v-if="notesStore.loading" class="note-list__empty">Loading…</li>
@@ -117,14 +122,32 @@ function getPreview(note: Note): string {
 }
 
 .note-item {
-  padding: 0.625rem 0.75rem;
+  position: relative;
   border-bottom: 1px solid var(--color-border);
-  cursor: pointer;
   transition: background var(--motion-duration-fast);
 }
 
-.note-item:hover {
+.note-item:hover,
+.note-item:focus-within {
   background: var(--color-surface-elevated);
+}
+
+/* FR-8c: full-width button activator — reset to look like a plain list item */
+.note-item__open {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0.625rem 2.5rem 0.625rem 0.75rem;
+  color: inherit;
+  font: inherit;
+}
+
+.note-item__open:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
 }
 
 .note-item--selected {
@@ -155,11 +178,16 @@ function getPreview(note: Note): string {
 }
 
 .note-item__del {
+  position: absolute;
+  top: 50%;
+  right: 0.5rem;
+  transform: translateY(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  /* FR-14/15: 24×24 minimum touch target */
+  min-width: 24px;
+  min-height: 24px;
   border-radius: 4px;
   border: none;
   background: transparent;
@@ -168,16 +196,33 @@ function getPreview(note: Note): string {
   padding: 0;
   flex-shrink: 0;
   opacity: 0;
+  pointer-events: none;
   transition: color var(--motion-duration-fast), opacity var(--motion-duration-fast), background-color var(--motion-duration-fast);
 }
 
-.note-item:hover .note-item__del {
+/* Reveal on hover or keyboard focus-within (ICT-43 pattern) */
+.note-item:hover .note-item__del,
+.note-item:focus-within .note-item__del {
   opacity: 1;
+  pointer-events: auto;
+}
+
+/* Always visible on touch devices */
+@media (hover: none) {
+  .note-item__del {
+    opacity: 0.6;
+    pointer-events: auto;
+  }
 }
 
 .note-item__del:hover {
   color: var(--color-status-blocked);
   background-color: color-mix(in srgb, var(--color-status-blocked) 12%, transparent);
+}
+
+.note-item__del:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
 }
 
 .note-item__preview {

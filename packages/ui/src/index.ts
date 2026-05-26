@@ -14,6 +14,8 @@ export { default as Tag }          from './components/Tag.vue'
 export { default as Chip }         from './components/Chip.vue'
 export { default as Kbd }          from './components/Kbd.vue'
 export { default as DatePicker }   from './components/DatePicker.vue'
+export { default as Select }       from './components/Select.vue'
+export type { SelectOption }       from './components/select-types'
 
 // ─── Composables ──────────────────────────────────────────────────
 export { useToast }                from './components/useToast'

@@ -5,9 +5,6 @@ import * as api from '@/api'
 import type { Task } from '@tasknote/shared'
 import ConfirmDeleteDialog from './ConfirmDeleteDialog.vue'
 
-// Tasks returned from /api/tasks/archived include a nested `column` object.
-// TypeORM serializes the relation as camelCase on the entity, but NestJS class-transformer
-// normalises it. Column name is all we display — no board_id needed here.
 interface ArchivedTask extends Task {
   column?: {
     id: number
@@ -90,7 +87,7 @@ function formatDate(date: Date | string | null): string {
 
 <template>
   <div>
-    <!-- Loading skeleton -->
+    
     <div v-if="isLoading" class="space-y-2" aria-live="polite" aria-busy="true">
       <div
         v-for="i in 3"
@@ -100,7 +97,6 @@ function formatDate(date: Date | string | null): string {
       />
     </div>
 
-    <!-- Empty state -->
     <div
       v-else-if="tasks.length === 0"
       class="py-16 text-center text-text-muted text-sm"
@@ -108,14 +104,13 @@ function formatDate(date: Date | string | null): string {
       No archived tasks{{ boardId ? ' for this board' : '' }}.
     </div>
 
-    <!-- Task list -->
     <ul v-else class="space-y-2" role="list">
       <li
         v-for="task in tasks"
         :key="task.id"
         class="flex items-center gap-3 rounded-control border border-border bg-surface px-4 py-3"
       >
-        <!-- Task info -->
+        
         <div class="min-w-0 flex-1">
           <p class="truncate text-sm font-medium text-text-primary">{{ task.title }}</p>
           <p class="mt-0.5 text-xs text-text-muted">
@@ -124,7 +119,6 @@ function formatDate(date: Date | string | null): string {
           </p>
         </div>
 
-        <!-- Actions -->
         <div class="flex shrink-0 items-center gap-2">
           <Button
             variant="ghost"

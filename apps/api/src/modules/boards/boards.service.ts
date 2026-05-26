@@ -10,6 +10,7 @@ import type { CreateBoardDto, UpdateBoardDto } from '@tasknote/shared';
 import { BoardEntity } from './entities/board.entity';
 import { ColumnEntity } from '../columns/entities/column.entity';
 import { TaskEntity } from '../tasks/entities/task.entity';
+import { FileRefsService } from '../file-refs/file-refs.service';
 
 interface DefaultColumnSeed {
   name: string;
@@ -37,6 +38,7 @@ export class BoardsService {
     @InjectRepository(TaskEntity)
     private readonly tasksRepo: Repository<TaskEntity>,
     private readonly dataSource: DataSource,
+    private readonly fileRefsService: FileRefsService,
   ) {}
 
   async listBoards(): Promise<BoardEntity[]> {
@@ -48,7 +50,7 @@ export class BoardsService {
     this.logger.log(`createBoard: creating board name="${dto.name}"`);
 
     return this.dataSource.transaction(async (manager) => {
-      // Compute next position from current max
+      
       const result = await manager
         .createQueryBuilder(BoardEntity, 'b')
         .select('MAX(b.position)', 'maxPos')
@@ -67,7 +69,6 @@ export class BoardsService {
       });
       const savedBoard = await manager.save(BoardEntity, board);
 
-      // Auto-create 4 default columns in a single batch
       const columnEntities = DEFAULT_COLUMNS.map((col) =>
         manager.create(ColumnEntity, {
           boardId: savedBoard.id,
@@ -90,8 +91,6 @@ export class BoardsService {
   async getBoard(id: number): Promise<BoardEntity> {
     this.logger.log(`getBoard: loading board id=${id} with nested columns and tasks`);
 
-    // Single query via joins. Archived tasks are excluded from the join condition
-    // (not WHERE) so columns with zero active tasks are still returned.
     const board = await this.dataSource
       .createQueryBuilder(BoardEntity, 'board')
       .leftJoinAndSelect('board.columns', 'col')
@@ -106,7 +105,6 @@ export class BoardsService {
       throw new NotFoundException(`Board with id '${id}' not found`);
     }
 
-    // Enrich each task with tag_ids for UI tag filtering (single aggregate query).
     const taskIds = board.columns.flatMap((c) => c.tasks.map((t) => t.id));
     if (taskIds.length > 0) {
       const rows = await this.dataSource.query<Array<{ task_id: number; tag_id: number }>>(
@@ -162,13 +160,23 @@ export class BoardsService {
       });
     }
 
-    const result = await this.boardsRepo.delete(id);
-    if (result.affected === 0) {
+    const board = await this.boardsRepo.findOne({ where: { id } });
+    if (!board) {
       this.logger.warn(`removeBoard: board id=${id} not found`);
       throw new NotFoundException(`Board with id '${id}' not found`);
     }
 
-    // FK ON DELETE CASCADE (columns.board_id, tasks.column_id) handles child rows.
-    this.logger.log(`removeBoard: board id=${id} deleted (cascade removed columns and tasks)`);
+    await this.dataSource.transaction(async (manager) => {
+      const columns = await manager.find(ColumnEntity, { where: { boardId: id } });
+      for (const col of columns) {
+        const tasks = await manager.find(TaskEntity, { where: { columnId: col.id } });
+        for (const task of tasks) {
+          await this.fileRefsService.deleteAllFor('task', task.id, manager);
+        }
+      }
+      await manager.remove(BoardEntity, board);
+    });
+
+    this.logger.log(`removeBoard: board id=${id} deleted (cascade removed columns, tasks and file_refs)`);
   }
 }

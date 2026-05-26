@@ -49,11 +49,11 @@ const emit = defineEmits<{
             <DialogTitle class="text-base font-semibold text-text-primary leading-heading">
               {{ title }}
             </DialogTitle>
+            <!-- Always render DialogDescription for a11y (hidden when no prop provided) -->
             <DialogDescription
-              v-if="description"
-              class="mt-0.5 text-sm text-text-secondary"
+              :class="description ? 'mt-0.5 text-sm text-text-secondary' : 'sr-only'"
             >
-              {{ description }}
+              {{ description || `${title} panel` }}
             </DialogDescription>
           </div>
 

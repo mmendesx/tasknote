@@ -11,7 +11,7 @@ function cacheKey(target_type: TargetType, target_id: number): CacheKey {
 }
 
 export const useFileRefsStore = defineStore('fileRefs', () => {
-  // Map from `${target_type}-${target_id}` → FileRef[]
+  
   const cache = ref<Map<string, FileRef[]>>(new Map())
   const loading = ref(false)
   const error = ref<string | null>(null)
@@ -51,7 +51,7 @@ export const useFileRefsStore = defineStore('fileRefs', () => {
     error.value = null
     try {
       const updated = await api.fileRefs.updateFileRef(id, dto)
-      // Update in whichever cache bucket contains this id
+      
       for (const [key, refs] of cache.value.entries()) {
         const idx = refs.findIndex((r) => r.id === id)
         if (idx !== -1) {
@@ -74,7 +74,7 @@ export const useFileRefsStore = defineStore('fileRefs', () => {
     error.value = null
     try {
       await api.fileRefs.deleteFileRef(id)
-      // Remove from whichever bucket contains this id
+      
       for (const [key, refs] of cache.value.entries()) {
         const idx = refs.findIndex((r) => r.id === id)
         if (idx !== -1) {

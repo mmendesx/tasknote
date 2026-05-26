@@ -37,7 +37,7 @@ async function pickAccent(hex: AccentHex) {
       :style="{ backgroundColor: preset.hex, '--tw-ring-color': preset.hex }"
       @click="pickAccent(preset.hex)"
     >
-      <!-- Checkmark for selected state -->
+      
       <span
         v-if="currentAccent === preset.hex"
         class="absolute inset-0 flex items-center justify-center"

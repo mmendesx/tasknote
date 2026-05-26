@@ -1,8 +1,5 @@
 <script setup lang="ts">
-/**
- * TagManager — CRUD interface for the global tag pool.
- * Used in SettingsView (ICT-23). Lists all tags with inline create/edit/delete.
- */
+
 import { ref, onMounted } from 'vue'
 import { Button, Input } from '@tasknote/ui'
 import { useTagsStore } from '@/stores/tags'
@@ -10,19 +7,16 @@ import type { Tag } from '@tasknote/shared'
 
 const tagsStore = useTagsStore()
 
-// Status-palette colors plus a few extras for tag customization
 const COLOR_PRESETS = [
-  '#5B616B', // muted
-  '#F5C26B', // doing/yellow
-  '#F87171', // blocked/red
-  '#A3E635', // done/lime (accent)
-  '#60A5FA', // blue
-  '#C084FC', // purple
-  '#34D399', // green
-  '#FB923C', // orange
+  '#5B616B', 
+  '#F5C26B', 
+  '#F87171', 
+  '#A3E635', 
+  '#60A5FA', 
+  '#C084FC', 
+  '#34D399', 
+  '#FB923C', 
 ]
-
-// ─── Create state ─────────────────────────────────────────────────────────────
 
 const createName  = ref('')
 const createColor = ref('#5B616B')
@@ -45,8 +39,6 @@ async function submitCreate(): Promise<void> {
     isCreating.value = false
   }
 }
-
-// ─── Edit state ───────────────────────────────────────────────────────────────
 
 const editingId    = ref<number | null>(null)
 const editName     = ref('')
@@ -82,8 +74,6 @@ async function submitEdit(): Promise<void> {
   }
 }
 
-// ─── Delete state ─────────────────────────────────────────────────────────────
-
 const confirmDeleteId = ref<number | null>(null)
 const isDeleting      = ref(false)
 
@@ -102,13 +92,11 @@ async function confirmDelete(): Promise<void> {
     await tagsStore.remove(confirmDeleteId.value)
     confirmDeleteId.value = null
   } catch {
-    /* tagsStore sets error */
+    
   } finally {
     isDeleting.value = false
   }
 }
-
-// ─── Load ─────────────────────────────────────────────────────────────────────
 
 onMounted(() => {
   if (tagsStore.list.length === 0) tagsStore.load()
@@ -119,19 +107,17 @@ onMounted(() => {
   <section class="tag-manager" aria-labelledby="tag-manager-heading">
     <h2 id="tag-manager-heading" class="tag-manager__heading">Tags</h2>
 
-    <!-- Error banner -->
     <p v-if="tagsStore.error" role="alert" class="tag-manager__error">
       {{ tagsStore.error }}
     </p>
 
-    <!-- Tag list -->
     <ul v-if="tagsStore.list.length" class="tag-manager__list" aria-label="All tags">
       <li
         v-for="tag in tagsStore.list"
         :key="tag.id"
         class="tag-manager__item"
       >
-        <!-- View mode -->
+        
         <template v-if="editingId !== tag.id && confirmDeleteId !== tag.id">
           <span
             class="tag-dot"
@@ -145,7 +131,6 @@ onMounted(() => {
           </div>
         </template>
 
-        <!-- Edit mode -->
         <template v-else-if="editingId === tag.id">
           <div class="tag-manager__edit-form">
             <div class="tag-manager__color-row">
@@ -179,7 +164,6 @@ onMounted(() => {
           </div>
         </template>
 
-        <!-- Delete confirm mode -->
         <template v-else-if="confirmDeleteId === tag.id">
           <span
             class="tag-dot"
@@ -199,7 +183,6 @@ onMounted(() => {
       No tags yet. Create your first tag below.
     </p>
 
-    <!-- Create form -->
     <div class="tag-manager__create-form" aria-label="Create new tag">
       <p class="text-sm font-medium text-text-primary mb-3">New tag</p>
 

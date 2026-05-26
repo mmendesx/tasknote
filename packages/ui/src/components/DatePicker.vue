@@ -4,10 +4,10 @@
  * Uses Reka-UI DatePickerRoot primitives for a11y + keyboard nav.
  * v-model: string ('YYYY-MM-DD' or '' for none).
  */
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import {
   DatePickerRoot,
-  DatePickerTrigger,
+  DatePickerAnchor,
   DatePickerContent,
   DatePickerCalendar,
   DatePickerHeader,
@@ -63,6 +63,13 @@ function clearDate(e: MouseEvent) {
   e.stopPropagation()
   emit('update:modelValue', '')
 }
+
+const open = ref(false)
+function toggleOpen(e: MouseEvent) {
+  e.stopPropagation()
+  if (props.disabled) return
+  open.value = !open.value
+}
 </script>
 
 <template>
@@ -71,16 +78,20 @@ function clearDate(e: MouseEvent) {
 
     <DatePickerRoot
       :model-value="calendarValue"
+      :open="open"
       :disabled="disabled"
       @update:model-value="onUpdate"
+      @update:open="open = $event"
     >
-      <!-- Trigger -->
-      <DatePickerTrigger as-child>
+      <div class="dp-trigger-wrap">
         <button
           type="button"
           class="dp-trigger"
           :class="{ 'dp-trigger--empty': !modelValue, 'dp-trigger--disabled': disabled }"
           :disabled="disabled"
+          :aria-expanded="open"
+          aria-haspopup="dialog"
+          @click="toggleOpen($event as MouseEvent)"
         >
           <svg viewBox="0 0 16 16" width="14" height="14" fill="none" aria-hidden="true" class="dp-trigger__icon">
             <rect x="1" y="3" width="14" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/>
@@ -88,21 +99,22 @@ function clearDate(e: MouseEvent) {
             <path d="M5 1v4M11 1v4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
           </svg>
           <span class="dp-trigger__text">{{ displayValue || placeholder }}</span>
-          <span
-            v-if="modelValue"
-            role="button"
-            aria-label="Clear date"
-            class="dp-clear"
-            tabindex="0"
-            @click.stop="clearDate($event as MouseEvent)"
-            @keydown.enter.stop="emit('update:modelValue', '')"
-          >
-            <svg viewBox="0 0 12 12" width="10" height="10" fill="none" aria-hidden="true">
-              <path d="M2 2l8 8M10 2L2 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-          </span>
         </button>
-      </DatePickerTrigger>
+        <DatePickerAnchor as-child>
+          <span class="dp-anchor" aria-hidden="true" />
+        </DatePickerAnchor>
+        <button
+          v-if="modelValue && !disabled"
+          type="button"
+          class="dp-clear"
+          aria-label="Clear date"
+          @click="clearDate($event as MouseEvent)"
+        >
+          <svg viewBox="0 0 12 12" width="10" height="10" fill="none" aria-hidden="true">
+            <path d="M2 2l8 8M10 2L2 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
 
       <!-- Popover calendar panel -->
       <DatePickerContent
@@ -182,6 +194,19 @@ function clearDate(e: MouseEvent) {
   color: var(--color-text-secondary);
 }
 
+.dp-trigger-wrap {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+}
+
+.dp-anchor {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
 /* ── Trigger button ──────────────────────────────────────────────────────── */
 .dp-trigger {
   display: flex;
@@ -189,6 +214,7 @@ function clearDate(e: MouseEvent) {
   gap: 8px;
   width: 100%;
   padding: 8px 10px;
+  padding-right: 32px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-control);
   background: var(--color-surface);
@@ -197,6 +223,7 @@ function clearDate(e: MouseEvent) {
   text-align: left;
   cursor: pointer;
   transition: border-color var(--motion-duration-fast);
+  font-family: inherit;
 }
 
 .dp-trigger:hover:not(.dp-trigger--disabled) {
@@ -228,21 +255,35 @@ function clearDate(e: MouseEvent) {
 }
 
 .dp-clear {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   align-items: center;
-  padding: 2px;
-  margin-left: auto;
+  justify-content: center;
+  /* FR-14: 24×24 minimum touch target */
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  border: none;
+  background: transparent;
   border-radius: 3px;
   color: var(--color-text-muted);
   cursor: pointer;
-  transition: color var(--motion-duration-fast);
+  transition: color var(--motion-duration-fast), background-color var(--motion-duration-fast);
 }
 
 .dp-clear:hover {
   color: var(--color-text-primary);
+  background-color: color-mix(in srgb, var(--color-text-primary) 10%, transparent);
 }
 
-/* ── Popover panel ───────────────────────────────────────────────────────── */
+</style>
+
+<style>
+/* Popover content is rendered in a Portal at <body>, so these rules MUST be
+   non-scoped — scoped selectors with data-v-* won't match portaled DOM. */
 .dp-content {
   z-index: 200;
   padding: 12px;
@@ -253,7 +294,6 @@ function clearDate(e: MouseEvent) {
   width: 260px;
 }
 
-/* ── Header ──────────────────────────────────────────────────────────────── */
 .dp-header {
   display: flex;
   align-items: center;
@@ -291,7 +331,6 @@ function clearDate(e: MouseEvent) {
   outline-offset: 1px;
 }
 
-/* ── Grid ────────────────────────────────────────────────────────────────── */
 .dp-grid {
   width: 100%;
 }
@@ -316,7 +355,6 @@ function clearDate(e: MouseEvent) {
   justify-content: center;
 }
 
-/* ── Day cell — Reka sets data-* attributes for state ────────────────────── */
 .dp-day {
   display: flex;
   align-items: center;

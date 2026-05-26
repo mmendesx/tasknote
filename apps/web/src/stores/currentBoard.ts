@@ -11,10 +11,6 @@ function nextTempId(): number {
   return TEMP_ID_OFFSET - Date.now()
 }
 
-/**
- * Deep-clone the board, unwrapping Vue reactivity proxies first.
- * Returns a plain non-reactive snapshot for rollback on optimistic failure.
- */
 function snapshot(board: BoardWithColumns): BoardWithColumns {
   return structuredClone(toRaw(board))
 }
@@ -25,19 +21,9 @@ export const useCurrentBoardStore = defineStore('currentBoard', () => {
   const board = ref<BoardWithColumns | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
-  // tag IDs to filter; empty = show all
+  
   const tagFilter = ref<number[]>([])
 
-  /**
-   * visibleTasks — columns with task arrays filtered by tagFilter.
-   * Aliased as `visibleColumns` so views can iterate columns directly.
-   * Named per ICT-16 spec: "visibleTasks (filtered by tagFilter)".
-   *
-   * NOTE: filtering relies on a `tag_ids: number[]` field on Task that the
-   * shared entity type does not currently declare. The API's BoardWithColumns
-   * response must include tag_ids per task for this to work at runtime.
-   * Track: add `tag_ids?: number[]` to Task in packages/shared/src/entities.ts.
-   */
   const visibleTasks = computed<ColumnWithTasks[]>(() => {
     if (!board.value) return []
     if (tagFilter.value.length === 0) return board.value.columns
@@ -52,8 +38,6 @@ export const useCurrentBoardStore = defineStore('currentBoard', () => {
     }))
   })
 
-  // ─── Load ──────────────────────────────────────────────────────────────────
-
   async function load(id: number): Promise<void> {
     loading.value = true
     error.value = null
@@ -66,15 +50,6 @@ export const useCurrentBoardStore = defineStore('currentBoard', () => {
     }
   }
 
-  // ─── Optimistic helper ─────────────────────────────────────────────────────
-
-  /**
-   * Run an optimistic mutation:
-   *  1. Snapshot current board state.
-   *  2. Apply `mutate` immediately (synchronous).
-   *  3. Await the API call.
-   *  4. On failure: restore snapshot + show toast; re-throw so callers can react.
-   */
   async function optimistic<T>(
     mutate: () => void,
     apiCall: () => Promise<T>,
@@ -95,8 +70,6 @@ export const useCurrentBoardStore = defineStore('currentBoard', () => {
     }
   }
 
-  // ─── Move task ─────────────────────────────────────────────────────────────
-
   async function moveTask(
     taskId: number,
     toColumnId: number,
@@ -107,7 +80,7 @@ export const useCurrentBoardStore = defineStore('currentBoard', () => {
     await optimistic(
       () => {
         if (!board.value) return
-        // Remove from source column
+        
         let movingTask: Task | undefined
         for (const col of board.value.columns) {
           const idx = col.tasks.findIndex((t) => t.id === taskId)
@@ -118,7 +91,6 @@ export const useCurrentBoardStore = defineStore('currentBoard', () => {
         }
         if (!movingTask) return
 
-        // Insert into target column at toPosition
         const targetCol = board.value.columns.find((c) => c.id === toColumnId)
         if (targetCol) {
           movingTask.column_id = toColumnId
@@ -130,8 +102,6 @@ export const useCurrentBoardStore = defineStore('currentBoard', () => {
       'Failed to move task'
     )
   }
-
-  // ─── Reorder columns ───────────────────────────────────────────────────────
 
   async function reorderColumns(columnIds: number[]): Promise<void> {
     if (!board.value) return
@@ -157,8 +127,6 @@ export const useCurrentBoardStore = defineStore('currentBoard', () => {
     )
   }
 
-  // ─── Create task ───────────────────────────────────────────────────────────
-
   async function createTask(columnId: number, dto: CreateTaskDto): Promise<Task | undefined> {
     if (!board.value) return undefined
 
@@ -181,12 +149,12 @@ export const useCurrentBoardStore = defineStore('currentBoard', () => {
     if (!col) return undefined
 
     const snap = snapshot(board.value)
-    // Optimistically prepend the temp task
+    
     col.tasks.unshift(tempTask)
 
     try {
       const realTask = await api.tasks.createTask(dto)
-      // Replace the temp task with the real one in-place
+      
       const idx = col.tasks.findIndex((t) => t.id === tempId)
       if (idx !== -1) col.tasks.splice(idx, 1, realTask)
       return realTask
@@ -197,8 +165,6 @@ export const useCurrentBoardStore = defineStore('currentBoard', () => {
       throw err
     }
   }
-
-  // ─── Update task ───────────────────────────────────────────────────────────
 
   async function updateTask(taskId: number, dto: UpdateTaskDto): Promise<void> {
     if (!board.value) return
@@ -219,8 +185,6 @@ export const useCurrentBoardStore = defineStore('currentBoard', () => {
     )
   }
 
-  // ─── Soft-delete task ──────────────────────────────────────────────────────
-
   async function softDeleteTask(taskId: number): Promise<void> {
     if (!board.value) return
 
@@ -239,8 +203,6 @@ export const useCurrentBoardStore = defineStore('currentBoard', () => {
       'Failed to archive task'
     )
   }
-
-  // ─── Tag management ────────────────────────────────────────────────────────
 
   async function addTag(taskId: number, tagId: number): Promise<void> {
     if (!board.value) return
@@ -283,8 +245,6 @@ export const useCurrentBoardStore = defineStore('currentBoard', () => {
       'Failed to remove tag'
     )
   }
-
-  // ─── Tag filter ────────────────────────────────────────────────────────────
 
   function setTagFilter(tagIds: number[]): void {
     tagFilter.value = tagIds

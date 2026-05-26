@@ -1,10 +1,5 @@
 <script setup lang="ts">
-/**
- * BoardTagFilter — horizontal chip row above board columns.
- * Reads tagsStore.list. Active tags highlighted. Toggles currentBoardStore.tagFilter.
- * Syncs to URL query param ?tag=1,2,3 via vue-router (replace, not push).
- * Clears filter when no tags are active.
- */
+
 import { watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTagsStore } from '@/stores/tags'
@@ -18,8 +13,6 @@ const route   = useRoute()
 const router  = useRouter()
 const tagsStore      = useTagsStore()
 const boardStore     = useCurrentBoardStore()
-
-// ─── URL → store sync ─────────────────────────────────────────────────────────
 
 function parseTagParam(raw: string | undefined): number[] {
   if (!raw) return []
@@ -38,16 +31,12 @@ onMounted(syncFromUrl)
 
 watch(() => route.query.tag, syncFromUrl)
 
-// ─── Store → URL sync ─────────────────────────────────────────────────────────
-
 function pushFilterToUrl(ids: number[]): void {
   const tag = ids.length ? ids.join(',') : undefined
   router.replace({
     query: { ...route.query, tag },
   })
 }
-
-// ─── Toggle ───────────────────────────────────────────────────────────────────
 
 function toggleTag(tagId: number): void {
   const current = boardStore.tagFilter

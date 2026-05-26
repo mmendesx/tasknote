@@ -19,12 +19,10 @@ const boardsStore = useBoardsStore()
 const tagsStore = useTagsStore()
 const isDesktop = useIsDesktop()
 
-// Tag colors map for TaskCard dots
 const tagColors = computed<Record<number, string>>(() =>
   Object.fromEntries(tagsStore.list.map((t) => [t.id, t.color]))
 )
 
-// Resolve board id: route param → default board
 const boardId = computed<number | null>(() => {
   const param = route.params.id
   if (param) {
@@ -39,7 +37,6 @@ async function loadBoard(id: number | null) {
   await currentBoardStore.load(id)
 }
 
-// Load on mount and route change
 onMounted(async () => {
   if (boardsStore.list.length === 0) {
     await boardsStore.load()
@@ -54,9 +51,6 @@ watch(boardId, (id) => {
   loadBoard(id)
 })
 
-// ─── Column sortable ──────────────────────────────────────────────────────────
-
-// Local column mirror — DnD mutates localColumns; watch syncs from store
 const localColumns = ref<ColumnWithTasks[]>([])
 
 watch(
@@ -65,7 +59,6 @@ watch(
   { immediate: true, deep: false }
 )
 
-// visibleColumns with tag filter applied
 const visibleColumns = computed(() => {
   const filter = currentBoardStore.tagFilter
   if (filter.length === 0) return localColumns.value
@@ -89,7 +82,6 @@ const { option: colSortableOption } = useSortable(columnsContainerRef, localColu
   },
 })
 
-// Must run after mount — colSortableOption() is a no-op before tryOnMounted fires.
 onMounted(() => {
   colSortableOption('disabled', !isDesktop.value)
   watch(isDesktop, (desktop) => {
@@ -97,13 +89,9 @@ onMounted(() => {
   })
 })
 
-// ─── Task move handler (from child) ──────────────────────────────────────────
-
 function handleMoveTask(taskId: number, toColumnId: number, toPosition: number) {
   currentBoardStore.moveTask(taskId, toColumnId, toPosition)
 }
-
-// ─── Task drawer ──────────────────────────────────────────────────────────────
 
 const drawerOpen     = ref(false)
 const selectedTaskId = ref<number | null>(null)
@@ -118,8 +106,6 @@ function handleDrawerClose(): void {
   selectedTaskId.value = null
 }
 
-// ─── Add task (board toolbar) ─────────────────────────────────────────────────
-
 const firstColumnId = computed(() => currentBoardStore.board?.columns[0]?.id ?? 0)
 
 function addTask(): void {
@@ -127,8 +113,6 @@ function addTask(): void {
   selectedTaskId.value = null
   drawerOpen.value = true
 }
-
-// ─── Create first board ───────────────────────────────────────────────────────
 
 const isCreatingBoard = ref(false)
 
@@ -146,7 +130,7 @@ async function createFirstBoard() {
 
 <template>
   <div class="board-view">
-    <!-- Mobile DnD banner -->
+    
     <aside
       v-if="!isDesktop"
       class="board-view__mobile-banner"
@@ -160,10 +144,8 @@ async function createFirstBoard() {
       Drag-and-drop available on desktop
     </aside>
 
-    <!-- Tag filter bar -->
     <BoardTagFilter :board-id="boardId" />
 
-    <!-- Board toolbar -->
     <div v-if="currentBoardStore.board" class="board-view__toolbar">
       <Button
         variant="primary"
@@ -177,18 +159,15 @@ async function createFirstBoard() {
       </Button>
     </div>
 
-    <!-- Loading state -->
     <div v-if="currentBoardStore.loading" class="board-view__state" aria-live="polite">
       <span class="state-spinner" aria-hidden="true" />
       <p>Loading board…</p>
     </div>
 
-    <!-- Error state -->
     <div v-else-if="currentBoardStore.error" class="board-view__state board-view__state--error" role="alert">
       <p>Failed to load board: {{ currentBoardStore.error }}</p>
     </div>
 
-    <!-- Empty / no board state -->
     <div
       v-else-if="!currentBoardStore.board"
       class="board-view__state"
@@ -209,7 +188,6 @@ async function createFirstBoard() {
       </button>
     </div>
 
-    <!-- Board canvas -->
     <div
       v-else
       ref="columnsContainerRef"
@@ -228,7 +206,6 @@ async function createFirstBoard() {
       />
     </div>
 
-    <!-- Task drawer (ICT-19) -->
     <TaskDrawer
       v-model:open="drawerOpen"
       :task-id="selectedTaskId"
@@ -259,7 +236,6 @@ async function createFirstBoard() {
   font-weight: 500;
   flex-shrink: 0;
 }
-
 
 .board-view__canvas {
   display: flex;

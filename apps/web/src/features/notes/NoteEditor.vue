@@ -1,12 +1,6 @@
 <script setup lang="ts">
-/**
- * NoteEditor — right-panel editor for a single note.
- * Props: noteId (number | null)
- * Features: title input, Milkdown body, pin toggle, task link picker, delete.
- * Title + body save debounced (500ms). Pin saves immediately.
- */
+
 import { ref, watch, computed } from 'vue'
-import { useDebounceFn } from '@vueuse/core'
 import { Input, Button, useToast } from '@tasknote/ui'
 import MilkdownEditor from '@/features/editor/MilkdownEditor.vue'
 import TaskLinkPicker from './TaskLinkPicker.vue'
@@ -30,8 +24,6 @@ const bodyMd = ref('')
 const loading = ref(false)
 const deleteConfirm = ref(false)
 
-// ─── Derived title (first heading / first line) ──────────────────────────────
-
 function deriveTitleClient(md: string): string {
   const heading = md.match(/^#{1,6}\s+(.+)$/m)
   if (heading) return heading[1].trim()
@@ -45,8 +37,6 @@ const displayTitle = computed(() =>
   title.value || (note.value ? deriveTitleClient(note.value.body_md) : '')
 )
 
-// ─── Load note when noteId changes ───────────────────────────────────────────
-
 watch(
   () => props.noteId,
   async (id) => {
@@ -54,14 +44,14 @@ watch(
     deleteConfirm.value = false
     loading.value = true
     try {
-      // Pull from store first for instant render, then sync from API if needed
+      
       const cached = notesStore.list.find((n) => n.id === id)
       if (cached) {
         note.value = cached
         title.value = cached.title
         bodyMd.value = cached.body_md
       } else {
-        // Note not in store: re-load all notes so the store stays consistent
+        
         await notesStore.load()
         const found = notesStore.list.find((n) => n.id === id)
         if (found) {
@@ -77,46 +67,56 @@ watch(
   { immediate: true }
 )
 
-// ─── Debounced save for title + body ─────────────────────────────────────────
+const isSaving = ref(false)
 
-const debouncedSave = useDebounceFn(async () => {
-  if (!note.value) return
+const isDirty = computed(() => {
+  if (!note.value) return false
+  return title.value !== note.value.title || bodyMd.value !== note.value.body_md
+})
+
+function onTitleInput(val: string): void { title.value = val }
+function onBodyUpdate(val: string): void { bodyMd.value = val }
+
+async function saveNote(): Promise<void> {
+  if (!note.value || isSaving.value) return
+  if (!isDirty.value) {
+    toast.success('No changes', 'Nothing to save')
+    return
+  }
+  isSaving.value = true
   try {
     await notesStore.update(note.value.id, {
       title: title.value,
       body_md: bodyMd.value,
     })
+    const updated = notesStore.list.find((n) => n.id === note.value!.id)
+    if (updated) note.value = updated
+    toast.success('Saved', 'Note updated')
   } catch {
     toast.error('Save failed', 'Could not save note')
+  } finally {
+    isSaving.value = false
   }
-}, 500)
-
-function onTitleInput(val: string): void {
-  title.value = val
-  debouncedSave()
 }
 
-function onBodyUpdate(val: string): void {
-  bodyMd.value = val
-  debouncedSave()
+function discardNoteChanges(): void {
+  if (!note.value) return
+  title.value = note.value.title
+  bodyMd.value = note.value.body_md
 }
-
-// ─── Pin toggle (saves immediately) ──────────────────────────────────────────
 
 async function togglePin(): Promise<void> {
   if (!note.value) return
   const next = !note.value.pinned
   try {
     await notesStore.update(note.value.id, { pinned: next })
-    // Reflect in local ref after store update
+    
     const updated = notesStore.list.find((n) => n.id === note.value!.id)
     if (updated) note.value = updated
   } catch {
     toast.error('Pin failed', 'Could not update pin status')
   }
 }
-
-// ─── Task link ────────────────────────────────────────────────────────────────
 
 async function onTaskLink(taskId: number | null): Promise<void> {
   if (!note.value) return
@@ -128,8 +128,6 @@ async function onTaskLink(taskId: number | null): Promise<void> {
     toast.error('Link failed', 'Could not link task')
   }
 }
-
-// ─── Delete ───────────────────────────────────────────────────────────────────
 
 async function confirmDelete(): Promise<void> {
   if (!note.value) return
@@ -149,7 +147,7 @@ async function confirmDelete(): Promise<void> {
   </div>
 
   <div v-else-if="note" class="note-editor">
-    <!-- ── Toolbar ─────────────────────────────────────────────── -->
+    
     <div class="note-editor__toolbar">
       <button
         type="button"
@@ -167,6 +165,26 @@ async function confirmDelete(): Promise<void> {
 
       <div class="note-editor__spacer" />
 
+      <span v-if="isDirty" class="note-editor__dirty">Unsaved</span>
+
+      <Button
+        variant="primary"
+        size="sm"
+        :disabled="isSaving"
+        @click="saveNote"
+      >
+        {{ isSaving ? 'Saving…' : 'Save' }}
+      </Button>
+
+      <Button
+        variant="ghost"
+        size="sm"
+        :disabled="isSaving"
+        @click="discardNoteChanges"
+      >
+        Discard
+      </Button>
+
       <Button
         v-if="!deleteConfirm"
         variant="ghost"
@@ -182,7 +200,6 @@ async function confirmDelete(): Promise<void> {
       </template>
     </div>
 
-    <!-- ── Title ──────────────────────────────────────────────── -->
     <Input
       :model-value="title"
       placeholder="Title (auto from body if empty)"
@@ -190,8 +207,6 @@ async function confirmDelete(): Promise<void> {
       @update:model-value="onTitleInput"
     />
 
-    <!-- ── Body ───────────────────────────────────────────────── -->
-    <!-- key=note.id forces remount on note switch; Milkdown initialises once -->
     <div class="note-editor__body">
       <MilkdownEditor
         :key="note.id"
@@ -200,11 +215,10 @@ async function confirmDelete(): Promise<void> {
       />
     </div>
 
-    <!-- ── Task link ──────────────────────────────────────────── -->
     <div class="note-editor__section">
       <p class="note-editor__section-label">Task link</p>
       <TaskLinkPicker
-        :linked-task-id="note.task_id"
+        :linked-task-id="note.task_id ?? null"
         @select="onTaskLink"
       />
     </div>
@@ -274,6 +288,13 @@ async function confirmDelete(): Promise<void> {
 .note-editor__confirm-text {
   font-size: 0.8125rem;
   color: var(--color-status-blocked);
+}
+
+.note-editor__dirty {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+  margin-right: 0.25rem;
 }
 
 .note-editor__title {

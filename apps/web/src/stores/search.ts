@@ -32,10 +32,6 @@ export const useSearchStore = defineStore('search', () => {
     }
   }
 
-  /**
-   * Set the search query and debounce the API call by 300ms.
-   * An empty query clears results immediately without hitting the API.
-   */
   function setQuery(q: string): void {
     query.value = q
 

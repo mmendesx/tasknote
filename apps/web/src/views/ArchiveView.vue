@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { Select } from '@tasknote/ui'
+import type { SelectOption } from '@tasknote/ui'
 import { useBoardsStore } from '@/stores/boards'
 import ArchivedTaskList from '@/features/archive/ArchivedTaskList.vue'
 import ArchivedNoteList from '@/features/archive/ArchivedNoteList.vue'
@@ -19,7 +21,7 @@ onMounted(async () => {
     await boardsStore.load()
   }
   if (boardsStore.list.length > 0 && selectedBoardId.value === null) {
-    selectedBoardId.value = boardsStore.defaultBoardId
+    selectedBoardId.value = boardsStore.defaultBoardId.value
   }
   boardsReady.value = true
 })
@@ -27,46 +29,41 @@ onMounted(async () => {
 function selectTab(tab: Tab) {
   activeTab.value = tab
 }
+
+const boardOptions = computed<SelectOption[]>(() => [
+  { value: 0, label: 'All boards' },
+  ...boardsStore.list.map((b) => ({ value: b.id, label: b.name })),
+])
+
+const boardSelectValue = computed<number>(() => selectedBoardId.value ?? 0)
+
+function onBoardSelect(value: string | number): void {
+  const id = Number(value)
+  selectedBoardId.value = id === 0 ? null : id
+}
 </script>
 
 <template>
   <div class="flex h-full flex-col">
-    <!-- Page header -->
+    
     <header class="border-b border-border bg-surface-elevated px-6 py-4">
       <div class="flex items-center justify-between gap-4">
         <h1 class="text-lg font-semibold text-text-primary">Archive</h1>
 
-        <!-- Board selector — only shown when multiple boards exist and Tasks tab is active -->
         <div
           v-if="hasMultipleBoards && activeTab === 'tasks'"
-          class="flex items-center gap-2"
+          class="min-w-[12rem]"
         >
-          <label
-            for="archive-board-select"
-            class="text-xs font-medium text-text-secondary"
-          >
-            Board
-          </label>
-          <select
+          <Select
             id="archive-board-select"
-            v-model="selectedBoardId"
-            class="rounded-control border border-border bg-surface px-3 py-1.5
-                   text-sm text-text-primary outline-none
-                   focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-bg"
-          >
-            <option :value="null">All boards</option>
-            <option
-              v-for="board in boardsStore.list"
-              :key="board.id"
-              :value="board.id"
-            >
-              {{ board.name }}
-            </option>
-          </select>
+            label="Board"
+            :model-value="boardSelectValue"
+            :options="boardOptions"
+            @update:model-value="onBoardSelect"
+          />
         </div>
       </div>
 
-      <!-- Tabs -->
       <div class="mt-4 flex gap-1" role="tablist" aria-label="Archive sections">
         <button
           role="tab"
@@ -97,7 +94,6 @@ function selectTab(tab: Tab) {
       </div>
     </header>
 
-    <!-- Tab panels — gated on boardsReady to prevent premature API calls -->
     <main class="flex-1 overflow-y-auto px-6 py-6">
       <template v-if="boardsReady">
         <div
@@ -119,7 +115,6 @@ function selectTab(tab: Tab) {
         </div>
       </template>
 
-      <!-- Loading boards -->
       <div
         v-else
         class="flex items-center justify-center py-16"

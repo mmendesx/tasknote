@@ -4,7 +4,7 @@
   "private": true,
   "description": "TaskNote NestJS API (port 3001)",
   "scripts": {
-    "dev": "tsx watch src/main.ts",
+    "dev": "nest start --watch",
     "build": "tsc && tsc-alias",
     "start": "node dist/main.js",
     "lint": "eslint src --ext .ts",

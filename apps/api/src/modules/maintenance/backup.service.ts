@@ -30,7 +30,7 @@ export class BackupService implements OnModuleInit {
         this.logger.log(`Pruned ${result.pruned.length} old backup(s): ${result.pruned.join(', ')}`);
       }
     } catch (err) {
-      // Backup failures must never block app startup. Log the error and continue.
+      
       this.logger.error('Backup-on-startup failed — app continues normally', err instanceof Error ? err.stack : String(err));
     }
   }
@@ -45,7 +45,7 @@ export class BackupService implements OnModuleInit {
 
     const newest = backupFiles.length > 0 ? backupFiles[backupFiles.length - 1] : null;
     const now = Date.now();
-    const isStale = newest === null || now - newest.mtime > TWENTY_FOUR_HOURS_MS;
+    const isStale = newest === null || now - newest!.mtime > TWENTY_FOUR_HOURS_MS;
 
     let backupPath: string | undefined;
 
@@ -53,16 +53,11 @@ export class BackupService implements OnModuleInit {
       const filename = `tasknote-${formatDateYYYYMMDD(new Date())}.sqlite`;
       backupPath = path.join(backupsDir, filename);
 
-      // Plain copyFile is intentional here: this service does not hold the
-      // better-sqlite3 connection, so we cannot use the db.backup() API.
-      // WAL mode guarantees atomic reads at the file level, so a copyFile
-      // snapshot is safe enough for a single-user local app backup.
       await fs.copyFile(dbPath, backupPath);
 
       this.logger.debug(`Copied DB to backup: ${backupPath}`);
     }
 
-    // Re-list after potential copy so the new file is included in pruning.
     const filesAfterCopy = await this.listBackupFiles(backupsDir);
     const pruned = await this.pruneOldBackups(backupsDir, filesAfterCopy);
 
@@ -82,7 +77,6 @@ export class BackupService implements OnModuleInit {
       }),
     );
 
-    // Sort oldest → newest so caller can pop the newest from the end.
     withStats.sort((a, b) => a.mtime - b.mtime);
     return withStats;
   }
@@ -95,7 +89,6 @@ export class BackupService implements OnModuleInit {
       return [];
     }
 
-    // Files are sorted oldest → newest; keep the last MAX_BACKUPS entries.
     const toDelete = files.slice(0, files.length - MAX_BACKUPS);
 
     await Promise.all(

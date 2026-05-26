@@ -11,11 +11,8 @@ import TagManager from '@/features/tags/TagManager.vue'
 const settingsStore = useSettingsStore()
 const boardsStore = useBoardsStore()
 
-// ─── Profile ──────────────────────────────────────────────────────────────────
-
 const displayName = ref(settingsStore.settings?.display_name ?? '')
 
-// Sync display name when settings finish loading (may load after component mounts)
 watch(
   () => settingsStore.settings?.display_name,
   (name) => {
@@ -33,8 +30,6 @@ async function saveDisplayName() {
   await settingsStore.update({ display_name: trimmed })
 }
 
-// ─── Default board ────────────────────────────────────────────────────────────
-
 const currentDefaultBoardId = computed(() => settingsStore.settings?.default_board_id ?? null)
 
 async function handleBoardSelect(event: Event) {
@@ -42,8 +37,6 @@ async function handleBoardSelect(event: Event) {
   const id = val ? Number(val) : null
   await settingsStore.update({ default_board_id: id })
 }
-
-// ─── Export ───────────────────────────────────────────────────────────────────
 
 const isExporting = ref(false)
 const exportError = ref<string | null>(null)
@@ -68,8 +61,6 @@ async function handleExport() {
     isExporting.value = false
   }
 }
-
-// ─── Import ───────────────────────────────────────────────────────────────────
 
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const importConfirmOpen = ref(false)
@@ -96,7 +87,6 @@ async function handleFileChange(event: Event) {
     importParseError.value = 'The selected file is not valid JSON.'
   }
 
-  // Reset input so same file can be re-selected
   if (fileInputRef.value) fileInputRef.value.value = ''
 }
 
@@ -120,8 +110,6 @@ function cancelImport() {
   importError.value = null
 }
 
-// ─── Reset ────────────────────────────────────────────────────────────────────
-
 const resetDialogOpen = ref(false)
 </script>
 
@@ -129,7 +117,6 @@ const resetDialogOpen = ref(false)
   <div class="mx-auto max-w-2xl px-6 py-10 space-y-10">
     <h1 class="text-xl font-semibold text-text-primary">Settings</h1>
 
-    <!-- ── Profile ─────────────────────────────────────────────────────────── -->
     <section aria-labelledby="profile-heading">
       <h2 id="profile-heading" class="mb-4 text-sm font-semibold uppercase tracking-wider text-text-muted">
         Profile
@@ -146,7 +133,6 @@ const resetDialogOpen = ref(false)
       </div>
     </section>
 
-    <!-- ── Appearance ──────────────────────────────────────────────────────── -->
     <section aria-labelledby="appearance-heading">
       <h2 id="appearance-heading" class="mb-4 text-sm font-semibold uppercase tracking-wider text-text-muted">
         Appearance
@@ -168,7 +154,6 @@ const resetDialogOpen = ref(false)
       </div>
     </section>
 
-    <!-- ── Preferences ─────────────────────────────────────────────────────── -->
     <section aria-labelledby="preferences-heading">
       <h2 id="preferences-heading" class="mb-4 text-sm font-semibold uppercase tracking-wider text-text-muted">
         Preferences
@@ -198,14 +183,12 @@ const resetDialogOpen = ref(false)
       </div>
     </section>
 
-    <!-- ── Danger zone ─────────────────────────────────────────────────────── -->
     <section aria-labelledby="danger-heading">
       <h2 id="danger-heading" class="mb-4 text-sm font-semibold uppercase tracking-wider text-status-blocked">
         Danger zone
       </h2>
       <div class="rounded-panel border border-status-blocked/30 bg-surface p-5 space-y-4">
 
-        <!-- Export -->
         <div class="flex items-start justify-between gap-4">
           <div>
             <p class="text-sm font-medium text-text-primary">Export data</p>
@@ -219,7 +202,6 @@ const resetDialogOpen = ref(false)
 
         <hr class="border-border" />
 
-        <!-- Import -->
         <div class="flex items-start justify-between gap-4">
           <div>
             <p class="text-sm font-medium text-text-primary">Import data</p>
@@ -241,7 +223,6 @@ const resetDialogOpen = ref(false)
 
         <hr class="border-border" />
 
-        <!-- Reset -->
         <div class="flex items-start justify-between gap-4">
           <div>
             <p class="text-sm font-medium text-text-primary">Reset database</p>
@@ -255,7 +236,6 @@ const resetDialogOpen = ref(false)
     </section>
   </div>
 
-  <!-- Import confirmation dialog -->
   <Dialog
     :open="importConfirmOpen"
     title="Import data"
@@ -276,6 +256,5 @@ const resetDialogOpen = ref(false)
     </template>
   </Dialog>
 
-  <!-- Reset confirmation dialog -->
   <ConfirmResetDialog v-model:open="resetDialogOpen" />
 </template>

@@ -5,7 +5,6 @@ import type { ColumnEntity } from './entities/column.entity';
 import type { BoardEntity } from '../boards/entities/board.entity';
 import type { Repository, DataSource, EntityManager } from 'typeorm';
 
-// Helpers to build minimal entity shapes
 function makeColumn(overrides: Partial<ColumnEntity> = {}): ColumnEntity {
   return {
     id: 1,
@@ -20,7 +19,6 @@ function makeColumn(overrides: Partial<ColumnEntity> = {}): ColumnEntity {
     ...overrides,
   } as ColumnEntity;
 }
-
 
 type MockColumnRepo = {
   findOne: ReturnType<typeof vi.fn>;
@@ -41,7 +39,6 @@ type MockDataSource = {
   transaction: ReturnType<typeof vi.fn>;
 };
 
-// Build a mock repository with vi.fn() for each method we call
 function makeMockColumnRepo(): MockColumnRepo {
   return {
     findOne: vi.fn(),
@@ -69,8 +66,6 @@ function makeMockDataSource(
   };
 }
 
-// ─── reorderColumns ───────────────────────────────────────────────────────────
-
 describe('ColumnsService.reorderColumns', () => {
   let service: ColumnsService;
   let columnRepo: ReturnType<typeof makeMockColumnRepo>;
@@ -90,8 +85,6 @@ describe('ColumnsService.reorderColumns', () => {
     columnRepo = makeMockColumnRepo();
     boardRepo = makeMockBoardRepo();
 
-    // The transaction callback receives a manager that proxies save back to a spy.
-    // manager.save(ColumnEntity, col) → second argument is the entity instance to return.
     const managerSaveSpy = vi.fn((_entityClass: unknown, col: ColumnEntity) => Promise.resolve(col));
     dataSource = makeMockDataSource((cb) =>
       cb({ save: managerSaveSpy } as unknown as EntityManager),
@@ -107,11 +100,9 @@ describe('ColumnsService.reorderColumns', () => {
   it('updates positions in array order (0-indexed)', async () => {
     columnRepo.find.mockResolvedValue([...columns]);
 
-    // Dragging Done (id=4) before Blocked (id=3) → [1,2,4,3]
     const reorderedIds = [1, 2, 4, 3];
     const result = await service.reorderColumns({ board_id: boardId, column_ids: reorderedIds });
 
-    // Result order should match input ids, with position = array index
     expect(result).toHaveLength(4);
     expect(result[0].id).toBe(1);
     expect(result[0].position).toBe(0);
@@ -124,9 +115,8 @@ describe('ColumnsService.reorderColumns', () => {
   });
 
   it('throws INVALID_REORDER when column_ids length does not match board column count', async () => {
-    columnRepo.find.mockResolvedValue([...columns]); // board has 4 columns
+    columnRepo.find.mockResolvedValue([...columns]); 
 
-    // Sending only 3 ids — missing one
     await expect(
       service.reorderColumns({ board_id: boardId, column_ids: [1, 2, 3] }),
     ).rejects.toSatisfy((err: unknown) => {
@@ -140,7 +130,6 @@ describe('ColumnsService.reorderColumns', () => {
   it('throws INVALID_REORDER when column_ids contains an id not belonging to the board', async () => {
     columnRepo.find.mockResolvedValue([...columns]);
 
-    // id=99 does not belong to board 10
     await expect(
       service.reorderColumns({ board_id: boardId, column_ids: [1, 2, 3, 99] }),
     ).rejects.toSatisfy((err: unknown) => {
@@ -154,7 +143,6 @@ describe('ColumnsService.reorderColumns', () => {
   it('throws INVALID_REORDER when column_ids contains duplicates', async () => {
     columnRepo.find.mockResolvedValue([...columns]);
 
-    // Duplicate id=1 — length matches but set size does not
     await expect(
       service.reorderColumns({ board_id: boardId, column_ids: [1, 1, 2, 3] }),
     ).rejects.toSatisfy((err: unknown) => {
@@ -165,8 +153,6 @@ describe('ColumnsService.reorderColumns', () => {
     });
   });
 });
-
-// ─── updateColumn (WIP limit persistence) ────────────────────────────────────
 
 describe('ColumnsService.updateColumn — WIP limit', () => {
   let service: ColumnsService;

@@ -64,6 +64,10 @@ function handlePointerDownOutside(event: Event) {
           >
             {{ description }}
           </DialogDescription>
+          <!-- Always render a hidden description to satisfy reka-ui's aria requirement -->
+          <DialogDescription v-else class="sr-only">
+            {{ title }}
+          </DialogDescription>
         </div>
 
         <!-- Body -->

@@ -1,8 +1,5 @@
 <script setup lang="ts">
-/**
- * TaskFilesTab — Files pane inside TaskDrawer.
- * Lists FileRefChips + inline AddFileRefForm.
- */
+
 import { ref } from 'vue'
 import { Button } from '@tasknote/ui'
 import FileRefChip from '@/features/files/FileRefChip.vue'

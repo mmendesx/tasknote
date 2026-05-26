@@ -1,17 +1,13 @@
 import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import type { CreateNoteDto, UpdateNoteDto } from '@tasknote/shared';
 import { NoteEntity } from './entities/note.entity';
 import { TaskEntity } from '../tasks/entities/task.entity';
+import { FileRefsService } from '../file-refs/file-refs.service';
 
 const MAX_DERIVED_TITLE_LENGTH = 80;
 
-/**
- * Derives a title from the first non-empty line of a markdown body.
- * Strips leading heading markers (# through ######) and surrounding whitespace.
- * Returns '' when the body is blank or all lines are empty.
- */
 export function deriveTitle(body: string): string {
   const lines = body.split('\n');
 
@@ -34,6 +30,8 @@ export class NotesService {
     private readonly notesRepo: Repository<NoteEntity>,
     @InjectRepository(TaskEntity)
     private readonly tasksRepo: Repository<TaskEntity>,
+    private readonly dataSource: DataSource,
+    private readonly fileRefsService: FileRefsService,
   ) {}
 
   async listArchived(): Promise<NoteEntity[]> {
@@ -131,10 +129,6 @@ export class NotesService {
       note.pinned = dto.pinned;
     }
 
-    // Title resolution:
-    //   - explicit non-empty title → use it directly
-    //   - title === '' or title omitted but body changed → re-derive from updated body
-    //   - title omitted and body unchanged → keep existing title
     if (dto.title !== undefined && dto.title !== '') {
       note.title = dto.title;
     } else if (dto.title === '' || (dto.title === undefined && dto.body_md !== undefined)) {
@@ -194,22 +188,17 @@ export class NotesService {
       });
     }
 
-    await this.notesRepo.remove(note);
+    await this.dataSource.transaction(async (manager) => {
+      await this.fileRefsService.deleteAllFor('note', id, manager);
+      await manager.remove(NoteEntity, note);
+    });
     this.logger.log(`permanentDeleteNote: note id=${id} hard deleted`);
   }
 }
 
-// ─── Private helpers ──────────────────────────────────────────────────────────
-
-/**
- * Picks a final title for create operations:
- *   - explicit non-empty title → use it
- *   - blank/absent title → derive from body
- */
 function resolveTitle(title: string | undefined, body: string): string {
   if (title !== undefined && title.trim().length > 0) {
-    // Explicit titles are bounded by the Zod schema (MAX_TITLE_LENGTH = 200).
-    // Only derived titles are truncated to 80 chars.
+    
     return title.trim();
   }
   return deriveTitle(body);

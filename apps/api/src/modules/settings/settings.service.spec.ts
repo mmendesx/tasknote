@@ -5,10 +5,6 @@ import { SettingsService } from './settings.service';
 import { SettingsEntity } from './entities/settings.entity';
 import type { SeedService } from '../seed/seed.service';
 
-// ---------------------------------------------------------------------------
-// Mock factories
-// ---------------------------------------------------------------------------
-
 function makeSettingsRow(overrides: Partial<SettingsEntity> = {}): SettingsEntity {
   const row = new SettingsEntity();
   row.id = 1;
@@ -35,10 +31,6 @@ function makeSeedServiceMock(boardId = 42): SeedService {
   } as unknown as SeedService;
 }
 
-/**
- * Build a DataSource mock whose transaction() method runs the callback with a
- * manager that delegates to the provided repository mock.
- */
 function makeDataSourceMock(row: SettingsEntity | null = null): DataSource {
   const manager: Partial<EntityManager> = {
     findOneBy: vi.fn().mockResolvedValue(row),
@@ -56,10 +48,6 @@ function makeDataSourceMock(row: SettingsEntity | null = null): DataSource {
     ),
   } as unknown as DataSource;
 }
-
-// ---------------------------------------------------------------------------
-// Scenarios
-// ---------------------------------------------------------------------------
 
 describe('SettingsService', () => {
   describe('getOrDefault()', () => {
@@ -80,7 +68,7 @@ describe('SettingsService', () => {
         onboarded_at: null,
         timezone: 'UTC',
       });
-      // Must not write to the DB
+      
       expect(repo.save).not.toHaveBeenCalled();
     });
 
@@ -102,7 +90,7 @@ describe('SettingsService', () => {
 
   describe('onboard()', () => {
     it('sets onboarded_at and returns updated settings when seed=empty', async () => {
-      // No existing row
+      
       const ds = makeDataSourceMock(null);
       const repo = makeRepoMock(null);
       const seed = makeSeedServiceMock();
@@ -117,9 +105,9 @@ describe('SettingsService', () => {
       expect(result.display_name).toBe('Matheus');
       expect(result.timezone).toBe('America/Sao_Paulo');
       expect(result.onboarded_at).not.toBeNull();
-      // seed service must NOT be called
+      
       expect(seed.createSampleBoard).not.toHaveBeenCalled();
-      // default_board_id stays null for empty seed
+      
       expect(result.default_board_id).toBeNull();
     });
 
@@ -151,7 +139,6 @@ describe('SettingsService', () => {
         service.onboard({ display_name: 'Matheus', timezone: 'UTC', seed: 'empty' }),
       ).rejects.toThrow(ConflictException);
 
-      // Verify the exception carries the correct code in its response body
       let thrown: ConflictException | undefined;
       try {
         await service.onboard({ display_name: 'Matheus', timezone: 'UTC', seed: 'empty' });
@@ -164,7 +151,6 @@ describe('SettingsService', () => {
       const resp = thrown!.getResponse() as Record<string, unknown>;
       expect(resp['code']).toBe('ALREADY_ONBOARDED');
 
-      // Seed service must never have been reached
       expect(seed.createSampleBoard).not.toHaveBeenCalled();
     });
   });

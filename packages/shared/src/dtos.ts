@@ -23,6 +23,12 @@ const titleField = z
 
 const isoDateField = z.string().datetime({ message: 'Must be a valid ISO 8601 date-time string' });
 
+// Accepts either YYYY-MM-DD (calendar day) or a full ISO 8601 datetime string (backward compat).
+const calendarOrIsoDateField = z.union([
+  z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be a YYYY-MM-DD date string'),
+  isoDateField,
+]);
+
 const priorityField = z.enum(PRIORITY_VALUES);
 const themeField = z.enum(THEME_VALUES);
 const targetTypeField = z.enum(TARGET_TYPE_VALUES);
@@ -71,7 +77,7 @@ const taskBase = z.object({
   title: titleField,
   description_md: z.string().nullable().optional(),
   priority: priorityField,
-  due_date: isoDateField.nullable().optional(),
+  due_date: calendarOrIsoDateField.nullable().optional(),
 });
 
 export const CreateTaskDtoSchema = taskBase.extend({

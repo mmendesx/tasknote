@@ -1,21 +1,3 @@
-/**
- * tasks.service.spec.ts
- *
- * Vitest tests for TasksService.
- * Uses an in-memory better-sqlite3 DataSource (synchronize: true) so tests
- * are self-contained and require no external process.
- *
- * BDD scenarios covered (ICT-9):
- *   - "Create task via quick-add":     position = max+1 within column, priority defaults to 'medium'
- *   - "Reject empty title":            Zod schema rejects; verified via CreateTaskDtoSchema.safeParse
- *   - "Reject title over 200 chars":   Zod schema rejects; verified via CreateTaskDtoSchema.safeParse
- *   - "Move task between columns":     column_id + position updated correctly
- *   - "Completing a task sets completed_at":            move into is_done column sets completed_at
- *   - "Moving a completed task back clears completed_at": move out of is_done column clears completed_at
- *   - "Archive then restore a task":   softDelete sets archived_at; restore clears it
- *   - "Permanent delete from archive": permanentDelete throws NOT_ARCHIVED when not archived;
- *                                      removes row when archived
- */
 
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -26,16 +8,16 @@ import { ColumnEntity } from '../columns/entities/column.entity';
 import { TaskEntity } from './entities/task.entity';
 import { NoteEntity } from '../notes/entities/note.entity';
 import { TagEntity } from '../tags/entities/tag.entity';
+import { FileRefEntity } from '../file-refs/entities/file-ref.entity';
 import { TasksService } from './tasks.service';
+import { FileRefsService } from '../file-refs/file-refs.service';
 import { CreateTaskDtoSchema } from '@tasknote/shared';
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function buildDataSource(): DataSource {
   return new DataSource({
     type: 'better-sqlite3',
     database: ':memory:',
-    entities: [BoardEntity, ColumnEntity, TaskEntity, NoteEntity, TagEntity],
+    entities: [BoardEntity, ColumnEntity, TaskEntity, NoteEntity, TagEntity, FileRefEntity],
     synchronize: true,
     prepareDatabase: (db) => {
       db.pragma('foreign_keys = ON');
@@ -60,15 +42,12 @@ async function seedBoardWithColumns(
   return { boardId: board.id, doingColumn, doneColumn, backlogColumn };
 }
 
-// ─── Test suite ───────────────────────────────────────────────────────────────
-
 describe('TasksService', () => {
   let dataSource: DataSource;
   let tasksRepo: Repository<TaskEntity>;
   let columnsRepo: Repository<ColumnEntity>;
   let service: TasksService;
 
-  // Column references populated per-test via seedBoardWithColumns
   let doingColumn: ColumnEntity;
   let doneColumn: ColumnEntity;
   let backlogColumn: ColumnEntity;
@@ -80,7 +59,9 @@ describe('TasksService', () => {
     tasksRepo = dataSource.getRepository(TaskEntity);
     columnsRepo = dataSource.getRepository(ColumnEntity);
 
-    service = new TasksService(tasksRepo, columnsRepo, dataSource);
+    const fileRefsRepo = dataSource.getRepository(FileRefEntity);
+    const fileRefsService = new FileRefsService(fileRefsRepo);
+    service = new TasksService(tasksRepo, columnsRepo, dataSource, fileRefsService);
 
     const seeded = await seedBoardWithColumns(dataSource);
     doingColumn = seeded.doingColumn;
@@ -93,8 +74,6 @@ describe('TasksService', () => {
       await dataSource.destroy();
     }
   });
-
-  // ─── Zod schema validation (boundary layer) ──────────────────────────────────
 
   describe('CreateTaskDtoSchema — BDD: Reject empty title / Reject title over 200 chars', () => {
     it('rejects an empty title', () => {
@@ -133,8 +112,6 @@ describe('TasksService', () => {
     });
   });
 
-  // ─── createTask ──────────────────────────────────────────────────────────────
-
   describe('createTask — BDD: Create task via quick-add', () => {
     it('assigns position=0 when column has no tasks yet', async () => {
       const task = await service.createTask({
@@ -158,7 +135,7 @@ describe('TasksService', () => {
     });
 
     it('defaults priority to medium when not provided (Zod default)', async () => {
-      // CreateTaskDtoSchema applies the default before the DTO reaches the service
+      
       const parsed = CreateTaskDtoSchema.parse({
         column_id: doingColumn.id,
         title: 'Review PR #42',
@@ -197,8 +174,6 @@ describe('TasksService', () => {
     });
   });
 
-  // ─── getOne ──────────────────────────────────────────────────────────────────
-
   describe('getOne', () => {
     it('returns the task with column relation loaded', async () => {
       const created = await service.createTask({
@@ -217,8 +192,6 @@ describe('TasksService', () => {
       await expect(service.getOne(9999)).rejects.toThrow(NotFoundException);
     });
   });
-
-  // ─── updateTask ──────────────────────────────────────────────────────────────
 
   describe('updateTask', () => {
     it('updates title in place without touching position or column', async () => {
@@ -250,7 +223,7 @@ describe('TasksService', () => {
     });
 
     it('clears completed_at when column_id changes from done column to non-done via PATCH', async () => {
-      // Place task directly in done column with completed_at already set
+      
       const task = await tasksRepo.save(
         tasksRepo.create({
           columnId: doneColumn.id,
@@ -265,8 +238,6 @@ describe('TasksService', () => {
       expect(updated.completedAt).toBeNull();
     });
   });
-
-  // ─── softDelete / restore ────────────────────────────────────────────────────
 
   describe('softDelete — BDD: Archive then restore a task', () => {
     it('sets archived_at on the task', async () => {
@@ -306,8 +277,6 @@ describe('TasksService', () => {
       await expect(service.restore(9999)).rejects.toThrow(NotFoundException);
     });
   });
-
-  // ─── moveTask ────────────────────────────────────────────────────────────────
 
   describe('moveTask — BDD: Move task between columns', () => {
     it('updates column_id and position', async () => {
@@ -366,7 +335,7 @@ describe('TasksService', () => {
 
   describe('moveTask — BDD: Moving a completed task back clears completed_at', () => {
     it('clears completed_at when moved from done column to non-done column', async () => {
-      // Place task directly in done column with completed_at set
+      
       const task = await tasksRepo.save(
         tasksRepo.create({
           columnId: doneColumn.id,
@@ -404,13 +373,10 @@ describe('TasksService', () => {
         position: 3,
       });
 
-      // completed_at should remain as set; only position changes
       expect(moved.completedAt).not.toBeNull();
       expect(moved.position).toBe(3);
     });
   });
-
-  // ─── permanentDelete ─────────────────────────────────────────────────────────
 
   describe('permanentDelete — BDD: Permanent delete from archive', () => {
     it('throws ConflictException with code NOT_ARCHIVED when task is not archived', async () => {
@@ -448,6 +414,30 @@ describe('TasksService', () => {
 
     it('throws NotFoundException when task does not exist', async () => {
       await expect(service.permanentDelete(9999)).rejects.toThrow(NotFoundException);
+    });
+
+    // SCN-3: permanent delete cascades file_refs
+    it('SCN-3: deletes associated file_refs when task is permanently deleted', async () => {
+      const created = await service.createTask({
+        column_id: doingColumn.id,
+        title: 'Task with files',
+        priority: 'medium',
+      });
+      await service.softDelete(created.id);
+
+      // Insert two file_refs for this task
+      const fileRefsRepo = dataSource.getRepository(FileRefEntity);
+      await fileRefsRepo.save([
+        fileRefsRepo.create({ targetType: 'task', targetId: created.id, path: '/tmp/a.pdf', label: 'A' }),
+        fileRefsRepo.create({ targetType: 'task', targetId: created.id, path: '/tmp/b.pdf', label: 'B' }),
+      ]);
+
+      await service.permanentDelete(created.id);
+
+      const remaining = await fileRefsRepo.find({
+        where: { targetType: 'task', targetId: created.id },
+      });
+      expect(remaining).toHaveLength(0);
     });
   });
 });

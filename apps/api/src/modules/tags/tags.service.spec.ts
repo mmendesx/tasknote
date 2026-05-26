@@ -1,16 +1,3 @@
-/**
- * tags.service.spec.ts
- *
- * Vitest tests for TagsService.
- * Uses an in-memory better-sqlite3 DataSource (synchronize: true) so tests
- * are self-contained and require no external process.
- *
- * BDD scenarios covered (FR-7):
- *   - "Filter board by tag": tags can be listed, created, linked to tasks
- *   - "Create with duplicate name throws DUPLICATE_TAG" (ICT-11 constraint)
- *   - "addTagToTask is idempotent" (ICT-11 constraint)
- *   - "removeTagFromTask is no-op on missing link" (ICT-11 constraint)
- */
 
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -22,8 +9,6 @@ import { TaskEntity } from '../tasks/entities/task.entity';
 import { NoteEntity } from '../notes/entities/note.entity';
 import { TagEntity } from './entities/tag.entity';
 import { TagsService } from './tags.service';
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function buildDataSource(): DataSource {
   return new DataSource({
@@ -55,8 +40,6 @@ async function seedBoardColumnTask(
   return { board, column, task };
 }
 
-// ─── Test suite ───────────────────────────────────────────────────────────────
-
 describe('TagsService', () => {
   let dataSource: DataSource;
   let tagsRepo: Repository<TagEntity>;
@@ -79,8 +62,6 @@ describe('TagsService', () => {
     }
   });
 
-  // ─── listTags ────────────────────────────────────────────────────────────────
-
   describe('listTags', () => {
     it('returns empty array when no tags exist', async () => {
       const tags = await service.listTags();
@@ -98,8 +79,6 @@ describe('TagsService', () => {
       expect(tags.map((t) => t.name)).toEqual(['alpha', 'mango', 'zebra']);
     });
   });
-
-  // ─── createTag ───────────────────────────────────────────────────────────────
 
   describe('createTag', () => {
     it('creates a tag and returns it with an assigned id', async () => {
@@ -125,16 +104,12 @@ describe('TagsService', () => {
     });
 
     it('documents current behavior: name uniqueness is case-sensitive under default SQLite collation', async () => {
-      // This is an observation of SQLite TEXT collation behavior, NOT a
-      // contractual requirement. If a COLLATE NOCASE constraint is ever added
-      // to the column, this test should be updated accordingly.
+      
       await service.createTag({ name: 'urgent', color: '#F87171' });
       const tag = await service.createTag({ name: 'Urgent', color: '#000' });
       expect(tag.name).toBe('Urgent');
     });
   });
-
-  // ─── updateTag ───────────────────────────────────────────────────────────────
 
   describe('updateTag', () => {
     it('updates the tag name', async () => {
@@ -171,8 +146,6 @@ describe('TagsService', () => {
     });
   });
 
-  // ─── removeTag ───────────────────────────────────────────────────────────────
-
   describe('removeTag', () => {
     it('removes an existing tag', async () => {
       const tag = await service.createTag({ name: 'to-remove', color: '#fff' });
@@ -191,19 +164,15 @@ describe('TagsService', () => {
 
       await service.addTagToTask(task.id, tag.id);
 
-      // Verify link exists before deletion
       const taskBefore = await tasksRepo.findOne({ where: { id: task.id }, relations: ['tags'] });
       expect(taskBefore!.tags).toHaveLength(1);
 
       await service.removeTag(tag.id);
 
-      // After tag deletion, the task_tags row must be gone
       const taskAfter = await tasksRepo.findOne({ where: { id: task.id }, relations: ['tags'] });
       expect(taskAfter!.tags).toHaveLength(0);
     });
   });
-
-  // ─── addTagToTask ────────────────────────────────────────────────────────────
 
   describe('addTagToTask', () => {
     it('links a tag to a task', async () => {
@@ -222,7 +191,7 @@ describe('TagsService', () => {
       const tag = await service.createTag({ name: 'urgent', color: '#F87171' });
 
       await service.addTagToTask(task.id, tag.id);
-      await service.addTagToTask(task.id, tag.id); // second call — must be a no-op
+      await service.addTagToTask(task.id, tag.id); 
 
       const updated = await tasksRepo.findOne({ where: { id: task.id }, relations: ['tags'] });
       expect(updated!.tags).toHaveLength(1);
@@ -238,8 +207,6 @@ describe('TagsService', () => {
       await expect(service.addTagToTask(task.id, 9999)).rejects.toThrow(NotFoundException);
     });
   });
-
-  // ─── removeTagFromTask ───────────────────────────────────────────────────────
 
   describe('removeTagFromTask', () => {
     it('unlinks a tag from a task', async () => {
@@ -257,7 +224,6 @@ describe('TagsService', () => {
       const { task } = await seedBoardColumnTask(dataSource);
       const tag = await service.createTag({ name: 'urgent', color: '#F87171' });
 
-      // Never linked — must not throw
       await expect(service.removeTagFromTask(task.id, tag.id)).resolves.toBeUndefined();
     });
 

@@ -1,9 +1,5 @@
 <script setup lang="ts">
-/**
- * TaskLinkPicker — filterable picker for linking a note to a task.
- * Uses current board's tasks (MVP scope; cross-board support deferred).
- * Emits 'select' with task id, or null to unlink.
- */
+
 import { ref, computed } from 'vue'
 import { Input } from '@tasknote/ui'
 import { useCurrentBoardStore } from '@/stores/currentBoard'
@@ -53,7 +49,7 @@ function unlink(): void {
 }
 
 function handleBlur(): void {
-  // Delay so click on item fires first
+  
   setTimeout(() => { isOpen.value = false }, 150)
 }
 </script>

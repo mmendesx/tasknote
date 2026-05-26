@@ -9,6 +9,8 @@ import { DataSource, Repository } from 'typeorm';
 import type { CreateColumnDto, UpdateColumnDto, ReorderColumnsDto } from '@tasknote/shared';
 import { ColumnEntity } from './entities/column.entity';
 import { BoardEntity } from '../boards/entities/board.entity';
+import { TaskEntity } from '../tasks/entities/task.entity';
+import { FileRefsService } from '../file-refs/file-refs.service';
 
 @Injectable()
 export class ColumnsService {
@@ -20,6 +22,7 @@ export class ColumnsService {
     @InjectRepository(BoardEntity)
     private readonly boardRepo: Repository<BoardEntity>,
     private readonly dataSource: DataSource,
+    private readonly fileRefsService: FileRefsService,
   ) {}
 
   async createColumn(dto: CreateColumnDto): Promise<ColumnEntity> {
@@ -28,7 +31,6 @@ export class ColumnsService {
       throw new NotFoundException(`Board with ID ${dto.board_id} not found`);
     }
 
-    // position = max current position within this board + 1
     const maxResult = await this.columnRepo
       .createQueryBuilder('col')
       .select('MAX(col.position)', 'max')
@@ -43,7 +45,7 @@ export class ColumnsService {
       color: dto.color ?? '#5B616B',
       wipLimit: dto.wip_limit ?? null,
       isDone: dto.is_done ?? false,
-      // Position is always server-assigned (max+1) — client value is ignored.
+      
       position: nextPosition,
     });
 
@@ -57,8 +59,6 @@ export class ColumnsService {
   async updateColumn(id: number, dto: UpdateColumnDto): Promise<ColumnEntity> {
     const column = await this.findColumnOrThrow(id);
 
-    // WIP limit is stored server-side but enforcement is a soft UI-only warning.
-    // The server accepts any positive integer or null — it never blocks task moves.
     if (dto.name !== undefined) column.name = dto.name;
     if (dto.color !== undefined) column.color = dto.color;
     if (dto.wip_limit !== undefined) column.wipLimit = dto.wip_limit;
@@ -71,28 +71,33 @@ export class ColumnsService {
 
   async removeColumn(id: number): Promise<void> {
     const column = await this.findColumnOrThrow(id);
-    // Tasks cascade-delete via FK ON DELETE CASCADE (confirmed in migration).
-    await this.columnRepo.remove(column);
-    this.logger.log(`Deleted column id=${id} (tasks cascade-deleted by FK)`);
+
+    await this.dataSource.transaction(async (manager) => {
+      // Delete file_refs for every task in this column before cascade-removing tasks+column
+      const tasks = await manager.find(TaskEntity, { where: { columnId: id } });
+      for (const task of tasks) {
+        await this.fileRefsService.deleteAllFor('task', task.id, manager);
+      }
+      await manager.remove(ColumnEntity, column);
+    });
+    this.logger.log(`Deleted column id=${id} (tasks and their file_refs cascade-deleted)`);
   }
 
   async reorderColumns(dto: ReorderColumnsDto): Promise<ColumnEntity[]> {
     const { board_id, column_ids } = dto;
 
-    // Load all columns that currently belong to this board
     const existingColumns = await this.columnRepo.find({
       where: { boardId: board_id },
     });
 
     if (existingColumns.length === 0) {
-      // Board may not exist — surface a clear error
+      
       const boardExists = await this.boardRepo.exist({ where: { id: board_id } });
       if (!boardExists) {
         throw new NotFoundException(`Board with ID ${board_id} not found`);
       }
     }
 
-    // Validate: array length must match the board's current column count
     if (column_ids.length !== existingColumns.length) {
       this.logger.warn(
         `Reorder rejected for boardId=${board_id}: ` +
@@ -104,7 +109,6 @@ export class ColumnsService {
       });
     }
 
-    // Validate: no duplicate ids
     const uniqueIds = new Set(column_ids);
     if (uniqueIds.size !== column_ids.length) {
       throw new BadRequestException({
@@ -113,7 +117,6 @@ export class ColumnsService {
       });
     }
 
-    // Validate: every id belongs to this board (membership check)
     const boardColumnIds = new Set(existingColumns.map((c) => c.id));
     for (const cid of column_ids) {
       if (!boardColumnIds.has(cid)) {
@@ -124,14 +127,12 @@ export class ColumnsService {
       }
     }
 
-    // Build a lookup map for quick access
     const columnById = new Map(existingColumns.map((c) => [c.id, c]));
 
-    // Update positions atomically in a transaction so partial reorders never persist
     const updated = await this.dataSource.transaction(async (manager) => {
       const results: ColumnEntity[] = [];
       for (let i = 0; i < column_ids.length; i++) {
-        const col = columnById.get(column_ids[i])!;
+        const col = columnById.get(column_ids[i] as number)!;
         col.position = i;
         const saved = await manager.save(ColumnEntity, col);
         results.push(saved);

@@ -10,10 +10,6 @@ export function createFileRef(dto: CreateFileRefDto): Promise<FileRef> {
   return http<FileRef>('/file-refs', { method: 'POST', body: dto })
 }
 
-/**
- * NOTE: PATCH /api/file-refs/:id is not listed in spec-1-tasknote-mvp.md but
- * is specified in ICT-16 task list. Implemented here; API team must add endpoint.
- */
 export function updateFileRef(id: number, dto: UpdateFileRefDto): Promise<FileRef> {
   return http<FileRef>(`/file-refs/${id}`, { method: 'PATCH', body: dto })
 }

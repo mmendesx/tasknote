@@ -1,9 +1,5 @@
 <script setup lang="ts">
-/**
- * NotesView — full-width notes editor at /notes and /notes/:id.
- * The NoteList is rendered in the sidebar via DefaultLayout.
- * This view owns only the editor pane and the "New note" toolbar action.
- */
+
 import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Button, useToast } from '@tasknote/ui'
@@ -15,7 +11,6 @@ const route = useRoute()
 const notesStore = useNotesStore()
 const toast = useToast()
 
-// Selected note id is driven by the URL param
 const selectedId = computed<number | null>(() => {
   const raw = route.params.id
   const id = Array.isArray(raw) ? raw[0] : raw
@@ -33,7 +28,7 @@ async function createNote(): Promise<void> {
 }
 
 function handleDeleted(id: number): void {
-  // If the deleted note is currently selected, go back to /notes
+  
   if (selectedId.value === id) {
     router.push({ name: 'notes' })
   }
@@ -42,14 +37,12 @@ function handleDeleted(id: number): void {
 
 <template>
   <div class="notes-view">
-    <!-- ── Toolbar ────────────────────────────────────────────────── -->
-    <div class="notes-view__toolbar" role="toolbar" aria-label="Notes actions">
+    <Teleport to="#topbar-actions-portal">
       <Button variant="primary" size="sm" @click="createNote">
         + New note
       </Button>
-    </div>
+    </Teleport>
 
-    <!-- ── Editor ────────────────────────────────────────────────── -->
     <main class="notes-view__editor" aria-label="Note editor">
       <NoteEditor
         :note-id="selectedId"
@@ -61,23 +54,13 @@ function handleDeleted(id: number): void {
 
 <style scoped>
 .notes-view {
-  display: flex;
-  flex-direction: column;
   height: 100%;
   overflow: hidden;
   background: var(--color-bg);
 }
 
-.notes-view__toolbar {
-  display: flex;
-  justify-content: flex-end;
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--color-border);
-  flex-shrink: 0;
-}
-
 .notes-view__editor {
-  flex: 1;
+  height: 100%;
   overflow: hidden;
   background: var(--color-bg);
 }

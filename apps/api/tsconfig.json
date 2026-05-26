@@ -1,18 +1,15 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "module": "CommonJS",
-    "moduleResolution": "node",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
     "target": "ES2022",
+    "baseUrl": ".",
     "outDir": "dist",
-    "rootDir": "src",
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
-    "paths": {
-      "@tasknote/shared": ["../../packages/shared/src/index.ts"],
-      "@tasknote/shared/*": ["../../packages/shared/src/*"]
-    }
+    "skipLibCheck": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "test"]
+  "exclude": ["node_modules", "dist", "test", "src/**/*.spec.ts"]
 }

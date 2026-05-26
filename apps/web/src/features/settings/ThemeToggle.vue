@@ -14,7 +14,6 @@ const containerRef = ref<HTMLDivElement | null>(null)
 async function selectTheme(next: 'dark' | 'light', event: MouseEvent) {
   if (theme.value === next) return
 
-  // Ripple animation from button center
   if (rippleRef.value && containerRef.value) {
     const container = containerRef.value.getBoundingClientRect()
     const btn = (event.currentTarget as HTMLElement).getBoundingClientRect()
@@ -48,7 +47,7 @@ async function selectTheme(next: 'dark' | 'light', event: MouseEvent) {
 
 <template>
   <div ref="containerRef" class="relative inline-flex overflow-hidden rounded-control border border-border" role="group" aria-label="Theme">
-    <!-- Ripple overlay — positioned absolutely within container -->
+    
     <span
       ref="rippleRef"
       aria-hidden="true"

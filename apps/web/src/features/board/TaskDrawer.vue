@@ -1,15 +1,9 @@
 <script setup lang="ts">
-/**
- * TaskDrawer — right-side drawer for task detail, notes, and file refs.
- * Props: open (v-model:open), taskId (number | null), newTaskDefaults (optional)
- * Tabs: Details | Notes | Files
- * Auto-patches on field change (debounced 500ms).
- * When newTaskDefaults is set and taskId is null, renders a create form instead.
- */
+
 import { ref, watch, computed } from 'vue'
 import { TabsRoot, TabsList, TabsTrigger, TabsContent } from 'reka-ui'
-import { Drawer, DatePicker, useToast } from '@tasknote/ui'
-import { useDebounceFn } from '@vueuse/core'
+import { Drawer, DatePicker, Button, Select, useToast } from '@tasknote/ui'
+import type { SelectOption } from '@tasknote/ui'
 import TaskDetailsTab from './TaskDetailsTab.vue'
 import TaskNotesTab from './TaskNotesTab.vue'
 import TaskFilesTab from './TaskFilesTab.vue'
@@ -42,10 +36,8 @@ const fileRefsStore = useFileRefsStore()
 const tagsStore     = useTagsStore()
 const toast         = useToast()
 
-// ─── Create mode ───────────────────────────────────────────────────────────
 const isCreateMode = computed(() => props.taskId === null && props.newTaskDefaults != null)
 
-// Separate state for create form — avoids cross-contamination with edit state
 const createTitle      = ref('')
 const createDescMd     = ref('')
 const createPriority   = ref<Priority>('low')
@@ -53,7 +45,6 @@ const createColumnId   = ref<number>(0)
 const createDueDate    = ref('')
 const isSavingCreate   = ref(false)
 
-// Seed create form fields when entering create mode
 watch(isCreateMode, (entering) => {
   if (entering && props.newTaskDefaults) {
     createTitle.value    = ''
@@ -73,21 +64,18 @@ async function saveNewTask(): Promise<void> {
       priority:       createPriority.value,
       column_id:      createColumnId.value,
       description_md: createDescMd.value.trim() || null,
-      due_date:       createDueDate.value
-        ? new Date(createDueDate.value).toISOString()
-        : null,
+      due_date:       createDueDate.value || null,
     })
     if (created) {
       emit('created', created.id)
     }
   } catch {
-    // boardStore handles toast
+    
   } finally {
     isSavingCreate.value = false
   }
 }
 
-// ─── Edit form state ───────────────────────────────────────────────────────
 const task      = ref<Task | null>(null)
 const title     = ref('')
 const descMd    = ref('')
@@ -97,14 +85,23 @@ const loading   = ref(false)
 
 const columns        = computed(() => boardStore.board?.columns ?? [])
 const drawerTitle    = computed(() => isCreateMode.value ? 'New task' : (task.value?.title ?? 'Task'))
+
+const priorityOptions: SelectOption[] = [
+  { value: 'low',    label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high',   label: 'High' },
+  { value: 'urgent', label: 'Urgent' },
+]
+const columnOptions = computed<SelectOption[]>(() =>
+  columns.value.map((c) => ({ value: c.id, label: c.name }))
+)
 const taskNotes = computed<Note[]>(() =>
-  notesStore.list.filter((n) => n.task_id === props.taskId)
+  props.taskId ? notesStore.forTask(props.taskId) : []
 )
 const fileRefs = computed<FileRef[]>(() =>
   props.taskId ? fileRefsStore.getFor('task', props.taskId) : []
 )
 
-// Resolve tag_ids from board store (optimistic) or fall back to drawer's loaded task
 const tagIds = computed<number[]>(() => {
   if (!props.taskId) return []
   for (const col of boardStore.board?.columns ?? []) {
@@ -115,12 +112,10 @@ const tagIds = computed<number[]>(() => {
 })
 
 function onTagIdsChange(ids: number[]): void {
-  // TagPicker already called boardStore.addTag / removeTag — tag_ids
-  // on the board task are already optimistically updated. No extra action needed.
+  
   void ids
 }
 
-// ─── Load on taskId change ─────────────────────────────────────────────────
 watch(
   () => props.taskId,
   async (id) => {
@@ -132,9 +127,7 @@ watch(
       title.value    = t.title
       descMd.value   = t.description_md ?? ''
       priority.value = t.priority
-      dueDate.value  = t.due_date
-        ? new Date(t.due_date).toISOString().substring(0, 10)
-        : ''
+      dueDate.value  = t.due_date ? t.due_date.slice(0, 10) : ''
     } catch (err) {
       toast.error('Load failed', err instanceof Error ? err.message : 'Could not load task')
     } finally {
@@ -146,18 +139,59 @@ watch(
   { immediate: true }
 )
 
-// ─── Debounced PATCH ───────────────────────────────────────────────────────
-const patchTask = useDebounceFn(async (dto: Parameters<typeof boardStore.updateTask>[1]) => {
-  if (!props.taskId) return
-  try { await boardStore.updateTask(props.taskId, dto) } catch { /* boardStore toasts */ }
-}, 500)
+const isSaving = ref(false)
 
-function onTitleChange(val: string)    { title.value = val;    if (val.trim()) patchTask({ title: val.trim() }) }
-function onDescChange(val: string)     { descMd.value = val;   patchTask({ description_md: val }) }
-function onPriorityChange(val: Priority) { priority.value = val; patchTask({ priority: val }) }
-function onDueDateChange(val: string)  {
-  dueDate.value = val
-  patchTask({ due_date: val ? new Date(val).toISOString() : null })
+const isDirty = computed(() => {
+  if (!task.value) return false
+  // Compare raw YYYY-MM-DD strings (FR-4: no ISO conversion)
+  const origDue = task.value.due_date ? task.value.due_date.slice(0, 10) : ''
+  return (
+    title.value.trim() !== task.value.title ||
+    descMd.value !== (task.value.description_md ?? '') ||
+    priority.value !== task.value.priority ||
+    dueDate.value !== origDue
+  )
+})
+
+function onTitleChange(val: string)      { title.value = val }
+function onDescChange(val: string)       { descMd.value = val }
+function onPriorityChange(val: Priority) { priority.value = val }
+function onDueDateChange(val: string)    { dueDate.value = val }
+
+async function saveTask(): Promise<void> {
+  if (!props.taskId || !task.value || isSaving.value) return
+  if (!isDirty.value) {
+    toast.success('No changes', 'Nothing to save')
+    return
+  }
+  const trimmedTitle = title.value.trim()
+  if (!trimmedTitle) {
+    toast.error('Title required', 'Task title cannot be empty')
+    return
+  }
+  isSaving.value = true
+  try {
+    await boardStore.updateTask(props.taskId, {
+      title:          trimmedTitle,
+      description_md: descMd.value,
+      priority:       priority.value,
+      due_date:       dueDate.value || null,
+    })
+    const refreshed = await api.tasks.getTask(props.taskId)
+    task.value = refreshed
+    toast.success('Saved', 'Task updated')
+  } catch {
+  } finally {
+    isSaving.value = false
+  }
+}
+
+function discardChanges(): void {
+  if (!task.value) return
+  title.value    = task.value.title
+  descMd.value   = task.value.description_md ?? ''
+  priority.value = task.value.priority
+  dueDate.value  = task.value.due_date ? task.value.due_date.slice(0, 10) : ''
 }
 
 async function onColumnChange(event: Event): Promise<void> {
@@ -180,9 +214,9 @@ async function onArchive(): Promise<void> {
     width="32rem"
     @update:open="emit('update:open', $event)"
   >
-    <!-- Create mode form -->
+    
     <template v-if="isCreateMode">
-      <form class="create-form" @submit.prevent="saveNewTask">
+      <form id="task-create-form" class="create-form" @submit.prevent="saveNewTask">
         <div class="create-form__field">
           <label for="create-title" class="create-form__label">Title <span class="create-form__required">*</span></label>
           <input
@@ -202,22 +236,20 @@ async function onArchive(): Promise<void> {
         </div>
 
         <div class="create-form__row">
-          <div class="create-form__field">
-            <label for="create-priority" class="create-form__label">Priority</label>
-            <select id="create-priority" v-model="createPriority" class="create-form__select">
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-              <option value="urgent">Urgent</option>
-            </select>
-          </div>
-
-          <div class="create-form__field">
-            <label for="create-column" class="create-form__label">Column</label>
-            <select id="create-column" v-model="createColumnId" class="create-form__select">
-              <option v-for="col in columns" :key="col.id" :value="col.id">{{ col.name }}</option>
-            </select>
-          </div>
+          <Select
+            id="create-priority"
+            label="Priority"
+            :model-value="createPriority"
+            :options="priorityOptions"
+            @update:model-value="createPriority = $event as Priority"
+          />
+          <Select
+            id="create-column"
+            label="Column"
+            :model-value="createColumnId"
+            :options="columnOptions"
+            @update:model-value="createColumnId = Number($event)"
+          />
         </div>
 
         <div class="create-form__field">
@@ -227,22 +259,6 @@ async function onArchive(): Promise<void> {
           />
         </div>
 
-        <div class="create-form__actions">
-          <button
-            type="submit"
-            class="create-form__btn create-form__btn--primary"
-            :disabled="!createTitle.trim() || isSavingCreate"
-          >
-            {{ isSavingCreate ? 'Saving…' : 'Save task' }}
-          </button>
-          <button
-            type="button"
-            class="create-form__btn create-form__btn--ghost"
-            @click="emit('update:open', false)"
-          >
-            Cancel
-          </button>
-        </div>
       </form>
     </template>
 
@@ -313,6 +329,46 @@ async function onArchive(): Promise<void> {
     <div v-else class="flex items-center justify-center py-12 text-text-muted text-sm">
       No task selected.
     </div>
+
+    <template #footer>
+      <template v-if="isCreateMode">
+        <Button
+          variant="ghost"
+          size="md"
+          @click="emit('update:open', false)"
+        >
+          Cancel
+        </Button>
+        <Button
+          type="submit"
+          form="task-create-form"
+          variant="primary"
+          size="md"
+          :disabled="!createTitle.trim() || isSavingCreate"
+        >
+          {{ isSavingCreate ? 'Saving…' : 'Save task' }}
+        </Button>
+      </template>
+      <template v-else-if="task">
+        <span v-if="isDirty" class="edit-form__dirty">Unsaved changes</span>
+        <Button
+          variant="ghost"
+          size="md"
+          :disabled="isSaving"
+          @click="discardChanges"
+        >
+          Discard
+        </Button>
+        <Button
+          variant="primary"
+          size="md"
+          :disabled="isSaving"
+          @click="saveTask"
+        >
+          {{ isSaving ? 'Saving…' : 'Save changes' }}
+        </Button>
+      </template>
+    </template>
   </Drawer>
 </template>
 
@@ -339,7 +395,6 @@ async function onArchive(): Promise<void> {
   color: var(--color-status-blocked);
 }
 
-/* Compact the description editor height in create mode */
 .create-form__field--desc :deep(.milkdown-host) {
   min-height: 5rem;
 }
@@ -374,44 +429,11 @@ async function onArchive(): Promise<void> {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 20%, transparent);
 }
 
-.create-form__actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 4px;
-}
 
-.create-form__btn {
-  padding: 8px 16px;
-  border-radius: var(--radius-control);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color var(--motion-duration-fast), opacity var(--motion-duration-fast);
-}
-
-.create-form__btn--primary {
-  background-color: var(--color-accent);
-  color: var(--color-bg);
-  border: none;
-}
-
-.create-form__btn--primary:hover:not(:disabled) {
-  background-color: var(--color-accent-hover);
-}
-
-.create-form__btn--primary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.create-form__btn--ghost {
-  background: transparent;
-  color: var(--color-text-secondary);
-  border: 1px solid var(--color-border);
-}
-
-.create-form__btn--ghost:hover {
-  background-color: var(--color-surface-hover, color-mix(in srgb, var(--color-border) 40%, transparent));
-  color: var(--color-text-primary);
+.edit-form__dirty {
+  margin-right: auto;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-style: italic;
 }
 </style>

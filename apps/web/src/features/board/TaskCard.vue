@@ -3,11 +3,17 @@ import { computed } from 'vue'
 import type { Task } from '@tasknote/shared'
 import { useIsDesktop } from '@/composables/useIsDesktop'
 import { useAnime } from '@/composables/useAnime'
+import { useCurrentBoardStore } from '@/stores/currentBoard'
+import { useTagsStore } from '@/stores/tags'
+import { DropdownMenu } from '@tasknote/ui'
+import type { MenuItemDef } from '@tasknote/ui'
 
 const props = defineProps<{
   task: Task
   tagColors?: Record<number, string>
 }>()
+
+const tagsStore = useTagsStore()
 
 const emit = defineEmits<{
   open: [taskId: number]
@@ -15,8 +21,8 @@ const emit = defineEmits<{
 
 const isDesktop = useIsDesktop()
 const { animate, prefersReducedMotion } = useAnime()
+const boardStore = useCurrentBoardStore()
 
-// Priority badge colors mapped to design tokens
 const priorityConfig: Record<string, { label: string; color: string }> = {
   low:    { label: 'Low',    color: 'var(--color-status-todo)' },
   medium: { label: 'Medium', color: 'var(--color-status-doing)' },
@@ -26,7 +32,6 @@ const priorityConfig: Record<string, { label: string; color: string }> = {
 
 const priority = computed(() => priorityConfig[props.task.priority] ?? priorityConfig.medium)
 
-// Due date display
 const dueDateLabel = computed(() => {
   if (!props.task.due_date) return null
   const d = new Date(props.task.due_date)
@@ -38,10 +43,31 @@ const dueDateLabel = computed(() => {
   return { text: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), overdue: false }
 })
 
-// First 3 tag color dots
 const tagDots = computed(() => {
   const ids = props.task.tag_ids?.slice(0, 3) ?? []
-  return ids.map((id) => props.tagColors?.[id] ?? 'var(--color-text-muted)')
+  return ids.map((id) => ({ color: props.tagColors?.[id] ?? 'var(--color-text-muted)', id }))
+})
+
+// FR-11: accessible label for the tags container
+const tagNames = computed(() =>
+  (props.task.tag_ids ?? []).map((id) => {
+    const tag = tagsStore.list.find((t) => t.id === id)
+    return tag?.name ?? ''
+  }).filter(Boolean)
+)
+
+const tagsLabel = computed(() =>
+  tagNames.value.length > 0 ? `Tags: ${tagNames.value.join(', ')}` : undefined
+)
+
+// FR-7: "Move task" dropdown items (one per column in the board)
+const moveColumnItems = computed<MenuItemDef[]>(() => {
+  const columns = boardStore.board?.columns ?? []
+  return columns.map((col) => ({
+    type: 'item' as const,
+    label: col.name,
+    onSelect: () => boardStore.moveTask(props.task.id, col.id, 0),
+  }))
 })
 
 function onDragStart(evt: DragEvent) {
@@ -62,28 +88,21 @@ function onDragEnd(evt: DragEvent) {
   })
 }
 
-function handleClick() {
+function handleOpen() {
   emit('open', props.task.id)
 }
 </script>
 
 <template>
-  <!-- role="article" per ICT-26 spec. The element remains keyboard-operable via
-       tabindex + keydown handlers. Long-term, role="button" with aria-label is
-       preferred for AT announcement of the interactive pattern. -->
+  <!-- FR-8a: outer article has no tabindex; inner button is the keyboard activator -->
   <article
     class="task-card"
     :data-task-id="task.id"
-    :aria-label="`${task.title} – priority ${priority.label}`"
     draggable="true"
-    @click="handleClick"
-    @keydown.enter="handleClick"
-    @keydown.space.prevent="handleClick"
     @dragstart="onDragStart"
     @dragend="onDragEnd"
-    tabindex="0"
   >
-    <!-- Drag handle (desktop only) -->
+    <!-- Drag handle — sibling, not inside the open button -->
     <span
       class="task-handle col-handle"
       :class="{ 'handle--hidden': !isDesktop }"
@@ -100,49 +119,80 @@ function handleClick() {
       </svg>
     </span>
 
-    <!-- Title -->
-    <p class="task-card__title">{{ task.title }}</p>
+    <!-- Inner button: primary keyboard activator (FR-8a) -->
+    <button
+      type="button"
+      class="task-card__open"
+      :aria-label="`Open task: ${task.title}`"
+      @click="handleOpen"
+    >
+      <p class="task-card__title">{{ task.title }}</p>
 
-    <!-- Meta row -->
-    <div class="task-card__meta">
-      <!-- Priority badge -->
-      <span
-        class="task-card__priority"
-        :style="{ color: priority.color, borderColor: priority.color + '33' }"
-      >
-        {{ priority.label }}
-      </span>
-
-      <!-- Due date -->
-      <span
-        v-if="dueDateLabel"
-        class="task-card__due"
-        :class="{ 'task-card__due--overdue': dueDateLabel.overdue }"
-      >
-        {{ dueDateLabel.text }}
-      </span>
-    </div>
-
-    <!-- Tag dots + completed indicator -->
-    <div v-if="tagDots.length > 0 || task.completed_at" class="task-card__footer">
-      <div v-if="tagDots.length > 0" class="task-card__tags" aria-label="Tags">
+      <div class="task-card__meta">
         <span
-          v-for="(color, i) in tagDots"
-          :key="i"
-          class="tag-dot"
-          :style="{ backgroundColor: color }"
-          aria-hidden="true"
-        />
+          class="task-card__priority"
+          :style="{ color: priority.color, borderColor: priority.color + '33' }"
+        >
+          {{ priority.label }}
+        </span>
+
+        <span
+          v-if="dueDateLabel"
+          class="task-card__due"
+          :class="{ 'task-card__due--overdue': dueDateLabel.overdue }"
+        >
+          {{ dueDateLabel.text }}
+        </span>
       </div>
-      <span
-        v-if="task.completed_at"
-        class="task-card__done-mark"
-        aria-label="Completed"
+
+      <!-- FR-11: tag container aria-label includes tag names; dots are aria-hidden -->
+      <div v-if="tagDots.length > 0 || task.completed_at" class="task-card__footer">
+        <div
+          v-if="tagDots.length > 0"
+          class="task-card__tags"
+          :aria-label="tagsLabel"
+        >
+          <span
+            v-for="dot in tagDots"
+            :key="dot.id"
+            class="tag-dot"
+            :style="{ backgroundColor: dot.color }"
+            aria-hidden="true"
+          />
+        </div>
+        <span
+          v-if="task.completed_at"
+          class="task-card__done-mark"
+          aria-label="Completed"
+        >
+          <svg viewBox="0 0 12 12" width="10" height="10" fill="none">
+            <path d="M2 6l3 3 5-5" stroke="var(--color-status-done)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </span>
+      </div>
+    </button>
+
+    <!-- FR-7: "Move task" dropdown — visible on hover + focus-within (ICT-40) -->
+    <div class="task-card__actions">
+      <DropdownMenu
+        :items="moveColumnItems"
+        side="bottom"
+        align="end"
       >
-        <svg viewBox="0 0 12 12" width="10" height="10" fill="none">
-          <path d="M2 6l3 3 5-5" stroke="var(--color-status-done)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </span>
+        <template #trigger>
+          <button
+            type="button"
+            class="task-card__menu-btn"
+            :aria-label="`Move task: ${task.title}`"
+            title="Move task"
+            @click.stop
+          >
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" aria-hidden="true">
+              <path d="M2 8h12M10 5l3 3-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </template>
+      </DropdownMenu>
     </div>
   </article>
 </template>
@@ -259,5 +309,68 @@ function handleClick() {
   margin-left: auto;
   display: flex;
   align-items: center;
+}
+
+/* FR-8a: inner button is the full-card keyboard/click activator */
+.task-card__open {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+}
+
+/* FR-7 + ICT-43: move-task dropdown — hidden by default, revealed on hover/focus-within */
+.task-card__actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--motion-duration-fast) var(--motion-easing);
+}
+
+.task-card:hover .task-card__actions,
+.task-card:focus-within .task-card__actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Always visible on touch devices (no hover) */
+@media (hover: none) {
+  .task-card__actions {
+    opacity: 0.6;
+    pointer-events: auto;
+  }
+}
+
+.task-card__menu-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 2px;
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: color var(--motion-duration-fast) var(--motion-easing),
+              background var(--motion-duration-fast) var(--motion-easing);
+}
+
+.task-card__menu-btn:hover {
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+}
+
+.task-card__menu-btn:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
 }
 </style>

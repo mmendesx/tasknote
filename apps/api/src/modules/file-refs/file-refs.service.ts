@@ -5,15 +5,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import * as childProcess from 'child_process';
 import * as fs from 'fs/promises';
 import type { CreateFileRefDto, UpdateFileRefDto } from '@tasknote/shared';
 import { ABSOLUTE_PATH_PATTERN, FORBIDDEN_PATH_CHARS, TARGET_TYPE_VALUES } from '@tasknote/shared';
 import { FileRefEntity } from './entities/file-ref.entity';
 
-// Maps Node.js process.platform to the OS "open file" binary.
-// spawn is called without `shell: true` — each value is a bare executable name.
 const PLATFORM_OPENER: Record<string, string> = {
   darwin: 'open',
   linux: 'xdg-open',
@@ -29,18 +27,6 @@ export class FileRefsService {
     private readonly fileRefsRepo: Repository<FileRefEntity>,
   ) {}
 
-  // ─── Helpers ──────────────────────────────────────────────────────────────
-
-  /**
-   * Defense-in-depth path validation. The Zod DTO already rejects bad paths at
-   * the HTTP boundary, but this re-checks at the service layer so that any
-   * caller bypassing the controller (e.g., tests, internal calls) still gets
-   * the same security guarantee.
-   *
-   * Throws 400 INVALID_PATH if:
-   *   - path is not absolute (POSIX / or Windows C:\)
-   *   - path contains shell metacharacters (; & | ` $ ( ) newline)
-   */
   validatePath(path: string): void {
     if (!ABSOLUTE_PATH_PATTERN.test(path)) {
       this.logger.warn(`validatePath: rejected non-absolute path="${path}"`);
@@ -59,13 +45,6 @@ export class FileRefsService {
     }
   }
 
-  /**
-   * Returns the platform-specific binary name for opening a file with its
-   * default OS application.
-   *
-   * Throws if the current platform is unsupported rather than silently
-   * falling through to an unsafe fallback.
-   */
   getPlatformOpener(): string {
     const opener = PLATFORM_OPENER[process.platform];
     if (!opener) {
@@ -77,12 +56,8 @@ export class FileRefsService {
     return opener;
   }
 
-  // ─── CRUD ─────────────────────────────────────────────────────────────────
-
   async listFileRefs(targetType: string, targetId: number): Promise<FileRefEntity[]> {
-    // Validate that target_type is a known value — guards against omitted query param
-    // (NestJS passes undefined when the param is missing, and TypeORM would silently
-    // drop the condition, returning refs across all target types).
+    
     if (!targetType || !(TARGET_TYPE_VALUES as readonly string[]).includes(targetType)) {
       this.logger.warn(
         `listFileRefs: rejected invalid target_type="${targetType}"`,
@@ -107,7 +82,6 @@ export class FileRefsService {
       `createFileRef: creating ref target_type="${dto.target_type}" target_id=${dto.target_id} path="${dto.path}"`,
     );
 
-    // Defense-in-depth — Zod already validated at controller boundary
     this.validatePath(dto.path);
 
     const entity = this.fileRefsRepo.create({
@@ -132,7 +106,6 @@ export class FileRefsService {
       throw new NotFoundException(`File reference with id '${id}' not found`);
     }
 
-    // Re-validate if the caller is changing the path — defense-in-depth
     if (dto.path !== undefined) {
       this.validatePath(dto.path);
     }
@@ -148,6 +121,20 @@ export class FileRefsService {
     return updated;
   }
 
+  async deleteAllFor(
+    targetType: string,
+    targetId: number,
+    manager?: EntityManager,
+  ): Promise<void> {
+    this.logger.log(
+      `deleteAllFor: deleting file_refs target_type="${targetType}" target_id=${targetId}`,
+    );
+    const repo = manager
+      ? manager.getRepository(FileRefEntity)
+      : this.fileRefsRepo;
+    await repo.delete({ targetType, targetId });
+  }
+
   async removeFileRef(id: number): Promise<void> {
     this.logger.log(`removeFileRef: deleting id=${id}`);
 
@@ -159,8 +146,6 @@ export class FileRefsService {
 
     this.logger.log(`removeFileRef: id=${id} deleted`);
   }
-
-  // ─── Filesystem checks ────────────────────────────────────────────────────
 
   async exists(id: number): Promise<{ exists: boolean }> {
     this.logger.log(`exists: checking filesystem for id=${id}`);
@@ -181,8 +166,6 @@ export class FileRefsService {
     }
   }
 
-  // ─── OS open ─────────────────────────────────────────────────────────────
-
   async openFile(id: number): Promise<{ opened: true }> {
     this.logger.log(`openFile: opening id=${id}`);
 
@@ -192,16 +175,10 @@ export class FileRefsService {
       throw new NotFoundException(`File reference with id '${id}' not found`);
     }
 
-    // Re-validate path as defense-in-depth before handing to the OS
     this.validatePath(ref.path);
 
     const opener = this.getPlatformOpener();
 
-    // Security: spawn is called WITHOUT `shell: true` (default is false).
-    // The path is a separate argv element — never string-concatenated.
-    // detached + unref: the child process is fully independent; the parent
-    // does not block or wait for it to exit.
-    // stdio 'ignore': we don't consume or log any output from the subprocess.
     const child = childProcess.spawn(opener, [ref.path], {
       detached: true,
       stdio: 'ignore',

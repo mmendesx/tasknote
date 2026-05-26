@@ -9,7 +9,6 @@ export const useSettingsStore = defineStore('settings', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  // true once onboarding is complete
   const isOnboarded = computed(() => settings.value?.onboarded_at != null)
 
   async function load(): Promise<void> {

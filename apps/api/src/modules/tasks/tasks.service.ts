@@ -9,6 +9,19 @@ import { DataSource, Repository } from 'typeorm';
 import type { CreateTaskDto, UpdateTaskDto, MoveTaskDto } from '@tasknote/shared';
 import { TaskEntity } from './entities/task.entity';
 import { ColumnEntity } from '../columns/entities/column.entity';
+import { FileRefsService } from '../file-refs/file-refs.service';
+
+/**
+ * Normalizes a due_date value from the DTO to a Date stored at noon UTC,
+ * preventing day-flip across timezones (FR-4).
+ * Accepts YYYY-MM-DD or full ISO strings.
+ */
+function normalizeDueDate(value: string): Date {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return new Date(`${value}T12:00:00.000Z`);
+  }
+  return new Date(value);
+}
 
 @Injectable()
 export class TasksService {
@@ -20,22 +33,20 @@ export class TasksService {
     @InjectRepository(ColumnEntity)
     private readonly columnsRepo: Repository<ColumnEntity>,
     private readonly dataSource: DataSource,
+    private readonly fileRefsService: FileRefsService,
   ) {}
-
-  // ─── create ──────────────────────────────────────────────────────────────────
 
   async createTask(dto: CreateTaskDto): Promise<TaskEntity> {
     this.logger.log(`createTask: column_id=${dto.column_id} title="${dto.title}"`);
 
     return this.dataSource.transaction(async (manager) => {
-      // Verify the target column exists
+      
       const column = await manager.findOne(ColumnEntity, { where: { id: dto.column_id } });
       if (!column) {
         this.logger.warn(`createTask: column id=${dto.column_id} not found`);
         throw new NotFoundException(`Column with id '${dto.column_id}' not found`);
       }
 
-      // Compute position = max(position)+1 within the column
       const result = await manager
         .createQueryBuilder(TaskEntity, 't')
         .select('MAX(t.position)', 'maxPos')
@@ -53,7 +64,7 @@ export class TasksService {
         title: dto.title,
         descriptionMd: dto.description_md ?? null,
         priority: dto.priority ?? 'medium',
-        dueDate: dto.due_date ? new Date(dto.due_date) : null,
+        dueDate: dto.due_date ? normalizeDueDate(dto.due_date) : null,
         position: nextPosition,
       });
 
@@ -62,8 +73,6 @@ export class TasksService {
       return saved;
     });
   }
-
-  // ─── listArchived ─────────────────────────────────────────────────────────────
 
   async listArchived(boardId?: number): Promise<TaskEntity[]> {
     this.logger.log(`listArchived: board_id=${boardId ?? 'all'}`);
@@ -81,8 +90,6 @@ export class TasksService {
     return qb.getMany();
   }
 
-  // ─── getOne ──────────────────────────────────────────────────────────────────
-
   async getOne(id: number): Promise<TaskEntity> {
     this.logger.log(`getOne: loading task id=${id} with column + tags relations`);
 
@@ -99,8 +106,6 @@ export class TasksService {
     return task;
   }
 
-  // ─── update ──────────────────────────────────────────────────────────────────
-
   async updateTask(id: number, dto: UpdateTaskDto): Promise<TaskEntity> {
     this.logger.log(`updateTask: task id=${id}`);
 
@@ -114,7 +119,6 @@ export class TasksService {
       const isColumnChanging =
         dto.column_id !== undefined && dto.column_id !== task.columnId;
 
-      // Validate new column when column_id is changing
       if (isColumnChanging) {
         const newColumn = await manager.findOne(ColumnEntity, {
           where: { id: dto.column_id },
@@ -124,12 +128,10 @@ export class TasksService {
           throw new NotFoundException(`Column with id '${dto.column_id}' not found`);
         }
 
-        // Load old column to check is_done for completed_at toggle
         const oldColumn = await manager.findOne(ColumnEntity, {
           where: { id: task.columnId },
         });
 
-        // Apply completed_at logic: same semantics as move endpoint
         if (newColumn.isDone && !oldColumn?.isDone) {
           task.completedAt = new Date();
           this.logger.log(
@@ -142,7 +144,6 @@ export class TasksService {
           );
         }
 
-        // Set position to max+1 in the new column when column changes via PATCH
         const result = await manager
           .createQueryBuilder(TaskEntity, 't')
           .select('MAX(t.position)', 'maxPos')
@@ -153,12 +154,11 @@ export class TasksService {
         task.columnId = dto.column_id!;
       }
 
-      // Apply remaining scalar updates
       if (dto.title !== undefined) task.title = dto.title;
       if (dto.description_md !== undefined) task.descriptionMd = dto.description_md ?? null;
       if (dto.priority !== undefined) task.priority = dto.priority;
       if (dto.due_date !== undefined) {
-        task.dueDate = dto.due_date ? new Date(dto.due_date) : null;
+        task.dueDate = dto.due_date ? normalizeDueDate(dto.due_date) : null;
       }
 
       const updated = await manager.save(TaskEntity, task);
@@ -166,8 +166,6 @@ export class TasksService {
       return updated;
     });
   }
-
-  // ─── softDelete ──────────────────────────────────────────────────────────────
 
   async softDelete(id: number): Promise<void> {
     this.logger.log(`softDelete: archiving task id=${id}`);
@@ -182,8 +180,6 @@ export class TasksService {
     await this.tasksRepo.save(task);
     this.logger.log(`softDelete: task id=${id} archived at ${task.archivedAt.toISOString()}`);
   }
-
-  // ─── restore ─────────────────────────────────────────────────────────────────
 
   async restore(id: number): Promise<TaskEntity> {
     this.logger.log(`restore: restoring task id=${id}`);
@@ -202,8 +198,6 @@ export class TasksService {
     this.logger.log(`restore: task id=${id} restored`);
     return updated;
   }
-
-  // ─── move ────────────────────────────────────────────────────────────────────
 
   async moveTask(dto: MoveTaskDto): Promise<TaskEntity> {
     this.logger.log(
@@ -226,7 +220,7 @@ export class TasksService {
       const isSameColumn = task.columnId === dto.column_id;
 
       if (!isSameColumn) {
-        // Load old column to determine completed_at toggle
+        
         const oldColumn = await manager.findOne(ColumnEntity, { where: { id: task.columnId } });
 
         if (newColumn.isDone && !oldColumn?.isDone) {
@@ -251,8 +245,6 @@ export class TasksService {
     });
   }
 
-  // ─── permanentDelete ─────────────────────────────────────────────────────────
-
   async permanentDelete(id: number): Promise<void> {
     this.logger.log(`permanentDelete: attempting hard delete task id=${id}`);
 
@@ -273,6 +265,7 @@ export class TasksService {
         });
       }
 
+      await this.fileRefsService.deleteAllFor('task', id, manager);
       await manager.remove(TaskEntity, task);
       this.logger.log(`permanentDelete: task id=${id} hard deleted`);
     });

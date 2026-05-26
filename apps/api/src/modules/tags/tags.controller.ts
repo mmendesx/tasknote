@@ -27,18 +27,15 @@ const AddTagToTaskBodySchema = z.object({
 });
 type AddTagToTaskBody = z.infer<typeof AddTagToTaskBodySchema>;
 
-/** GET /api/tags, POST /api/tags, PATCH /api/tags/:id, DELETE /api/tags/:id */
 @Controller('tags')
 export class TagsController {
   constructor(private readonly tagsService: TagsService) {}
 
-  /** GET /api/tags — list all tags ordered by name asc */
   @Get()
   listTags(): Promise<TagEntity[]> {
     return this.tagsService.listTags();
   }
 
-  /** POST /api/tags — create a tag; 409 DUPLICATE_TAG if name already exists */
   @Post()
   @HttpCode(HttpStatus.CREATED)
   createTag(
@@ -47,7 +44,6 @@ export class TagsController {
     return this.tagsService.createTag(dto);
   }
 
-  /** PATCH /api/tags/:id — partial update; 409 DUPLICATE_TAG on name collision */
   @Patch(':id')
   updateTag(
     @Param('id', ParseIntPipe) id: number,
@@ -56,7 +52,6 @@ export class TagsController {
     return this.tagsService.updateTag(id, dto);
   }
 
-  /** DELETE /api/tags/:id — deletes tag; cascade removes task_tags rows via FK */
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async removeTag(@Param('id', ParseIntPipe) id: number): Promise<void> {
@@ -64,16 +59,10 @@ export class TagsController {
   }
 }
 
-/** POST /api/tasks/:taskId/tags, DELETE /api/tasks/:taskId/tags/:tagId */
 @Controller('tasks/:taskId/tags')
 export class TaskTagsController {
   constructor(private readonly tagsService: TagsService) {}
 
-  /**
-   * POST /api/tasks/:taskId/tags
-   * Body: { tag_id: number }
-   * Idempotent — no error if the tag is already linked.
-   */
   @Post()
   @HttpCode(HttpStatus.NO_CONTENT)
   async addTagToTask(
@@ -83,7 +72,6 @@ export class TaskTagsController {
     await this.tagsService.addTagToTask(taskId, body.tag_id);
   }
 
-  /** DELETE /api/tasks/:taskId/tags/:tagId — no-op if link does not exist */
   @Delete(':tagId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async removeTagFromTask(

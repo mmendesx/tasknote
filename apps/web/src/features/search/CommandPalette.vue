@@ -11,8 +11,6 @@ import { useSearchStore } from '@/stores/search'
 import * as api from '@/api'
 import type { Task, Note, FileRef } from '@tasknote/shared'
 
-// ─── Props / emits ────────────────────────────────────────────────────────────
-
 const props = defineProps<{
   open: boolean
 }>()
@@ -21,27 +19,17 @@ const emit = defineEmits<{
   'update:open': [value: boolean]
 }>()
 
-// ─── Stores + router ─────────────────────────────────────────────────────────
-
 const searchStore = useSearchStore()
 const router = useRouter()
-
-// ─── Local state ─────────────────────────────────────────────────────────────
 
 const localQuery = ref('')
 const selectedIndex = ref(0)
 const inputRef = ref<HTMLInputElement | null>(null)
 
-// ─── Derived result lists ─────────────────────────────────────────────────────
-
 const tasks = computed<Task[]>(() => searchStore.results?.tasks ?? [])
 const notes = computed<Note[]>(() => searchStore.results?.notes ?? [])
 const files = computed<FileRef[]>(() => searchStore.results?.files ?? [])
 
-/**
- * Flat list used for keyboard navigation index tracking.
- * Each entry carries enough info to identify the item on Enter.
- */
 type FlatResult =
   | { kind: 'task'; item: Task }
   | { kind: 'note'; item: Note }
@@ -54,8 +42,6 @@ const flatResults = computed<FlatResult[]>(() => [
 ])
 
 const hasResults = computed(() => flatResults.value.length > 0)
-
-// ─── Watch open state ─────────────────────────────────────────────────────────
 
 watch(
   () => props.open,
@@ -71,8 +57,6 @@ watch(
   },
 )
 
-// ─── Input handler ────────────────────────────────────────────────────────────
-
 function handleInput(event: Event): void {
   const value = (event.target as HTMLInputElement).value
   localQuery.value = value
@@ -80,16 +64,12 @@ function handleInput(event: Event): void {
   searchStore.setQuery(value)
 }
 
-// ─── Result index helpers ─────────────────────────────────────────────────────
-
 function isSelected(kind: FlatResult['kind'], id: number): boolean {
   const idx = flatResults.value.findIndex(
     (r) => r.kind === kind && r.item.id === id,
   )
   return idx === selectedIndex.value
 }
-
-// ─── Keyboard navigation ──────────────────────────────────────────────────────
 
 function handleKeydown(event: KeyboardEvent): void {
   switch (event.key) {
@@ -119,8 +99,6 @@ function handleKeydown(event: KeyboardEvent): void {
   }
 }
 
-// ─── Open result ──────────────────────────────────────────────────────────────
-
 function close(): void {
   emit('update:open', false)
 }
@@ -130,8 +108,7 @@ async function openResult(result: FlatResult): Promise<void> {
   await nextTick()
 
   if (result.kind === 'task') {
-    // Navigate to the default board route; ICT-20/task-drawer will handle
-    // selectedTaskId once that composable exists. For now navigate to root.
+    
     router.push('/')
   } else if (result.kind === 'note') {
     router.push(`/notes/${result.item.id}`)
@@ -139,15 +116,10 @@ async function openResult(result: FlatResult): Promise<void> {
     try {
       await api.fileRefs.openFile(result.item.id)
     } catch {
-      // Opening in OS — silent failure is acceptable; OS will not respond if
-      // the file is missing (that's surfaced at file-ref level, not here).
+      
     }
   }
 }
-
-// ─── Global cmd/ctrl+K listener ───────────────────────────────────────────────
-// ICT-20 (useShortcuts) will replace this with its own handler.
-// Kept here so the scenario "Open command palette" passes without ICT-20.
 
 function handleGlobalKeydown(event: KeyboardEvent): void {
   const isK = event.key === 'k' || event.key === 'K'
@@ -168,8 +140,6 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleGlobalKeydown)
 })
 
-// ─── Secondary text helpers ───────────────────────────────────────────────────
-
 function noteExcerpt(note: Note): string {
   const text = note.body_md.replace(/[#*_`>-]/g, '').trim()
   return text.length > 60 ? `${text.slice(0, 60)}…` : text
@@ -187,13 +157,12 @@ function priorityLabel(task: Task): string {
 <template>
   <DialogRoot :open="open" @update:open="emit('update:open', $event)">
     <DialogPortal>
-      <!-- Backdrop -->
+      
       <DialogOverlay
         class="tn-overlay fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
         @click="close"
       />
 
-      <!-- Palette panel -->
       <DialogContent
         as="div"
         role="dialog"
@@ -205,9 +174,9 @@ function priorityLabel(task: Task): string {
         style="top: 15vh"
         @keydown="handleKeydown"
       >
-        <!-- Search input row -->
+        
         <div class="flex items-center gap-3 border-b border-border px-4 py-3">
-          <!-- Search icon -->
+          
           <svg
             viewBox="0 0 16 16"
             width="16"
@@ -242,7 +211,6 @@ function priorityLabel(task: Task): string {
             @input="handleInput"
           />
 
-          <!-- Loading indicator -->
           <span
             v-if="searchStore.loading"
             aria-label="Searching…"
@@ -250,7 +218,6 @@ function priorityLabel(task: Task): string {
                    animate-spin text-text-muted"
           />
 
-          <!-- Kbd hint -->
           <kbd
             class="hidden shrink-0 rounded border border-border px-1.5 py-0.5
                    font-mono text-xs text-text-muted sm:block"
@@ -259,14 +226,13 @@ function priorityLabel(task: Task): string {
           </kbd>
         </div>
 
-        <!-- Results area -->
         <div
           id="command-palette-results"
           role="listbox"
           aria-label="Search results"
           class="max-h-[400px] overflow-y-auto"
         >
-          <!-- Empty query hint -->
+          
           <div
             v-if="!localQuery"
             class="px-4 py-8 text-center text-sm text-text-muted"
@@ -274,7 +240,6 @@ function priorityLabel(task: Task): string {
             Type to search…
           </div>
 
-          <!-- No results found -->
           <div
             v-else-if="localQuery && !searchStore.loading && !hasResults"
             class="px-4 py-8 text-center text-sm text-text-muted"
@@ -282,9 +247,8 @@ function priorityLabel(task: Task): string {
             No results for "{{ localQuery }}"
           </div>
 
-          <!-- Grouped results -->
           <template v-else-if="hasResults">
-            <!-- Tasks group -->
+            
             <section v-if="tasks.length > 0" aria-label="Tasks">
               <header
                 class="sticky top-0 bg-surface-elevated px-4 py-1.5
@@ -307,7 +271,7 @@ function priorityLabel(task: Task): string {
                   @click="openResult({ kind: 'task', item: task })"
                   @mouseenter="selectedIndex = flatResults.findIndex(r => r.kind === 'task' && r.item.id === task.id)"
                 >
-                  <!-- Type icon -->
+                  
                   <svg
                     viewBox="0 0 16 16"
                     width="14"
@@ -320,16 +284,13 @@ function priorityLabel(task: Task): string {
                     <path d="M5 8h6M5 5.5h6M5 10.5h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
                   </svg>
 
-                  <!-- Primary text -->
                   <span class="flex-1 truncate text-sm font-medium">{{ task.title }}</span>
 
-                  <!-- Secondary: priority -->
                   <span class="shrink-0 text-xs text-text-muted">{{ priorityLabel(task) }}</span>
                 </li>
               </ul>
             </section>
 
-            <!-- Notes group -->
             <section v-if="notes.length > 0" aria-label="Notes">
               <header
                 class="sticky top-0 bg-surface-elevated px-4 py-1.5
@@ -352,7 +313,7 @@ function priorityLabel(task: Task): string {
                   @click="openResult({ kind: 'note', item: note })"
                   @mouseenter="selectedIndex = flatResults.findIndex(r => r.kind === 'note' && r.item.id === note.id)"
                 >
-                  <!-- Type icon -->
+                  
                   <svg
                     viewBox="0 0 16 16"
                     width="14"
@@ -370,10 +331,8 @@ function priorityLabel(task: Task): string {
                     <path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
                   </svg>
 
-                  <!-- Primary text -->
                   <span class="flex-1 truncate text-sm font-medium">{{ note.title }}</span>
 
-                  <!-- Secondary: excerpt -->
                   <span class="ml-2 hidden shrink-0 max-w-[180px] truncate text-xs text-text-muted sm:block">
                     {{ noteExcerpt(note) }}
                   </span>
@@ -381,7 +340,6 @@ function priorityLabel(task: Task): string {
               </ul>
             </section>
 
-            <!-- Files group -->
             <section v-if="files.length > 0" aria-label="Files">
               <header
                 class="sticky top-0 bg-surface-elevated px-4 py-1.5
@@ -404,7 +362,7 @@ function priorityLabel(task: Task): string {
                   @click="openResult({ kind: 'file', item: file })"
                   @mouseenter="selectedIndex = flatResults.findIndex(r => r.kind === 'file' && r.item.id === file.id)"
                 >
-                  <!-- Type icon -->
+                  
                   <svg
                     viewBox="0 0 16 16"
                     width="14"
@@ -421,10 +379,8 @@ function priorityLabel(task: Task): string {
                     <path d="M10 2v4h4" stroke="currentColor" stroke-width="1.2" />
                   </svg>
 
-                  <!-- Primary text (label) -->
                   <span class="flex-1 truncate text-sm font-medium">{{ file.label }}</span>
 
-                  <!-- Secondary: basename -->
                   <span class="ml-2 hidden shrink-0 max-w-[180px] truncate text-xs text-text-muted sm:block">
                     {{ fileBasename(file.path) }}
                   </span>

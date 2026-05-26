@@ -1,10 +1,8 @@
 <script setup lang="ts">
-/**
- * TaskDetailsTab — Details pane inside TaskDrawer.
- * Handles title, description, priority, due-date, column, timestamps, and archive.
- */
+
 import { ref, computed } from 'vue'
-import { Button, Input, DatePicker } from '@tasknote/ui'
+import { Button, Input, DatePicker, Select } from '@tasknote/ui'
+import type { SelectOption } from '@tasknote/ui'
 import MilkdownEditor from './MilkdownEditor.vue'
 import type { Task, ColumnWithTasks, Priority } from '@tasknote/shared'
 
@@ -27,6 +25,21 @@ const emit = defineEmits<{
 }>()
 
 const archiveConfirm = ref(false)
+
+const priorityOptions: SelectOption[] = [
+  { value: 'low',    label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high',   label: 'High' },
+  { value: 'urgent', label: 'Urgent' },
+]
+
+const columnOptions = computed<SelectOption[]>(() =>
+  props.columns.map((c) => ({ value: c.id, label: c.name }))
+)
+
+function onColumnSelect(value: string | number): void {
+  emit('columnChange', { target: { value: String(value) } } as unknown as Event)
+}
 
 function formatDate(d: Date | string | null | undefined): string {
   if (!d) return '—'
@@ -52,22 +65,13 @@ function formatDate(d: Date | string | null | undefined): string {
       />
     </div>
 
-    <div class="flex flex-col gap-1">
-      <label class="text-xs font-medium text-text-secondary" for="task-priority">Priority</label>
-      <select
-        id="task-priority"
-        :value="priority"
-        class="rounded-control border border-border bg-surface px-3 py-2 text-sm
-               text-text-primary focus-visible:outline-none focus-visible:ring-2
-               focus-visible:ring-accent"
-        @change="emit('update:priority', ($event.target as HTMLSelectElement).value as Priority)"
-      >
-        <option value="low">Low</option>
-        <option value="medium">Medium</option>
-        <option value="high">High</option>
-        <option value="urgent">Urgent</option>
-      </select>
-    </div>
+    <Select
+      id="task-priority"
+      label="Priority"
+      :model-value="priority"
+      :options="priorityOptions"
+      @update:model-value="emit('update:priority', $event as Priority)"
+    />
 
     <DatePicker
       :model-value="dueDate"
@@ -75,21 +79,13 @@ function formatDate(d: Date | string | null | undefined): string {
       @update:model-value="emit('update:dueDate', $event)"
     />
 
-    <div class="flex flex-col gap-1">
-      <label class="text-xs font-medium text-text-secondary" for="task-column">Column</label>
-      <select
-        id="task-column"
-        :value="task.column_id"
-        class="rounded-control border border-border bg-surface px-3 py-2 text-sm
-               text-text-primary focus-visible:outline-none focus-visible:ring-2
-               focus-visible:ring-accent"
-        @change="emit('columnChange', $event)"
-      >
-        <option v-for="col in columns" :key="col.id" :value="col.id">
-          {{ col.name }}
-        </option>
-      </select>
-    </div>
+    <Select
+      id="task-column"
+      label="Column"
+      :model-value="task.column_id"
+      :options="columnOptions"
+      @update:model-value="onColumnSelect"
+    />
 
     <dl class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-text-muted">
       <dt>Created</dt><dd>{{ formatDate(task.created_at) }}</dd>

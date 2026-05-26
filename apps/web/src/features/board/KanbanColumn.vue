@@ -19,9 +19,6 @@ const emit = defineEmits<{
 const isDesktop = useIsDesktop()
 const { animate, prefersReducedMotion } = useAnime()
 
-// Local tasks mirror — DnD mutates this, watch syncs back from store on rollback.
-// deep: false is intentional: Sortable already mutated localTasks on happy path;
-// on store rollback, board ref is replaced → props.column ref changes → watch fires.
 const localTasks = ref<Task[]>([...props.column.tasks])
 
 watch(
@@ -30,7 +27,6 @@ watch(
   { deep: false }
 )
 
-// WIP limit
 const taskCount = computed(() => props.column.tasks.length)
 const isOverLimit = computed(
   () => props.column.wip_limit != null && taskCount.value > props.column.wip_limit
@@ -51,7 +47,6 @@ watch(isOverLimit, async (over) => {
   wasOverLimit = over
 }, { immediate: false })
 
-// Task list sortable
 const taskListRef = ref<HTMLElement | null>(null)
 
 const { option: sortableOption } = useSortable(taskListRef, localTasks, {
@@ -69,13 +64,11 @@ const { option: sortableOption } = useSortable(taskListRef, localTasks, {
   },
 })
 
-// Disable on mobile after mount (sortable instance exists by then)
 onMounted(() => {
   if (!isDesktop.value) sortableOption('disabled', true)
   watch(isDesktop, (desktop) => sortableOption('disabled', !desktop))
 })
 
-// Anime lift on drag start — list-level handler to avoid double-fire with TaskCard
 function onListDragStart(evt: DragEvent) {
   const card = (evt.target as HTMLElement).closest('.task-card') as HTMLElement | null
   if (!card || prefersReducedMotion.value) return
@@ -104,11 +97,10 @@ function onListDragEnd(evt: DragEvent) {
     class="kanban-column"
     :aria-label="`${column.name} column, ${taskCount} tasks`"
   >
-    <!-- Column header -->
+    
     <header class="kanban-column__header">
       <h2 class="kanban-column__name">{{ column.name }}</h2>
 
-      <!-- Task count + WIP indicator -->
       <span
         ref="wipBadgeRef"
         class="kanban-column__count"
@@ -124,7 +116,6 @@ function onListDragEnd(evt: DragEvent) {
       </span>
     </header>
 
-    <!-- Task list -->
     <div
       ref="taskListRef"
       class="kanban-column__tasks"
@@ -140,7 +131,6 @@ function onListDragEnd(evt: DragEvent) {
         @open="(id) => emit('openTask', id)"
       />
 
-      <!-- Empty state — outside sortable's draggable selector so it doesn't affect drop index -->
       <p v-if="localTasks.length === 0" class="kanban-column__empty" aria-live="polite">
         No tasks
       </p>
@@ -170,7 +160,6 @@ function onListDragEnd(evt: DragEvent) {
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
 }
-
 
 .kanban-column__name {
   flex: 1;
@@ -217,7 +206,6 @@ function onListDragEnd(evt: DragEvent) {
   padding: 16px 0;
   margin: 0;
 }
-
 
 :global(.task-ghost) {
   opacity: 0.4;

@@ -39,6 +39,7 @@ const iconMap: Record<ToastVariant, string> = {
       :key="toast.id"
       :duration="toast.duration"
       :default-open="true"
+      :type="toast.variant === 'error' ? 'foreground' : 'background'"
       class="tn-toast group relative flex items-start gap-3 rounded-card border px-4 py-3
              shadow-lg w-80 bg-surface-elevated focus:outline-none"
       :class="variantClasses[toast.variant]"

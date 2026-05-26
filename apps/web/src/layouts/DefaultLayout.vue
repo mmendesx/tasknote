@@ -5,17 +5,16 @@ import { useTheme } from '@/composables/useTheme'
 import { useMediaQuery } from '@vueuse/core'
 import { useBoardsStore } from '@/stores/boards'
 import NoteList from '@/features/notes/NoteList.vue'
+import { useNavigationState } from '@/composables/useNavigationState'
 
 const { theme, toggleTheme } = useTheme()
 const route = useRoute()
 const router = useRouter()
 const boardsStore = useBoardsStore()
 
-// Sidebar drawer state — for <600px mobile
 const isDrawerOpen = ref(false)
 const sidebarRef = ref<HTMLElement | null>(null)
 
-// Track mobile viewport to determine when trap should be active
 const isMobile = useMediaQuery('(max-width: 599px)')
 
 function toggleDrawer() {
@@ -24,11 +23,11 @@ function toggleDrawer() {
 
 function closeDrawer() {
   isDrawerOpen.value = false
+  // Return focus to hamburger trigger when mobile drawer closes (FR-9 / ICT-46)
+  const hamburger = document.getElementById('topbar-hamburger') as HTMLButtonElement | null
+  if (hamburger) hamburger.focus()
 }
 
-// ─── Native focus trap for mobile drawer ─────────────────────────────────────
-// focus-trap package is not installed; this implements the same constraint
-// natively: tab/shift-tab cycle within focusable sidebar elements when open.
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 function trapFocus(event: KeyboardEvent) {
@@ -59,7 +58,7 @@ watch(
   () => isDrawerOpen.value && isMobile.value,
   (active) => {
     if (active) {
-      // Focus the first focusable element in the sidebar
+      
       const first = sidebarRef.value?.querySelector<HTMLElement>(FOCUSABLE)
       first?.focus()
       window.addEventListener('keydown', trapFocus)
@@ -72,8 +71,6 @@ watch(
 onUnmounted(() => {
   window.removeEventListener('keydown', trapFocus)
 })
-
-// ─── Boards ───────────────────────────────────────────────────────────────────
 
 onMounted(() => {
   if (boardsStore.list.length === 0) {
@@ -100,14 +97,12 @@ async function createBoard() {
   }
 }
 
-// ─── Delete board ─────────────────────────────────────────────────────────────
-
 const deletingBoardId = ref<number | null>(null)
 
 async function deleteBoard(boardId: number): Promise<void> {
   const currentRoute = route.name as string
   const currentBoardRouteId = String(route.params.id ?? '')
-  // Snapshot before remove — defaultBoardId changes once the board is gone
+  
   const wasDefault = boardId === boardsStore.defaultBoardId.value
   const nextId = boardsStore.list.find((b) => b.id !== boardId)?.id ?? null
   try {
@@ -117,7 +112,7 @@ async function deleteBoard(boardId: number): Promise<void> {
     return
   }
   deletingBoardId.value = null
-  // Redirect if we just deleted the active board
+  
   const wasActive =
     (currentRoute === 'board' && currentBoardRouteId === String(boardId)) ||
     (currentRoute === 'board-default' && wasDefault)
@@ -126,11 +121,9 @@ async function deleteBoard(boardId: number): Promise<void> {
   }
 }
 
-// ─── Rename board ─────────────────────────────────────────────────────────────
-
 const editingBoardId = ref<number | null>(null)
 const editingBoardName = ref('')
-// Array ref — v-for template refs become arrays in Vue 3
+
 const boardNameInputRef = ref<HTMLInputElement[]>([])
 
 async function startRenamingBoard(boardId: number, currentName: string): Promise<void> {
@@ -149,7 +142,7 @@ async function saveRenameBoard(): Promise<void> {
     try {
       await boardsStore.update(editingBoardId.value, { name: trimmed })
     } catch {
-      // silently revert on error
+      
     }
   }
   editingBoardId.value = null
@@ -164,21 +157,24 @@ function navigateToBoard(boardId: number): void {
   closeDrawer()
 }
 
-// ─── Sidebar collapse (desktop) ───────────────────────────────────────────────
-
 const isSidebarCollapsed = ref(false)
 
 function toggleSidebar() {
   isSidebarCollapsed.value = !isSidebarCollapsed.value
 }
 
-// ─── Navigation progress bar ──────────────────────────────────────────────────
+// Consume module-scoped navigation state (guards registered once in router/index.ts)
+const { isNavigating } = useNavigationState()
 
-const isNavigating = ref(false)
-router.beforeEach(() => { isNavigating.value = true })
-router.afterEach(() => { isNavigating.value = false })
+// FR-13: focus main content area after route changes so keyboard users land in the right place
+const mainRef = ref<HTMLElement | null>(null)
 
-// ─── Notes sidebar panel ──────────────────────────────────────────────────────
+watch(
+  () => route.fullPath,
+  () => {
+    mainRef.value?.focus()
+  },
+)
 
 const notesExpanded = ref(false)
 
@@ -190,7 +186,6 @@ const currentNoteId = computed<number | null>(() => {
   return isNaN(parsed) ? null : parsed
 })
 
-// Current route label for the topbar
 const routeLabel = computed(() => {
   const name = route.name as string | undefined
   if (!name) return 'TaskNote'
@@ -208,7 +203,7 @@ const routeLabel = computed(() => {
 
 <template>
   <div class="app-shell" :class="{ 'app-shell--sidebar-collapsed': isSidebarCollapsed }">
-    <!-- Mobile drawer backdrop -->
+    
     <div
       v-show="isDrawerOpen"
       class="drawer-backdrop"
@@ -216,7 +211,6 @@ const routeLabel = computed(() => {
       @click="closeDrawer"
     />
 
-    <!-- Sidebar -->
     <aside
       id="sidebar-nav"
       ref="sidebarRef"
@@ -224,10 +218,10 @@ const routeLabel = computed(() => {
       :class="{ 'sidebar--drawer-open': isDrawerOpen, 'sidebar--collapsed': isSidebarCollapsed }"
       aria-label="Main navigation"
     >
-      <!-- Logo + collapse toggle -->
+      
       <div class="sidebar__logo">
         <RouterLink to="/" class="logo-link focus-ring" @click="closeDrawer">
-          <!-- Inline logo mark SVG -->
+          
           <svg
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 32 32"
@@ -277,7 +271,6 @@ const routeLabel = computed(() => {
         </button>
       </div>
 
-      <!-- Navigation -->
       <nav class="sidebar__nav">
         <div class="nav-section">
           <div class="nav-section__header">
@@ -295,24 +288,13 @@ const routeLabel = computed(() => {
             </button>
           </div>
 
-          <!-- Board list -->
+          <!-- FR-8b: board row uses real RouterLink; action buttons are siblings outside the link -->
           <div
             v-for="board in sortedBoards"
             :key="board.id"
-            class="nav-item nav-item--board focus-ring"
+            class="nav-item--board"
             :class="{ 'nav-item--active': (route.name === 'board' && String(route.params.id) === String(board.id)) || (route.name === 'board-default' && board.id === boardsStore.defaultBoardId) }"
-            :aria-current="((route.name === 'board' && String(route.params.id) === String(board.id)) || (route.name === 'board-default' && board.id === boardsStore.defaultBoardId)) ? 'page' : undefined"
-            role="link"
-            tabindex="0"
-            @click="editingBoardId !== board.id && navigateToBoard(board.id)"
-            @keydown.enter="editingBoardId !== board.id && navigateToBoard(board.id)"
           >
-            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" class="nav-item__icon" style="flex-shrink:0">
-              <rect x="1" y="1" width="6" height="14" rx="1" stroke="currentColor" stroke-width="1.5" />
-              <rect x="9" y="1" width="6" height="9" rx="1" stroke="currentColor" stroke-width="1.5" />
-            </svg>
-
-            <!-- Inline rename input OR static name -->
             <input
               v-if="editingBoardId === board.id"
               ref="boardNameInputRef"
@@ -320,16 +302,26 @@ const routeLabel = computed(() => {
               class="nav-item__rename-input"
               type="text"
               maxlength="100"
-              @click.stop
               @keydown.enter.stop="saveRenameBoard"
               @keydown.escape.stop="cancelRenameBoard"
               @blur="saveRenameBoard"
             />
-            <span v-else class="nav-item__label">{{ board.name }}</span>
+            <RouterLink
+              v-else
+              :to="`/b/${board.id}`"
+              class="nav-item nav-item__board-link focus-ring"
+              :aria-current="((route.name === 'board' && String(route.params.id) === String(board.id)) || (route.name === 'board-default' && board.id === boardsStore.defaultBoardId)) ? 'page' : undefined"
+              @click="closeDrawer"
+            >
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" class="nav-item__icon" style="flex-shrink:0">
+                <rect x="1" y="1" width="6" height="14" rx="1" stroke="currentColor" stroke-width="1.5" />
+                <rect x="9" y="1" width="6" height="9" rx="1" stroke="currentColor" stroke-width="1.5" />
+              </svg>
+              <span class="nav-item__label">{{ board.name }}</span>
+            </RouterLink>
 
-            <!-- Board action buttons (visible on row hover) -->
-            <div class="nav-item__actions" @click.stop>
-              <!-- Delete confirm state -->
+            <!-- Action buttons are siblings of the link, not descendants (FR-8b) -->
+            <div class="nav-item__actions">
               <template v-if="deletingBoardId === board.id">
                 <button
                   class="nav-item__action-btn nav-item__action-btn--danger"
@@ -352,7 +344,7 @@ const routeLabel = computed(() => {
                   </svg>
                 </button>
               </template>
-              <!-- Rename + trash icons (default) -->
+
               <template v-else>
                 <button
                   class="nav-item__action-btn"
@@ -378,12 +370,11 @@ const routeLabel = computed(() => {
             </div>
           </div>
 
-          <!-- Fallback when no boards yet -->
           <p v-if="boardsStore.list.length === 0" class="nav-section__empty">No boards yet</p>
         </div>
 
         <div class="nav-section">
-          <!-- Notes row: link + toggle for inline NoteList -->
+          
           <div
             class="nav-notes"
             :class="{ 'nav-notes--active': route.name === 'notes' || route.name === 'note-detail' }"
@@ -422,7 +413,7 @@ const routeLabel = computed(() => {
                 :title="notesExpanded ? 'Collapse notes list' : 'Expand notes list'"
                 @click="notesExpanded = !notesExpanded"
               >
-                <!-- chevron-right when collapsed, chevron-down when expanded -->
+                
                 <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" width="12" height="12">
                   <path
                     :d="notesExpanded ? 'M3 6l5 5 5-5' : 'M6 3l5 5-5 5'"
@@ -464,7 +455,6 @@ const routeLabel = computed(() => {
         </div>
       </nav>
 
-      <!-- Bottom: Settings link -->
       <div class="sidebar__footer">
         <RouterLink
           to="/settings"
@@ -488,15 +478,14 @@ const routeLabel = computed(() => {
 
     </aside>
 
-    <!-- Main area: topbar + content -->
     <div class="main-area">
-      <!-- Navigation progress bar -->
+      
       <div v-show="isNavigating" class="nav-progress" aria-hidden="true" />
 
-      <!-- Top bar -->
       <header class="topbar" role="banner">
-        <!-- Hamburger (mobile only) -->
+        
         <button
+          id="topbar-hamburger"
           class="topbar__hamburger focus-ring"
           :aria-label="isDrawerOpen ? 'Close navigation' : 'Open navigation'"
           :aria-expanded="isDrawerOpen"
@@ -508,11 +497,12 @@ const routeLabel = computed(() => {
           </svg>
         </button>
 
-        <!-- Route label / board name -->
         <h1 class="topbar__title">{{ routeLabel }}</h1>
 
+        <div id="topbar-actions-portal" class="topbar__route-actions" />
+
         <div class="topbar__actions">
-          <!-- Search trigger placeholder (ICT-21) -->
+          
           <button class="topbar__action-btn focus-ring" aria-label="Search (Cmd+K)">
             <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" width="16" height="16">
               <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.5" />
@@ -521,13 +511,12 @@ const routeLabel = computed(() => {
             <kbd class="topbar__kbd" aria-hidden="true">⌘K</kbd>
           </button>
 
-          <!-- Theme toggle -->
           <button
             class="topbar__action-btn focus-ring"
             :aria-label="`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`"
             @click="toggleTheme"
           >
-            <!-- Sun icon (shown in dark mode to indicate switching to light) -->
+            
             <svg
               v-if="theme === 'dark'"
               viewBox="0 0 16 16"
@@ -544,7 +533,7 @@ const routeLabel = computed(() => {
                 stroke-linecap="round"
               />
             </svg>
-            <!-- Moon icon (shown in light mode to indicate switching to dark) -->
+            
             <svg
               v-else
               viewBox="0 0 16 16"
@@ -563,7 +552,6 @@ const routeLabel = computed(() => {
             </svg>
           </button>
 
-          <!-- Settings shortcut -->
           <RouterLink
             to="/settings"
             class="topbar__action-btn focus-ring"
@@ -582,8 +570,10 @@ const routeLabel = computed(() => {
         </div>
       </header>
 
-      <!-- Page content -->
-      <main class="main-content" id="main-content">
+      <!-- FR-9: announce route label to screen readers after navigation -->
+      <span aria-live="polite" aria-atomic="true" class="sr-only route-announcement">{{ isNavigating ? '' : routeLabel }}</span>
+
+      <main class="main-content" id="main-content" tabindex="-1" ref="mainRef">
         <slot />
       </main>
     </div>
@@ -591,7 +581,7 @@ const routeLabel = computed(() => {
 </template>
 
 <style scoped>
-/* ─── Shell grid ──────────────────────────────────────────────────── */
+
 .app-shell {
   display: grid;
   grid-template-columns: 240px 1fr;
@@ -602,7 +592,6 @@ const routeLabel = computed(() => {
   transition: grid-template-columns var(--motion-duration-base) var(--motion-easing);
 }
 
-/* ─── Sidebar ─────────────────────────────────────────────────────── */
 .sidebar {
   display: flex;
   flex-direction: column;
@@ -728,7 +717,6 @@ const routeLabel = computed(() => {
   flex-shrink: 0;
 }
 
-/* ─── Main area ───────────────────────────────────────────────────── */
 .main-area {
   display: grid;
   grid-template-rows: auto 1fr;
@@ -736,7 +724,6 @@ const routeLabel = computed(() => {
   position: relative;
 }
 
-/* ─── Navigation progress bar ─────────────────────────────────────── */
 .nav-progress {
   position: absolute;
   top: 0;
@@ -759,7 +746,6 @@ const routeLabel = computed(() => {
   }
 }
 
-/* ─── Top bar ─────────────────────────────────────────────────────── */
 .topbar {
   display: flex;
   align-items: center;
@@ -788,6 +774,12 @@ const routeLabel = computed(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.topbar__route-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .topbar__actions {
@@ -826,21 +818,18 @@ const routeLabel = computed(() => {
   padding: 0 4px;
 }
 
-/* ─── Main content ────────────────────────────────────────────────── */
 .main-content {
   overflow-y: auto;
   overflow-x: hidden;
   background-color: var(--color-bg);
 }
 
-/* ─── Mobile drawer backdrop ──────────────────────────────────────── */
 .drawer-backdrop {
   display: none;
   opacity: 0;
   transition: opacity var(--motion-duration-base) var(--motion-easing);
 }
 
-/* ─── Nav section header (boards) ────────────────────────────────── */
 .nav-section__header {
   display: flex;
   align-items: center;
@@ -852,8 +841,10 @@ const routeLabel = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  min-width: 24px;
+  min-height: 24px;
+  width: 24px;
+  height: 24px;
   border-radius: var(--radius-control);
   color: var(--color-text-muted);
   flex-shrink: 0;
@@ -877,33 +868,54 @@ const routeLabel = computed(() => {
   margin: 0;
 }
 
-/* ─── Board row actions (delete / rename) ────────────────────────── */
+/* FR-8b: board row wrapper — flex row with link + sibling action buttons */
 .nav-item--board {
-  cursor: pointer;
   position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-control);
+}
+
+.nav-item--board.nav-item--active .nav-item__board-link {
+  background-color: var(--color-surface-elevated);
+  color: var(--color-text-primary);
+}
+
+.nav-item__board-link {
+  flex: 1;
+  min-width: 0;
 }
 
 .nav-item__actions {
   display: flex;
   align-items: center;
   gap: 2px;
-  margin-left: auto;
   flex-shrink: 0;
   opacity: 0;
   transition: opacity var(--motion-duration-fast);
 }
 
+/* FR-14: reveal on hover AND keyboard focus-within */
 .nav-item--board:hover .nav-item__actions,
 .nav-item--board:focus-within .nav-item__actions {
   opacity: 1;
+}
+
+/* FR-15: touch devices — 0.4 opacity default so actions are discoverable */
+@media (hover: none) {
+  .nav-item__actions {
+    opacity: 0.4;
+  }
 }
 
 .nav-item__action-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  min-width: 24px;
+  min-height: 24px;
+  width: 24px;
+  height: 24px;
   border-radius: 4px;
   color: var(--color-text-muted);
   background: transparent;
@@ -946,7 +958,6 @@ const routeLabel = computed(() => {
   line-height: 1.4;
 }
 
-/* ─── Notes nav section (link + toggle + panel) ──────────────────── */
 .nav-notes {
   display: flex;
   flex-direction: column;
@@ -973,7 +984,7 @@ const routeLabel = computed(() => {
 .nav-notes__link {
   flex: 1;
   border-radius: var(--radius-control);
-  /* Override the nav-item background hover — handled by the row wrapper */
+  
   background-color: transparent !important;
 }
 
@@ -1012,7 +1023,6 @@ const routeLabel = computed(() => {
   background: transparent;
 }
 
-/* Sublist — no border rail, indent only */
 .nav-notes__panel :deep(.note-list) {
   padding-left: 0;
 }
@@ -1024,7 +1034,6 @@ const routeLabel = computed(() => {
   position: relative;
 }
 
-/* Dim dash prefix — brightens on hover/active */
 .nav-notes__panel :deep(.note-item)::before {
   content: '–';
   position: absolute;
@@ -1063,14 +1072,12 @@ const routeLabel = computed(() => {
   border-left: none;
 }
 
-/* Hide preview, timestamp and pin in sidebar — title + delete only */
 .nav-notes__panel :deep(.note-item__preview),
 .nav-notes__panel :deep(.note-item__time),
 .nav-notes__panel :deep(.note-item__pin) {
   display: none;
 }
 
-/* ─── Sidebar collapse button ─────────────────────────────────────── */
 .sidebar__collapse-btn {
   display: flex;
   align-items: center;
@@ -1089,7 +1096,6 @@ const routeLabel = computed(() => {
   background-color: var(--color-surface-elevated);
 }
 
-/* ─── Collapsed sidebar (desktop) ────────────────────────────────── */
 @media (min-width: 600px) {
   .app-shell--sidebar-collapsed {
     grid-template-columns: 64px 1fr;
@@ -1099,7 +1105,6 @@ const routeLabel = computed(() => {
     width: 64px !important;
   }
 
-  /* Fade out labels — use opacity so the transition plays */
   .sidebar--collapsed .logo-wordmark,
   .sidebar--collapsed .nav-item__label,
   .sidebar--collapsed .nav-section__label {
@@ -1108,7 +1113,6 @@ const routeLabel = computed(() => {
     pointer-events: none;
   }
 
-  /* These elements have no meaningful collapsed state — hide instantly */
   .sidebar--collapsed .nav-section__header p,
   .sidebar--collapsed .nav-section__add,
   .sidebar--collapsed .nav-section__empty,
@@ -1124,13 +1128,16 @@ const routeLabel = computed(() => {
     padding: 0 8px;
   }
 
+  .sidebar--collapsed .sidebar__logo .logo-link {
+    display: none;
+  }
+
   .sidebar--collapsed .nav-item {
     justify-content: center;
     padding: 8px;
   }
 }
 
-/* ─── Responsive: icon-rail at <900px ────────────────────────────── */
 @media (max-width: 899px) {
   .app-shell {
     grid-template-columns: 64px 1fr;
@@ -1159,7 +1166,6 @@ const routeLabel = computed(() => {
   }
 }
 
-/* ─── Responsive: drawer at <600px ───────────────────────────────── */
 @media (max-width: 599px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -1181,7 +1187,6 @@ const routeLabel = computed(() => {
     box-shadow: 8px 0 32px rgba(0, 0, 0, 0.4);
   }
 
-  /* Restore text labels and notes controls in full drawer mode */
   .logo-wordmark,
   .nav-item__label,
   .nav-section__label {

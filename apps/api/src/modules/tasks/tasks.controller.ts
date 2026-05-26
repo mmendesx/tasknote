@@ -20,7 +20,6 @@ import { TasksService } from './tasks.service';
 export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
-  /** POST /api/tasks — create a task; position = max+1 within the column */
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @UsePipes(new ZodValidationPipe(shared.CreateTaskDtoSchema))
@@ -28,26 +27,22 @@ export class TasksController {
     return this.tasksService.createTask(dto);
   }
 
-  /** POST /api/tasks/move — move a task to a different column/position (transactional) */
   @Post('move')
   @UsePipes(new ZodValidationPipe(shared.MoveTaskDtoSchema))
   moveTask(@Body() dto: shared.MoveTaskDto) {
     return this.tasksService.moveTask(dto);
   }
 
-  /** GET /api/tasks/archived?board_id=X — list archived tasks; filtered by board when provided */
   @Get('archived')
   listArchived(@Query('board_id', new ParseIntPipe({ optional: true })) boardId?: number) {
     return this.tasksService.listArchived(boardId);
   }
 
-  /** GET /api/tasks/:id — fetch a single task with column + tags relations */
   @Get(':id')
   getTask(@Param('id', ParseIntPipe) id: number) {
     return this.tasksService.getOne(id);
   }
 
-  /** PATCH /api/tasks/:id — partial update; if column_id changes, applies completed_at logic */
   @Patch(':id')
   updateTask(
     @Param('id', ParseIntPipe) id: number,
@@ -56,20 +51,17 @@ export class TasksController {
     return this.tasksService.updateTask(id, dto);
   }
 
-  /** DELETE /api/tasks/:id — soft delete: sets archived_at = now() */
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   softDelete(@Param('id', ParseIntPipe) id: number) {
     return this.tasksService.softDelete(id);
   }
 
-  /** POST /api/tasks/:id/restore — clears archived_at; returns updated task */
   @Post(':id/restore')
   restore(@Param('id', ParseIntPipe) id: number) {
     return this.tasksService.restore(id);
   }
 
-  /** DELETE /api/tasks/:id/permanent — hard delete; only allowed when archived_at is set */
   @Delete(':id/permanent')
   @HttpCode(HttpStatus.NO_CONTENT)
   permanentDelete(@Param('id', ParseIntPipe) id: number) {

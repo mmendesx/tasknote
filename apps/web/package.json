@@ -22,6 +22,7 @@
     "@milkdown/preset-commonmark": "^7.0.0",
     "@milkdown/preset-gfm": "^7.0.0",
     "@milkdown/theme-nord": "^7.0.0",
+    "@milkdown/utils": "^7.0.0",
     "@milkdown/vue": "^7.0.0",
     "@tasknote/shared": "workspace:*",
     "@tasknote/ui": "workspace:*",

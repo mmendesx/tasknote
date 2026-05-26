@@ -9,7 +9,6 @@ export const useBoardsStore = defineStore('boards', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  // The board with the lowest position, or the first in the array
   const defaultBoardId = computed<number | null>(() => {
     if (list.value.length === 0) return null
     const sorted = [...list.value].sort((a, b) => a.position - b.position)

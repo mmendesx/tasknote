@@ -1,10 +1,5 @@
 <script setup lang="ts">
-/**
- * TagPicker — multi-select combobox for assigning tags to a task.
- * Props: modelValue (number[] — selected tag ids), taskId (number)
- * Emits: update:modelValue
- * On toggle: calls currentBoardStore.addTag / removeTag for optimistic update + API.
- */
+
 import { ref, computed } from 'vue'
 import { useTagsStore } from '@/stores/tags'
 import { useCurrentBoardStore } from '@/stores/currentBoard'
@@ -75,7 +70,6 @@ function handleKeydown(event: KeyboardEvent): void {
   <div class="tag-picker" @keydown="handleKeydown">
     <label class="tag-picker__label" id="tag-picker-label">Tags</label>
 
-    <!-- Selected tag chips -->
     <div
       class="tag-picker__chips"
       role="group"
@@ -120,7 +114,6 @@ function handleKeydown(event: KeyboardEvent): void {
       </button>
     </div>
 
-    <!-- Dropdown listbox -->
     <div v-if="isOpen" class="tag-picker__dropdown">
       <input
         v-model="searchQuery"

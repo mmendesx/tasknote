@@ -4,7 +4,7 @@ export class Initial1700000000000 implements MigrationInterface {
   name = 'Initial1700000000000';
 
   async up(queryRunner: QueryRunner): Promise<void> {
-    // settings — singleton row; id is always 1
+    
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "settings" (
         "id"               INTEGER PRIMARY KEY NOT NULL DEFAULT 1,
@@ -18,7 +18,6 @@ export class Initial1700000000000 implements MigrationInterface {
       )
     `);
 
-    // boards
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "boards" (
         "id"         INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -29,7 +28,6 @@ export class Initial1700000000000 implements MigrationInterface {
       )
     `);
 
-    // columns
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "columns" (
         "id"        INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -43,7 +41,6 @@ export class Initial1700000000000 implements MigrationInterface {
       )
     `);
 
-    // tasks
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "tasks" (
         "id"             INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -61,7 +58,6 @@ export class Initial1700000000000 implements MigrationInterface {
       )
     `);
 
-    // notes
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "notes" (
         "id"          INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -76,7 +72,6 @@ export class Initial1700000000000 implements MigrationInterface {
       )
     `);
 
-    // tags
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "tags" (
         "id"    INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -86,7 +81,6 @@ export class Initial1700000000000 implements MigrationInterface {
       )
     `);
 
-    // task_tags — composite primary key, no surrogate id
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "task_tags" (
         "task_id" INTEGER NOT NULL,
@@ -97,7 +91,6 @@ export class Initial1700000000000 implements MigrationInterface {
       )
     `);
 
-    // file_refs — target_id has NO foreign key (polymorphic)
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "file_refs" (
         "id"          INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -111,7 +104,6 @@ export class Initial1700000000000 implements MigrationInterface {
       )
     `);
 
-    // Indexes per spec
     await queryRunner.query(
       `CREATE INDEX IF NOT EXISTS "IDX_tasks_column_position"
        ON "tasks" ("column_id", "position")`

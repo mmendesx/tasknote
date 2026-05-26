@@ -1,9 +1,5 @@
 <script setup lang="ts">
-/**
- * AddFileRefForm — inline form for attaching a file reference to a task.
- * "Select file" button opens native file picker; extracts name/path automatically.
- * User can still type a path manually.
- */
+
 import { ref, computed } from 'vue'
 import { Input, Button } from '@tasknote/ui'
 import { ABSOLUTE_PATH_PATTERN, FORBIDDEN_PATH_CHARS } from '@tasknote/shared'
@@ -24,7 +20,6 @@ const label   = ref('')
 const note    = ref('')
 const loading = ref(false)
 
-// Hidden file input ref
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
 function openFilePicker(): void {
@@ -35,17 +30,13 @@ function onFileSelected(evt: Event): void {
   const file = (evt.target as HTMLInputElement).files?.[0]
   if (!file) return
 
-  // `file.path` is non-standard but available in some Electron / Chrome builds.
-  // Fall back to filename only — user can prepend the directory manually.
   const filePath = (file as File & { path?: string }).path ?? file.name
   path.value = filePath
 
-  // Auto-fill label from filename (strip extension)
   if (!label.value) {
     label.value = file.name.replace(/\.[^.]+$/, '')
   }
 
-  // Reset so same file can be picked again
   if (fileInputRef.value) fileInputRef.value.value = ''
 }
 
@@ -98,7 +89,7 @@ async function submit(): Promise<void> {
 
 <template>
   <form class="flex flex-col gap-3" @submit.prevent="submit">
-    <!-- Hidden native file input -->
+    
     <input
       ref="fileInputRef"
       type="file"
@@ -108,7 +99,6 @@ async function submit(): Promise<void> {
       @change="onFileSelected"
     />
 
-    <!-- Path row: text input + Select file button -->
     <div class="file-path-row">
       <Input
         v-model="path"
@@ -172,6 +162,6 @@ async function submit(): Promise<void> {
 
 .file-pick-btn {
   flex-shrink: 0;
-  margin-bottom: 1px; /* align with input bottom border */
+  margin-bottom: 1px; 
 }
 </style>

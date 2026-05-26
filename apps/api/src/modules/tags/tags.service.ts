@@ -79,7 +79,6 @@ export class TagsService {
       throw new NotFoundException(`Tag with id '${id}' not found`);
     }
 
-    // ON DELETE CASCADE on task_tags.tag_id handles join-table rows automatically.
     this.logger.log(`removeTag: tag id=${id} deleted (cascade removed task_tags rows)`);
   }
 
@@ -98,8 +97,6 @@ export class TagsService {
       throw new NotFoundException(`Tag with id '${tagId}' not found`);
     }
 
-    // Check for existing link before inserting to stay idempotent.
-    // The relation builder's .add() does not deduplicate on its own.
     const existing = await this.dataSource
       .createQueryBuilder()
       .select('1')
@@ -130,7 +127,6 @@ export class TagsService {
       throw new NotFoundException(`Task with id '${taskId}' not found`);
     }
 
-    // Check link exists before attempting removal — keeps operation no-op safe.
     const existing = await this.dataSource
       .createQueryBuilder()
       .select('1')
@@ -153,11 +149,6 @@ export class TagsService {
   }
 }
 
-/**
- * SQLite UNIQUE constraint violations surface as QueryFailedError with a
- * message containing "UNIQUE constraint failed". This helper centralises the
- * detection so callers don't couple to the raw error string.
- */
 function isUniqueConstraintError(err: unknown): boolean {
   return (
     err instanceof QueryFailedError &&

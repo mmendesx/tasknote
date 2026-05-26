@@ -1,11 +1,5 @@
 <script setup lang="ts">
-/**
- * FileRefChip — displays a single file reference with:
- * - basename + label
- * - missing indicator (checked on mount via API)
- * - Open button (calls api.fileRefs.openFile, toast on error)
- * - Delete button with inline confirm
- */
+
 import { ref, onMounted, computed } from 'vue'
 import { Button } from '@tasknote/ui'
 import { useToast } from '@tasknote/ui'
@@ -68,7 +62,7 @@ async function confirmDelete(): Promise<void> {
     class="flex items-start gap-2 rounded-control border border-border bg-surface p-3"
     :class="exists === false && 'opacity-60'"
   >
-    <!-- Status dot -->
+    
     <span
       class="mt-1 h-2 w-2 flex-shrink-0 rounded-full"
       :class="
@@ -88,7 +82,6 @@ async function confirmDelete(): Promise<void> {
       role="img"
     />
 
-    <!-- Names -->
     <div class="flex-1 min-w-0">
       <p
         class="truncate text-sm font-mono text-text-primary"
@@ -104,7 +97,6 @@ async function confirmDelete(): Promise<void> {
       </p>
     </div>
 
-    <!-- Actions -->
     <div class="flex items-center gap-1 flex-shrink-0">
       <Button
         v-if="!confirmingDelete"
@@ -118,7 +110,6 @@ async function confirmDelete(): Promise<void> {
         Open
       </Button>
 
-      <!-- Delete / Confirm -->
       <template v-if="!confirmingDelete">
         <Button
           size="sm"

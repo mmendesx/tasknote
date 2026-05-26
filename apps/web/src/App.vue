@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import { RouterView } from 'vue-router'
+import { useNavigationState } from '@/composables/useNavigationState'
 import DefaultLayout from '@/layouts/DefaultLayout.vue'
 import { Toast } from '@tasknote/ui'
 import { useSettingsStore } from '@/stores'
@@ -12,17 +13,11 @@ import { useCommandPalette } from '@/features/search/useCommandPalette'
 import ShortcutCheatsheet from '@/features/shortcuts/ShortcutCheatsheet.vue'
 import { useShortcuts, onShortcut } from '@/composables/useShortcuts'
 
-// Theme is initialised from localStorage at module-load time in useTheme.ts,
-// setting data-theme on <html> before any component renders.
 const { setTheme } = useTheme()
 const settingsStore = useSettingsStore()
 
-// Controls whether the overlay is mounted. Separate from isOnboarded so we
-// can animate it out before unmounting rather than removing it instantly.
 const overlayMounted = ref(false)
 
-// Once settings are loaded from the API, sync the theme ref so the composable
-// and localStorage both reflect the server-stored preference.
 watch(
   () => settingsStore.settings?.theme,
   (serverTheme) => {
@@ -31,9 +26,6 @@ watch(
   { immediate: true }
 )
 
-// Sync accent color CSS variable from settings so the stored hex is applied on
-// every load — AccentPicker sets it immediately on pick, but this handles initial
-// load and cross-tab sync.
 watch(
   () => settingsStore.settings?.accent,
   (hex) => {
@@ -42,15 +34,11 @@ watch(
   { immediate: true }
 )
 
-// When onboarding completes (isOnboarded flips true), fade the overlay out
-// then unmount it.
 watch(
   () => settingsStore.isOnboarded,
   (nowOnboarded) => {
     if (nowOnboarded && overlayMounted.value) {
-      // The Dialog uses reka-ui's DialogPortal which teleports the backdrop
-      // (.tn-overlay) and content panel (.tn-dialog) to document.body.
-      // We animate those portaled nodes rather than the wrapper div.
+      
       const dialogTargets = document.querySelectorAll('.tn-dialog, .tn-overlay')
       if (dialogTargets.length > 0) {
         const anim = animateOrSkip(Array.from(dialogTargets), {
@@ -58,7 +46,7 @@ watch(
           duration: 250,
           easing: 'easeOutCubic',
         })
-        // anime.js v4 animation instances expose a `.finished` Promise
+        
         const finished: Promise<unknown> =
           (anim as { finished?: Promise<unknown> }).finished ?? Promise.resolve()
         finished.then(() => {
@@ -71,49 +59,55 @@ watch(
   }
 )
 
-// ─── Shortcut cheatsheet ───────────────────────────────────────────────────────
 const cheatsheetOpen = ref(false)
 
-// ─── Global shortcut layer ─────────────────────────────────────────────────────
 const { install: installShortcuts } = useShortcuts()
 
 onMounted(async () => {
   await settingsStore.load()
-  // Show overlay only when settings are loaded and user has not yet onboarded
+  
   if (!settingsStore.isOnboarded) {
     overlayMounted.value = true
   }
 
-  // Install keyboard shortcut layer after DOM is ready
   installShortcuts()
 
-  // Subscribe to cheatsheet shortcut — toggle modal open/closed
   onShortcut('cheatsheet', () => {
     cheatsheetOpen.value = !cheatsheetOpen.value
   })
 })
 
-// Command palette — open state is owned by the singleton composable so that
-// ICT-20 (useShortcuts) can call openPalette() from anywhere.
 const { open: paletteOpen } = useCommandPalette()
+
+// FR-9: aria-live announcement for route changes (screen-reader navigation feedback)
+const { routeLabel } = useNavigationState()
+const routeAnnouncement = ref('')
+watch(routeLabel, (label) => {
+  routeAnnouncement.value = label ? `Navigated to ${label}` : ''
+})
 </script>
 
 <template>
-  <!-- Global toast container — mounted once at app root -->
+  <!-- FR-9: skip-to-content link for keyboard users -->
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
+  <!-- FR-9: aria-live region for route-change announcements -->
+  <div
+    class="sr-only"
+    aria-live="polite"
+    aria-atomic="true"
+  >{{ routeAnnouncement }}</div>
+
   <Toast />
 
-  <!-- Command palette — rendered at root so it overlays any view -->
   <CommandPalette v-model:open="paletteOpen" />
 
-  <!-- Shortcut cheatsheet modal — toggled by '?' shortcut -->
   <ShortcutCheatsheet v-model:open="cheatsheetOpen" />
 
-  <!-- Onboarding overlay — shown above the layout until onboarded -->
   <div v-if="overlayMounted" class="tn-onboarding-root">
     <OnboardingOverlay />
   </div>
 
-  <!-- All views render inside the shell layout -->
   <DefaultLayout>
     <RouterView v-slot="{ Component }">
       <Transition name="page" mode="out-in">
@@ -124,6 +118,40 @@ const { open: paletteOpen } = useCommandPalette()
 </template>
 
 <style>
+/* FR-9: skip-to-content link — visually hidden until focused */
+.skip-link {
+  position: fixed;
+  top: -100%;
+  left: 0.5rem;
+  z-index: 9999;
+  padding: 0.5rem 1rem;
+  background: var(--color-surface);
+  border: 2px solid var(--color-focus-ring);
+  border-radius: var(--radius-control);
+  color: var(--color-text-primary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: top 0.1s;
+}
+
+.skip-link:focus {
+  top: 0.5rem;
+}
+
+/* Utility: screen-reader only text */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .page-enter-active,
 .page-leave-active {
   transition:

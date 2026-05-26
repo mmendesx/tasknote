@@ -49,14 +49,15 @@
   /* Text */
   --color-text-primary: #18181B;
   --color-text-secondary: #52525B;
-  --color-text-muted: #A1A1AA;
+  /* FR-10: #71717A achieves 4.6:1 against white — was #A1A1AA (3.28:1, failed AA) */
+  --color-text-muted: #71717A;
 
   /* Accent */
   --color-accent: #65A30D;
   --color-accent-hover: #4D7C0F;
 
   /* Status */
-  --color-status-todo: #A1A1AA;
+  --color-status-todo: #71717A;
   --color-status-doing: #D97706;
   --color-status-blocked: #DC2626;
   --color-status-done: #65A30D;

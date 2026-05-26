@@ -14,7 +14,6 @@ const emit = defineEmits<{
 
 const typed = ref('')
 
-// Reset input whenever the dialog opens
 watch(
   () => props.open,
   (isOpen) => {

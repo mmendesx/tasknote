@@ -73,7 +73,7 @@ function formatDate(date: Date | string | null): string {
 
 <template>
   <div>
-    <!-- Loading skeleton -->
+    
     <div v-if="isLoading" class="space-y-2" aria-live="polite" aria-busy="true">
       <div
         v-for="i in 3"
@@ -83,7 +83,6 @@ function formatDate(date: Date | string | null): string {
       />
     </div>
 
-    <!-- Empty state -->
     <div
       v-else-if="notes.length === 0"
       class="py-16 text-center text-text-muted text-sm"
@@ -91,14 +90,13 @@ function formatDate(date: Date | string | null): string {
       No archived notes.
     </div>
 
-    <!-- Note list -->
     <ul v-else class="space-y-2" role="list">
       <li
         v-for="note in notes"
         :key="note.id"
         class="flex items-center gap-3 rounded-control border border-border bg-surface px-4 py-3"
       >
-        <!-- Note info -->
+        
         <div class="min-w-0 flex-1">
           <p class="truncate text-sm font-medium text-text-primary">
             {{ note.title || 'Untitled note' }}
@@ -108,7 +106,6 @@ function formatDate(date: Date | string | null): string {
           </p>
         </div>
 
-        <!-- Actions -->
         <div class="flex shrink-0 items-center gap-2">
           <Button
             variant="ghost"

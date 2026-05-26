@@ -9,11 +9,11 @@ export type TargetType = (typeof TARGET_TYPE_VALUES)[number];
 
 export interface Settings {
   id: 1;
-  display_name: string;
+  display_name: string | null;
   theme: Theme;
   accent: string;
   default_board_id: number | null;
-  onboarded_at: Date | null;
+  onboarded_at: string | null;
   timezone: string;
 }
 

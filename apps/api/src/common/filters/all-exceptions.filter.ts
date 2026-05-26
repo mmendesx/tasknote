@@ -10,10 +10,6 @@ import type { Response } from 'express';
 import { ZodValidationException } from 'nestjs-zod';
 import type { ApiErrorResponse } from '@tasknote/shared';
 
-/**
- * Maps all thrown exceptions to { error: { code, message, details? } }.
- * Stack traces are logged to stderr and never appear in response bodies.
- */
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger(AllExceptionsFilter.name);
@@ -28,8 +24,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let details: unknown;
 
     if (exception instanceof ZodValidationException) {
-      // ZodValidationException is a subclass of BadRequestException.
-      // Check it BEFORE the generic HttpException branch.
+      
       status = HttpStatus.UNPROCESSABLE_ENTITY;
       code = 'VALIDATION_ERROR';
       message = 'Validation failed';
@@ -40,7 +35,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       const exceptionResponse = exception.getResponse();
       if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
         const resp = exceptionResponse as Record<string, unknown>;
-        // Honor an explicit code when provided (e.g. ConflictException with { code, message })
+        
         code = typeof resp['code'] === 'string' ? resp['code'] : this.codeFromStatus(status);
         message = (typeof resp['message'] === 'string' ? resp['message'] : null) ?? exception.message;
       } else {
@@ -52,7 +47,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       status = HttpStatus.INTERNAL_SERVER_ERROR;
       code = 'INTERNAL';
       message = 'An unexpected error occurred';
-      // Log full stack to stderr — never include in response body
+      
       this.logger.error(`[INTERNAL] ${exception.message}`, exception.stack);
     } else {
       status = HttpStatus.INTERNAL_SERVER_ERROR;
@@ -63,7 +58,6 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     const body: ApiErrorResponse = { error: { code, message, details } };
 
-    // Omit details key when undefined to keep response clean
     if (details === undefined) {
       delete body.error.details;
     }

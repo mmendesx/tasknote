@@ -1,18 +1,4 @@
 <script setup lang="ts">
-/**
- * QuickAddTaskInput — inline new-task input for Kanban columns.
- *
- * ICT-18 (KanbanColumn) integration contract:
- *   - Import and mount inside KanbanColumn.vue at the top of the task list
- *   - Pass :column-id="column.id"
- *   - Pass :active="quickAddActiveColumnId === column.id"
- *     (quickAddActiveColumnId from useFocusedColumn())
- *   - Handle @submit: (title: string) => currentBoardStore.createTask(columnId, { title, priority: 'medium', column_id: columnId })
- *   - Handle @cancel: () => clearQuickAdd()
- *
- * The component auto-focuses when :active becomes true.
- * Enter submits (validates non-empty title); Esc cancels.
- */
 
 import { ref, watch, nextTick } from 'vue'
 
@@ -30,7 +16,6 @@ const inputRef = ref<HTMLInputElement | null>(null)
 const title = ref('')
 const validationError = ref<string | null>(null)
 
-// Auto-focus when active becomes true
 watch(
   () => props.active,
   async (isActive) => {
@@ -79,7 +64,7 @@ function handleKeydown(event: KeyboardEvent) {
 }
 
 function handleBlur() {
-  // On blur without submit, cancel silently
+  
   if (props.active && title.value.trim() === '') {
     handleCancel()
   }

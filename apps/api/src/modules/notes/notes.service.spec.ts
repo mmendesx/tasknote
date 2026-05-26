@@ -1,17 +1,3 @@
-/**
- * notes.service.spec.ts
- *
- * Vitest tests for NotesService and deriveTitle helper.
- * Uses an in-memory better-sqlite3 DataSource (synchronize: true) so tests
- * are self-contained and require no external process.
- *
- * BDD scenarios covered:
- *   - "Create standalone note": deriveTitle strips heading markers, uses first non-empty line
- *   - "Create standalone note": create with empty title derives from body
- *   - "Pinned notes appear first": list returns pinned first, then updated_at desc
- *   - "Link a note to a task": linking via task_id persists to notes.task_id
- *   - soft delete + restore cycle
- */
 
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -23,8 +9,6 @@ import { ColumnEntity } from '../columns/entities/column.entity';
 import { BoardEntity } from '../boards/entities/board.entity';
 import { TagEntity } from '../tags/entities/tag.entity';
 import { NotesService, deriveTitle } from './notes.service';
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function buildDataSource(): DataSource {
   return new DataSource({
@@ -38,7 +22,6 @@ function buildDataSource(): DataSource {
   });
 }
 
-/** Insert a note row directly, bypassing service logic, for ordering tests. */
 async function insertNote(
   repo: Repository<NoteEntity>,
   overrides: Partial<NoteEntity>,
@@ -51,8 +34,6 @@ async function insertNote(
   });
   return repo.save(note);
 }
-
-// ─── Test suite ───────────────────────────────────────────────────────────────
 
 describe('deriveTitle', () => {
   it('strips h1 heading marker and returns trimmed text', () => {
@@ -114,8 +95,6 @@ describe('NotesService', () => {
     }
   });
 
-  // ─── Helper: create a real task for linking tests ─────────────────────────
-
   async function createTask(): Promise<TaskEntity> {
     const board = await boardsRepo.save(boardsRepo.create({ name: 'Board', position: 0 }));
     const column = await columnsRepo.save(
@@ -125,8 +104,6 @@ describe('NotesService', () => {
       tasksRepo.create({ columnId: column.id, title: 'Task T', position: 0 }),
     );
   }
-
-  // ─── createNote — BDD: Create standalone note ─────────────────────────────
 
   describe('createNote — BDD: Create standalone note', () => {
     it('derives title from body when title is absent', async () => {
@@ -168,19 +145,14 @@ describe('NotesService', () => {
     });
   });
 
-  // ─── listNotes — BDD: Pinned notes appear first ───────────────────────────
-
   describe('listNotes — BDD: Pinned notes appear first', () => {
     it('returns pinned notes before unpinned notes', async () => {
-      // Insert three notes: A pinned (older), B unpinned (newest), C pinned (oldest)
-      // Wait is simulated by explicit updatedAt overrides — SQLite datetime precision may
-      // collapse sub-second timestamps, so we use spread-out times.
+      
       const baseTime = new Date('2024-01-01T10:00:00.000Z');
-      const tA = new Date(baseTime.getTime() + 2000); // A pinned, t+2s
-      const tB = new Date(baseTime.getTime() + 3000); // B unpinned newest, t+3s
-      const tC = new Date(baseTime.getTime() + 1000); // C pinned oldest, t+1s
+      const tA = new Date(baseTime.getTime() + 2000); 
+      const tB = new Date(baseTime.getTime() + 3000); 
+      const tC = new Date(baseTime.getTime() + 1000); 
 
-      // Insert via repo directly so we can set updatedAt explicitly
       const noteA = await notesRepo.save(
         notesRepo.create({ title: 'A', bodyMd: '', pinned: true }),
       );
@@ -191,7 +163,6 @@ describe('NotesService', () => {
         notesRepo.create({ title: 'C', bodyMd: '', pinned: true }),
       );
 
-      // Force specific updated_at so ordering is deterministic
       await notesRepo.query(
         `UPDATE notes SET updated_at = ? WHERE id = ?`,
         [tA.toISOString(), noteA.id],
@@ -207,10 +178,9 @@ describe('NotesService', () => {
 
       const notes = await service.listNotes();
 
-      // Pinned notes A (newer) and C (older) come first, then unpinned B
       expect(notes).toHaveLength(3);
       const titles = notes.map((n) => n.title);
-      // Among pinned: A (t+2s) > C (t+1s) → order [A, C, B]
+      
       expect(titles).toEqual(['A', 'C', 'B']);
     });
 
@@ -228,8 +198,6 @@ describe('NotesService', () => {
       expect(notes).toEqual([]);
     });
   });
-
-  // ─── listNotes — task_id filter ───────────────────────────────────────────
 
   describe('listNotes — task_id filter', () => {
     it('returns only notes linked to the given task', async () => {
@@ -254,8 +222,6 @@ describe('NotesService', () => {
     });
   });
 
-  // ─── getNote ──────────────────────────────────────────────────────────────
-
   describe('getNote', () => {
     it('returns the note by id', async () => {
       const created = await service.createNote({ body_md: 'Some body' });
@@ -267,8 +233,6 @@ describe('NotesService', () => {
       await expect(service.getNote(9999)).rejects.toThrow(NotFoundException);
     });
   });
-
-  // ─── updateNote — BDD: Link a note to a task ─────────────────────────────
 
   describe('updateNote — BDD: Link a note to a task', () => {
     it('persists task_id when linking note to task', async () => {
@@ -319,8 +283,6 @@ describe('NotesService', () => {
     });
   });
 
-  // ─── softDeleteNote + restoreNote cycle ───────────────────────────────────
-
   describe('softDeleteNote + restoreNote — soft delete + restore cycle', () => {
     it('sets archived_at on delete', async () => {
       const note = await service.createNote({ body_md: 'Will be archived' });
@@ -357,7 +319,7 @@ describe('NotesService', () => {
 
     it('restore is idempotent when note is not archived', async () => {
       const note = await service.createNote({ body_md: 'Content' });
-      // Note was never archived — restoring should succeed with archivedAt = null
+      
       const restored = await service.restoreNote(note.id);
       expect(restored.archivedAt).toBeNull();
     });

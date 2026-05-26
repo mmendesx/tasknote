@@ -1,12 +1,4 @@
 <script setup lang="ts">
-/**
- * ShortcutCheatsheet — modal listing all keyboard shortcuts.
- *
- * Opened by pressing '?' (registered in useShortcuts).
- * Close via Esc key, the X button, or the Close button at the bottom.
- *
- * Uses Dialog from @tasknote/ui. Each shortcut displays keys via Kbd.
- */
 
 import { Dialog, Kbd } from '@tasknote/ui'
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Placeholder — redirected to features/board/BoardView.vue via router
+
 </script>
 
 <template>

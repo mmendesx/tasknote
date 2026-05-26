@@ -1,19 +1,10 @@
 <script setup lang="ts">
-/**
- * MilkdownEditor — canonical shared WYSIWYG editor wrapping @milkdown/vue.
- * Plugins: commonmark, gfm, listener, history, clipboard, prism.
- *
- * v-model: string (markdown). Emits 'update:modelValue' on doc change.
- * readOnly prop: disables editing and dims the surface.
- *
- * Authoritative path: apps/web/src/features/editor/MilkdownEditor.vue
- * ICT-19 (TaskDrawer) should import from here; the board/ copy is kept as a
- * re-export shim to avoid breaking ICT-19 if it ran before this move.
- */
+
 import '@milkdown/theme-nord/style.css'
-import { defineComponent, h, ref, onMounted, onUnmounted, Teleport } from 'vue'
+import { defineComponent, h, ref, watch, onMounted, onUnmounted, Teleport } from 'vue'
 import { Milkdown as MilkdownComp, MilkdownProvider, useEditor, useInstance } from '@milkdown/vue'
 import { Editor, rootCtx, defaultValueCtx, editorViewOptionsCtx, commandsCtx, editorViewCtx } from '@milkdown/core'
+import { replaceAll } from '@milkdown/utils'
 import { commonmark, toggleStrongCommand, toggleEmphasisCommand, toggleInlineCodeCommand } from '@milkdown/preset-commonmark'
 import { gfm, toggleStrikethroughCommand } from '@milkdown/preset-gfm'
 import { listener, listenerCtx } from '@milkdown/plugin-listener'
@@ -32,7 +23,6 @@ const emit = defineEmits<{
   'update:modelValue': [value: string]
 }>()
 
-// ─── Inner component — has access to Milkdown context ─────────────────────────
 const EditorInner = defineComponent({
   name: 'MilkdownEditorInner',
   props: {
@@ -51,7 +41,7 @@ const EditorInner = defineComponent({
             editable: () => !innerProps.readOnly,
           }))
           ctx.get(listenerCtx).markdownUpdated((_, md) => {
-            innerEmit('update:modelValue', md)
+            trackedEmit('update:modelValue', md)
           })
         })
         .use(commonmark)
@@ -61,8 +51,37 @@ const EditorInner = defineComponent({
         .use(clipboard)
     )
 
-    // ─── Floating toolbar state ────────────────────────────────────────────
     const [, getInstance] = useInstance()
+
+    // FR-6: track last-emitted value so we can distinguish external from self-emitted changes
+    const lastEmitted = ref(innerProps.modelValue ?? '')
+
+    // Override innerEmit to track what we emitted
+    const originalEmit = innerEmit
+    function trackedEmit(event: string, value: string) {
+      if (event === 'update:modelValue') {
+        lastEmitted.value = value
+      }
+      originalEmit(event as 'update:modelValue', value)
+    }
+
+    // FR-6: Watch for external changes (e.g. Discard reset) and replace ProseMirror doc.
+    // "External" = incoming value differs from last-emitted (not a self-update loop).
+    watch(
+      () => innerProps.modelValue,
+      (newVal) => {
+        const val = newVal ?? ''
+        if (val === lastEmitted.value) return // self-emitted — no-op to avoid loop
+        const editor = getInstance()
+        if (!editor) return
+        try {
+          editor.action(replaceAll(val))
+          lastEmitted.value = val
+        } catch {
+          // Editor not yet ready; ignore silently
+        }
+      },
+    )
 
     const toolbarVisible = ref(false)
     const toolbarX      = ref(0)
@@ -75,7 +94,7 @@ const EditorInner = defineComponent({
       editor.action((ctx) => {
         ctx.get(commandsCtx).call(cmd.key)
       })
-      // Re-check marks after toggle
+      
       requestAnimationFrame(updateActiveMarks)
     }
 
@@ -103,7 +122,7 @@ const EditorInner = defineComponent({
           }
         })
       } catch {
-        // editor not ready yet
+        
       }
     }
 
@@ -117,7 +136,6 @@ const EditorInner = defineComponent({
       const range    = sel.getRangeAt(0)
       const anchorEl = sel.anchorNode?.parentElement
 
-      // Only show toolbar when selection is inside a ProseMirror editor
       if (!anchorEl?.closest('.ProseMirror')) {
         toolbarVisible.value = false
         return
@@ -126,7 +144,6 @@ const EditorInner = defineComponent({
       const rect = range.getBoundingClientRect()
       if (rect.width === 0) { toolbarVisible.value = false; return }
 
-      // Position: centred above selection, 8px gap
       toolbarX.value = rect.left + rect.width / 2
       toolbarY.value = rect.top - 8
       toolbarVisible.value = true
@@ -153,7 +170,7 @@ const EditorInner = defineComponent({
                 transform: 'translate(-50%, -100%)',
                 zIndex: 9999,
               },
-              onMousedown: (e: MouseEvent) => e.preventDefault(), // keep selection
+              onMousedown: (e: MouseEvent) => e.preventDefault(), 
             }, [
               h('button', {
                 type: 'button',
@@ -203,7 +220,6 @@ const EditorInner = defineComponent({
   </div>
 </template>
 
-<!-- Override Milkdown theme-nord CSS vars to match TaskNote design tokens -->
 <style>
 .milkdown {
   --nord0: var(--color-surface);
@@ -217,7 +233,6 @@ const EditorInner = defineComponent({
   color: var(--color-text-primary) !important;
 }
 
-/* ─── Floating selection toolbar ─────────────────────────────────────────── */
 .milkdown-toolbar {
   display: flex;
   align-items: center;

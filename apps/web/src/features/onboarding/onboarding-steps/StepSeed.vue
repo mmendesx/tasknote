@@ -38,7 +38,7 @@ function selectSeed(option: SeedOption) {
 <template>
   <div ref="containerRef" class="step-seed">
     <div class="step-seed__options" role="radiogroup" aria-label="Starting point">
-      <!-- Empty option -->
+      
       <button
         type="button"
         class="seed-card"
@@ -73,7 +73,6 @@ function selectSeed(option: SeedOption) {
         </span>
       </button>
 
-      <!-- Sample option -->
       <button
         type="button"
         class="seed-card"
@@ -131,7 +130,6 @@ function selectSeed(option: SeedOption) {
   gap: 10px;
 }
 
-/* Seed selection cards */
 .seed-card {
   display: flex;
   align-items: flex-start;

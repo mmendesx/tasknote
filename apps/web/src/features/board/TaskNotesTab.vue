@@ -1,8 +1,5 @@
 <script setup lang="ts">
-/**
- * TaskNotesTab — Notes pane inside TaskDrawer.
- * Lists linked notes, supports unlink, inline create, and read-only expand.
- */
+
 import { ref } from 'vue'
 import { Button, Input } from '@tasknote/ui'
 import { useToast } from '@tasknote/ui'
@@ -78,7 +75,6 @@ async function unlinkNote(noteId: number): Promise<void> {
     </ul>
     <p v-else-if="!showForm" class="text-sm text-text-muted">No notes linked to this task.</p>
 
-    <!-- Inline create form -->
     <template v-if="showForm">
       <div class="flex flex-col gap-3 border border-border rounded-control p-3">
         <Input v-model="newNoteTitle" label="Title (optional)" placeholder="Note title" />

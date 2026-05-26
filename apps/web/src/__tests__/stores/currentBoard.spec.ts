@@ -1,22 +1,6 @@
-/**
- * currentBoard.spec.ts
- *
- * Unit tests for the useCurrentBoardStore (apps/web/src/stores/currentBoard.ts).
- *
- * Focus: optimistic moveTask behaviour
- *   - Mutates local state immediately (before API resolves)
- *   - Rolls back to pre-mutation snapshot on API failure
- *
- * Uses vi.mock() to stub the api module and @tasknote/ui (useToast).
- * Pinia is initialised fresh before each test via setActivePinia + createPinia().
- */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { setActivePinia, createPinia } from 'pinia';
-
-// ── Mock external dependencies BEFORE importing the store ────────────────────
-// vi.mock calls are hoisted to the top of the file by the Vitest transform, so
-// this placement is intentional and required.
 
 vi.mock('@/api', () => ({
   tasks: {
@@ -44,12 +28,9 @@ vi.mock('@tasknote/ui', () => ({
   }),
 }));
 
-// ── Import after mocks are registered ────────────────────────────────────────
 import { useCurrentBoardStore } from '@/stores/currentBoard';
 import * as api from '@/api';
 import type { BoardWithColumns } from '@tasknote/shared';
-
-// ─── Test data builders ───────────────────────────────────────────────────────
 
 function makeBoard(): BoardWithColumns {
   return {
@@ -97,17 +78,15 @@ function makeBoard(): BoardWithColumns {
   };
 }
 
-// ─── Test suite ───────────────────────────────────────────────────────────────
-
 describe('useCurrentBoardStore.moveTask — optimistic update', () => {
   let store: ReturnType<typeof useCurrentBoardStore>;
 
   beforeEach(() => {
     setActivePinia(createPinia());
     store = useCurrentBoardStore();
-    // Seed the store with a known board state
+    
     store.board = makeBoard();
-    // Reset all mocks between tests
+    
     vi.resetAllMocks();
   });
 
@@ -119,18 +98,14 @@ describe('useCurrentBoardStore.moveTask — optimistic update', () => {
 
     vi.mocked(api.tasks.moveTask).mockReturnValueOnce(pendingApiCall as Promise<never>);
 
-    // Start the move (do not await — we want to inspect mid-flight state)
     const movePromise = store.moveTask(100, 11, 0);
 
-    // Synchronous: the optimistic mutation should have already fired
-    // Task 100 should now be in column 11, not column 10
     const column10 = store.board!.columns.find((c) => c.id === 10)!;
     const column11 = store.board!.columns.find((c) => c.id === 11)!;
 
     expect(column10.tasks.find((t) => t.id === 100)).toBeUndefined();
     expect(column11.tasks.find((t) => t.id === 100)).toBeDefined();
 
-    // Resolve the API call so the promise settles cleanly
     resolveApiCall({ id: 100, column_id: 11, position: 0 });
     await movePromise;
   });
@@ -138,7 +113,6 @@ describe('useCurrentBoardStore.moveTask — optimistic update', () => {
   it('rolls back to the pre-mutation board state when the API call fails', async () => {
     vi.mocked(api.tasks.moveTask).mockRejectedValueOnce(new Error('Network error'));
 
-    // Take a snapshot of the initial state to compare after rollback
     const initialColumn10TaskIds = store.board!.columns
       .find((c) => c.id === 10)!
       .tasks.map((t) => t.id);
@@ -147,10 +121,8 @@ describe('useCurrentBoardStore.moveTask — optimistic update', () => {
       .find((c) => c.id === 11)!
       .tasks.map((t) => t.id);
 
-    // Expect the move to throw (the error is re-thrown after rollback)
     await expect(store.moveTask(100, 11, 0)).rejects.toThrow();
 
-    // After failure: state should be restored to original
     const column10After = store.board!.columns.find((c) => c.id === 10)!;
     const column11After = store.board!.columns.find((c) => c.id === 11)!;
 
@@ -161,10 +133,8 @@ describe('useCurrentBoardStore.moveTask — optimistic update', () => {
   it('does not mutate the board when board is null', async () => {
     store.board = null;
 
-    // moveTask should return without throwing when board is null
     await expect(store.moveTask(100, 11, 0)).resolves.toBeUndefined();
 
-    // API must not have been called
     expect(api.tasks.moveTask).not.toHaveBeenCalled();
   });
 
@@ -173,10 +143,8 @@ describe('useCurrentBoardStore.moveTask — optimistic update', () => {
 
     const boardBefore = JSON.stringify(store.board);
 
-    // Task id 9999 does not exist in any column
     await store.moveTask(9999, 11, 0);
 
-    // Board should be unchanged because the mutate early-returns when task not found
     expect(JSON.stringify(store.board)).toBe(boardBefore);
   });
 

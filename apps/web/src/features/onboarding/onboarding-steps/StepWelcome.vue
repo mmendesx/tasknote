@@ -24,7 +24,7 @@ onMounted(() => {
 
 <template>
   <div ref="containerRef" class="step-welcome">
-    <!-- Logo mark -->
+    
     <div class="step-welcome__logo" aria-hidden="true">
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -58,10 +58,8 @@ onMounted(() => {
       </svg>
     </div>
 
-    <!-- Tagline -->
     <p class="step-welcome__tagline">Your work, your way — local.</p>
 
-    <!-- CTA -->
     <Button variant="primary" size="md" @click="emit('next')">
       Get started
     </Button>

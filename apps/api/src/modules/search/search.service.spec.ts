@@ -1,16 +1,3 @@
-/**
- * search.service.spec.ts
- *
- * Vitest tests for SearchService.
- * Uses an in-memory better-sqlite3 DataSource (synchronize: true) so tests are
- * self-contained and require no external process.
- *
- * BDD scenarios covered:
- *   - "Empty query returns no results": empty or whitespace-only q → empty groups
- *   - "Search finds matches across types": q='onboard' matches task title, note body, file label
- *   - LIKE escaping: q='50%' only matches a row containing the literal string "50%",
- *     not an unrelated row whose label happens to contain "50" followed by other chars.
- */
 
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -22,8 +9,6 @@ import { ColumnEntity } from '../columns/entities/column.entity';
 import { BoardEntity } from '../boards/entities/board.entity';
 import { TagEntity } from '../tags/entities/tag.entity';
 import { SearchService } from './search.service';
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function buildDataSource(): DataSource {
   return new DataSource({
@@ -37,10 +22,6 @@ function buildDataSource(): DataSource {
   });
 }
 
-/**
- * Creates the minimum board + column structure so TaskEntity FK constraints are
- * satisfied when inserting test tasks.
- */
 async function seedColumn(
   boardsRepo: Repository<BoardEntity>,
   columnsRepo: Repository<ColumnEntity>,
@@ -50,8 +31,6 @@ async function seedColumn(
     columnsRepo.create({ boardId: board.id, name: 'Backlog', position: 0, color: '#000' }),
   );
 }
-
-// ─── Test suite ───────────────────────────────────────────────────────────────
 
 describe('SearchService', () => {
   let dataSource: DataSource;
@@ -81,8 +60,6 @@ describe('SearchService', () => {
     }
   });
 
-  // ─── BDD: Empty query returns no results ────────────────────────────────────
-
   describe('empty query returns empty groups', () => {
     it('returns empty groups when q is an empty string', async () => {
       const result = await service.search('');
@@ -103,23 +80,18 @@ describe('SearchService', () => {
     });
   });
 
-  // ─── BDD: Search finds matches across types ──────────────────────────────────
-
   describe('search finds matches across types', () => {
     it('q="onboard" matches task title, note body, and file label', async () => {
       const col = await seedColumn(boardsRepo, columnsRepo);
 
-      // Task: title matches
       await tasksRepo.save(
         tasksRepo.create({ columnId: col.id, title: 'Onboarding deck', position: 0 }),
       );
 
-      // Note: body matches (title does not)
       await notesRepo.save(
         notesRepo.create({ title: 'Sprint notes', bodyMd: 'Completed onboarding checklist' }),
       );
 
-      // File ref: label matches
       await fileRefsRepo.save(
         fileRefsRepo.create({
           targetType: 'task',
@@ -206,11 +178,9 @@ describe('SearchService', () => {
     });
   });
 
-  // ─── LIKE escaping: q='50%' must not match '500' ────────────────────────────
-
   describe('LIKE escaping prevents unintended wildcard expansion', () => {
     it('q="50%" matches only labels containing the literal string "50%" and not "500"', async () => {
-      // This is the discriminating row: label is exactly "50% complete"
+      
       await fileRefsRepo.save(
         fileRefsRepo.create({
           targetType: 'task',
@@ -220,9 +190,6 @@ describe('SearchService', () => {
         }),
       );
 
-      // Unrelated row: contains "50" followed by other characters but NOT a literal "%"
-      // Without LIKE escaping, the pattern '%50%%' would treat the second % as a wildcard
-      // and match this row (since "500 items" contains "50" followed by anything).
       await fileRefsRepo.save(
         fileRefsRepo.create({
           targetType: 'task',
@@ -248,8 +215,6 @@ describe('SearchService', () => {
         }),
       );
 
-      // Without escaping, LIKE '100_' would treat _ as a single-char wildcard,
-      // matching "100X", "100Y", etc.
       await fileRefsRepo.save(
         fileRefsRepo.create({
           targetType: 'note',
@@ -265,8 +230,6 @@ describe('SearchService', () => {
       expect(result.files[0].label).toBe('100_coverage');
     });
   });
-
-  // ─── Result cap ─────────────────────────────────────────────────────────────
 
   describe('results are capped at 20 per group', () => {
     it('returns at most 20 tasks even when more than 20 match', async () => {

@@ -6,7 +6,7 @@ import {
 
 @Entity('settings')
 export class SettingsEntity {
-  // Singleton row — id is always 1, enforced by CHECK constraint in migration.
+  
   @PrimaryColumn({ type: 'integer', default: 1 })
   id: 1 = 1;
 

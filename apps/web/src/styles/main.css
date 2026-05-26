@@ -1,5 +1,39 @@
 @import 'tailwindcss';
-@config '../../tailwind.config.ts';
+
+/* ─── Explicit source scanning for workspace packages ─────────────── */
+/* Tailwind v4's Vite plugin scans via the module graph, but pre-bundled
+   workspace packages (.vue files) may not be traversed. @source forces
+   scanning of the UI package component source so Dialog, Drawer, etc.
+   have their utility classes compiled. */
+@source '../../../../packages/ui/src/**/*.{vue,ts}';
+
+/* ─── Tailwind v4 theme — CSS-var-backed utilities ────────────────── */
+/* @theme inline keeps vars as references so theming (dark/light) works */
+@theme inline {
+  /* Colors — mapped from design tokens in tokens.css */
+  --color-bg:               var(--color-bg);
+  --color-surface:          var(--color-surface);
+  --color-surface-elevated: var(--color-surface-elevated);
+  --color-border:           var(--color-border);
+  --color-accent:           var(--color-accent);
+  --color-accent-hover:     var(--color-accent-hover);
+  --color-text-primary:     var(--color-text-primary);
+  --color-text-secondary:   var(--color-text-secondary);
+  --color-text-muted:       var(--color-text-muted);
+  --color-status-todo:      var(--color-status-todo);
+  --color-status-doing:     var(--color-status-doing);
+  --color-status-blocked:   var(--color-status-blocked);
+  --color-status-done:      var(--color-status-done);
+
+  /* Border radius */
+  --radius-control: var(--radius-control);
+  --radius-card:    var(--radius-card);
+  --radius-modal:   var(--radius-modal);
+
+  /* Transition durations */
+  --duration-fast: var(--motion-duration-fast);
+  --duration-base: var(--motion-duration-base);
+}
 
 /* ─── Base resets + body defaults ────────────────────────────────── */
 *,
@@ -33,8 +67,10 @@ ol {
   padding: 0;
 }
 
-/* ─── Remove default button styling ──────────────────────────────── */
-button {
+/* ─── Remove default button styling (bare <button> only, not styled components) */
+/* Only reset buttons that have no explicit class — styled Button components
+   apply their own bg/border via Tailwind utilities which have higher specificity */
+button:not([class]) {
   cursor: pointer;
   background: none;
   border: none;

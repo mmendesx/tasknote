@@ -1,21 +1,7 @@
-/**
- * admin.service.spec.ts
- *
- * Vitest integration tests for AdminService using an in-memory SQLite database.
- * Tests run against real TypeORM + better-sqlite3 so raw SQL paths are exercised.
- *
- * BDD scenarios covered:
- *   - "Export DB to JSON": exportAll returns all tables with arrays
- *   - "Reset DB re-triggers onboarding":
- *       - import without confirm throws 400 CONFIRM_REQUIRED
- *       - import with valid payload replaces all data
- *       - reset without confirm throws 400 CONFIRM_REQUIRED
- *       - reset clears onboarded_at and wipes boards/columns/tasks/notes/tags/file_refs
- */
 
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { AdminService } from './admin.service';
 import { SettingsEntity } from '../settings/entities/settings.entity';
@@ -26,8 +12,6 @@ import { NoteEntity } from '../notes/entities/note.entity';
 import { TagEntity } from '../tags/entities/tag.entity';
 import { FileRefEntity } from '../file-refs/entities/file-ref.entity';
 
-// ─── DB setup ─────────────────────────────────────────────────────────────────
-
 function buildDataSource(): DataSource {
   return new DataSource({
     type: 'better-sqlite3',
@@ -35,48 +19,46 @@ function buildDataSource(): DataSource {
     entities: [SettingsEntity, BoardEntity, ColumnEntity, TaskEntity, NoteEntity, TagEntity, FileRefEntity],
     synchronize: true,
     prepareDatabase: (db) => {
-      // FK enforcement off by default; individual tests toggle as needed via PRAGMA
+      
       db.pragma('foreign_keys = OFF');
     },
   });
 }
 
-// ─── Seed helpers ─────────────────────────────────────────────────────────────
-
 async function seedMinimalData(dataSource: DataSource): Promise<void> {
   const runner = dataSource.createQueryRunner();
   await runner.connect();
   try {
-    // Settings singleton
+    
     await runner.query(
       `INSERT INTO settings (id, display_name, theme, accent, default_board_id, onboarded_at, timezone)
        VALUES (1, 'Matheus', 'dark', '#A3E635', NULL, '2026-05-23T10:00:00.000Z', 'UTC')`,
     );
-    // Board
+    
     await runner.query(
       `INSERT INTO boards (id, name, position, created_at, updated_at)
        VALUES (1, 'Work', 0, '2026-05-23T10:00:00.000Z', '2026-05-23T10:00:00.000Z')`,
     );
-    // Column
+    
     await runner.query(
       `INSERT INTO columns (id, board_id, name, color, wip_limit, is_done, position)
        VALUES (1, 1, 'Backlog', '#5B616B', NULL, 0, 0)`,
     );
-    // Task
+    
     await runner.query(
       `INSERT INTO tasks (id, column_id, title, description_md, priority, due_date, position, archived_at, completed_at, created_at, updated_at)
        VALUES (1, 1, 'Review PR #42', NULL, 'medium', NULL, 0, NULL, NULL, '2026-05-23T10:00:00.000Z', '2026-05-23T10:00:00.000Z')`,
     );
-    // Tag
+    
     await runner.query(`INSERT INTO tags (id, name, color) VALUES (1, 'urgent', '#F87171')`);
-    // task_tags join
+    
     await runner.query(`INSERT INTO task_tags (task_id, tag_id) VALUES (1, 1)`);
-    // Note
+    
     await runner.query(
       `INSERT INTO notes (id, task_id, title, body_md, pinned, archived_at, created_at, updated_at)
        VALUES (1, NULL, 'Standup', '# Standup', 0, NULL, '2026-05-23T10:00:00.000Z', '2026-05-23T10:00:00.000Z')`,
     );
-    // File ref
+    
     await runner.query(
       `INSERT INTO file_refs (id, target_type, target_id, path, label, note, created_at)
        VALUES (1, 'task', 1, '/Users/me/spec.pdf', 'Spec', NULL, '2026-05-23T10:00:00.000Z')`,
@@ -85,8 +67,6 @@ async function seedMinimalData(dataSource: DataSource): Promise<void> {
     await runner.release();
   }
 }
-
-// ─── Test suite ───────────────────────────────────────────────────────────────
 
 describe('AdminService', () => {
   let dataSource: DataSource;
@@ -103,8 +83,6 @@ describe('AdminService', () => {
       await dataSource.destroy();
     }
   });
-
-  // ─── exportAll ──────────────────────────────────────────────────────────────
 
   describe('exportAll — BDD: Export DB to JSON', () => {
     it('returns all eight table arrays with correct keys', async () => {
@@ -127,7 +105,6 @@ describe('AdminService', () => {
     it('returns empty arrays when tables have no rows', async () => {
       const result = await service.exportAll();
 
-      // Empty DB — all arrays are empty
       expect(result.data.boards).toHaveLength(0);
       expect(result.data.tasks).toHaveLength(0);
       expect(result.data.tags).toHaveLength(0);
@@ -154,8 +131,6 @@ describe('AdminService', () => {
       expect(new Date(result.exported_at).toISOString()).toBe(result.exported_at);
     });
   });
-
-  // ─── importAll — confirm guard ───────────────────────────────────────────────
 
   describe('importAll — confirm guard', () => {
     it('throws BadRequestException with code CONFIRM_REQUIRED when confirm is missing', async () => {
@@ -198,17 +173,13 @@ describe('AdminService', () => {
     });
   });
 
-  // ─── importAll — full replace ────────────────────────────────────────────────
-
   describe('importAll — BDD: import with valid payload replaces all data', () => {
     it('replaces existing data with imported payload', async () => {
-      // Seed initial state
+      
       await seedMinimalData(dataSource);
 
-      // Export current state to get a valid payload
       const exported = await service.exportAll();
 
-      // Mutate the export — change the board name to verify replacement
       const mutatedData = {
         ...exported.data,
         boards: [{ ...exported.data.boards[0], name: 'Imported Board' }],
@@ -218,7 +189,6 @@ describe('AdminService', () => {
 
       expect(result).toEqual({ imported: true });
 
-      // Verify the board name was replaced
       const runner = dataSource.createQueryRunner();
       await runner.connect();
       try {
@@ -231,10 +201,9 @@ describe('AdminService', () => {
     });
 
     it('wipes existing rows before inserting imported ones', async () => {
-      // Seed with 1 board
+      
       await seedMinimalData(dataSource);
 
-      // Import with an empty boards array — boards table should be wiped
       const exported = await service.exportAll();
       const emptyBoards = {
         ...exported.data,
@@ -272,15 +241,93 @@ describe('AdminService', () => {
       expect(result).toEqual({ imported: true });
     });
 
+    // SCN-1: rejects unknown column names
+    it('SCN-1: throws ConflictException with code IMPORT_BAD_COLUMN for unknown task column', async () => {
+      const emptyBase = {
+        settings: [],
+        boards: [],
+        columns: [],
+        notes: [],
+        tags: [],
+        task_tags: [],
+        file_refs: [],
+      };
+
+      let thrown: ConflictException | undefined;
+      try {
+        await service.importAll({
+          confirm: 'IMPORT',
+          data: {
+            ...emptyBase,
+            tasks: [{ title: 'Legit', evil_column: 'injection' }],
+          },
+        });
+      } catch (err) {
+        thrown = err as ConflictException;
+      }
+
+      expect(thrown).toBeInstanceOf(ConflictException);
+      const resp = thrown!.getResponse() as Record<string, unknown>;
+      expect(resp['code']).toBe('IMPORT_BAD_COLUMN');
+    });
+
+    // SCN-1: transaction rolled back — no rows inserted
+    it('SCN-1: rolls back the transaction — no rows inserted when bad column present', async () => {
+      const emptyBase = {
+        settings: [],
+        boards: [{ id: 99, name: 'Should rollback', position: 0, created_at: '2026-01-01', updated_at: '2026-01-01' }],
+        columns: [],
+        notes: [],
+        tags: [],
+        task_tags: [],
+        file_refs: [],
+      };
+
+      try {
+        await service.importAll({
+          confirm: 'IMPORT',
+          data: {
+            ...emptyBase,
+            tasks: [{ title: 'Bad', evil_column: 'x' }],
+          },
+        });
+      } catch {
+        // expected
+      }
+
+      const runner = dataSource.createQueryRunner();
+      await runner.connect();
+      try {
+        const boards = await runner.query('SELECT * FROM boards WHERE id = 99');
+        expect(boards).toHaveLength(0);
+      } finally {
+        await runner.release();
+      }
+    });
+
+    // SCN-2: well-formed payload succeeds
+    it('SCN-2: accepts well-formed payload with all valid columns', async () => {
+      await seedMinimalData(dataSource);
+      const exported = await service.exportAll();
+
+      const result = await service.importAll({ confirm: 'IMPORT', data: exported.data });
+      expect(result).toEqual({ imported: true });
+
+      // Verify foreign_keys is ON after import
+      const runner = dataSource.createQueryRunner();
+      await runner.connect();
+      try {
+        const [row] = await runner.query('PRAGMA foreign_keys');
+        expect(row.foreign_keys).toBe(1);
+      } finally {
+        await runner.release();
+      }
+    });
+
     it('round-trips a note linked to a task without FK violation (PRAGMA before transaction)', async () => {
-      // This test verifies PRAGMA foreign_keys = OFF is issued before BEGIN.
-      // If it were issued inside the transaction it would be silently ignored by SQLite,
-      // and inserting a note (whose task_id FK points to a task not yet inserted)
-      // would throw a FOREIGN KEY constraint violation.
+      
       await seedMinimalData(dataSource);
 
-      // The seeded note has task_id=NULL; we need task_id set to trigger the FK path.
-      // Update the note to link to the seeded task.
       const runner = dataSource.createQueryRunner();
       await runner.connect();
       try {
@@ -289,12 +336,10 @@ describe('AdminService', () => {
         await runner.release();
       }
 
-      // Export — note now has task_id = 1
       const exported = await service.exportAll();
 
       expect(exported.data.notes[0]).toMatchObject({ task_id: 1 });
 
-      // Re-import the same data into a fresh DB to prove the insert order works
       await service.importAll({ confirm: 'IMPORT', data: exported.data });
 
       const runner2 = dataSource.createQueryRunner();
@@ -307,8 +352,6 @@ describe('AdminService', () => {
       }
     });
   });
-
-  // ─── reset — confirm guard ───────────────────────────────────────────────────
 
   describe('reset — confirm guard', () => {
     it('throws BadRequestException with code CONFIRM_REQUIRED when body is missing confirm', async () => {
@@ -351,13 +394,10 @@ describe('AdminService', () => {
     });
   });
 
-  // ─── reset — wipe and clear ──────────────────────────────────────────────────
-
   describe('reset — BDD: Reset DB re-triggers onboarding', () => {
     it('clears onboarded_at on settings row after reset', async () => {
       await seedMinimalData(dataSource);
 
-      // Verify seeded state
       const runner = dataSource.createQueryRunner();
       await runner.connect();
       try {
@@ -476,7 +516,7 @@ describe('AdminService', () => {
       await runner.connect();
       try {
         const settings = await runner.query('SELECT * FROM settings');
-        // Row must still exist — we UPDATE, not DELETE
+        
         expect(settings).toHaveLength(1);
         expect(settings[0].id).toBe(1);
       } finally {

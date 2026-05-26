@@ -1,15 +1,3 @@
-/**
- * boards.service.spec.ts
- *
- * Vitest tests for BoardsService.
- * Uses an in-memory better-sqlite3 DataSource (synchronize: true) so tests
- * are self-contained and require no external process.
- *
- * BDD scenarios covered:
- *   - "Create a new board": position auto-assigned, 4 default columns created
- *   - "Cannot delete the last board": 409 CONFLICT / LAST_BOARD
- *   - "Switching boards is instant": getOne returns nested columns + tasks structure
- */
 
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -20,24 +8,22 @@ import { ColumnEntity } from '../columns/entities/column.entity';
 import { TaskEntity } from '../tasks/entities/task.entity';
 import { NoteEntity } from '../notes/entities/note.entity';
 import { TagEntity } from '../tags/entities/tag.entity';
+import { FileRefEntity } from '../file-refs/entities/file-ref.entity';
 import { BoardsService } from './boards.service';
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+import { FileRefsService } from '../file-refs/file-refs.service';
 
 function buildDataSource(): DataSource {
   return new DataSource({
     type: 'better-sqlite3',
     database: ':memory:',
-    entities: [BoardEntity, ColumnEntity, TaskEntity, NoteEntity, TagEntity],
+    entities: [BoardEntity, ColumnEntity, TaskEntity, NoteEntity, TagEntity, FileRefEntity],
     synchronize: true,
-    // Foreign-key enforcement required for cascade tests
+
     prepareDatabase: (db) => {
       db.pragma('foreign_keys = ON');
     },
   });
 }
-
-// ─── Test suite ───────────────────────────────────────────────────────────────
 
 describe('BoardsService', () => {
   let dataSource: DataSource;
@@ -54,7 +40,9 @@ describe('BoardsService', () => {
     columnsRepo = dataSource.getRepository(ColumnEntity);
     tasksRepo = dataSource.getRepository(TaskEntity);
 
-    service = new BoardsService(boardsRepo, columnsRepo, tasksRepo, dataSource);
+    const fileRefsRepo = dataSource.getRepository(FileRefEntity);
+    const fileRefsService = new FileRefsService(fileRefsRepo);
+    service = new BoardsService(boardsRepo, columnsRepo, tasksRepo, dataSource, fileRefsService);
   });
 
   afterEach(async () => {
@@ -63,8 +51,6 @@ describe('BoardsService', () => {
     }
   });
 
-  // ─── listBoards ─────────────────────────────────────────────────────────────
-
   describe('listBoards', () => {
     it('returns empty array when no boards exist', async () => {
       const boards = await service.listBoards();
@@ -72,7 +58,7 @@ describe('BoardsService', () => {
     });
 
     it('returns boards ordered by position ascending', async () => {
-      // Insert out-of-order to verify sort
+      
       await boardsRepo.save([
         boardsRepo.create({ name: 'Beta', position: 2 }),
         boardsRepo.create({ name: 'Alpha', position: 0 }),
@@ -83,8 +69,6 @@ describe('BoardsService', () => {
       expect(boards.map((b) => b.name)).toEqual(['Alpha', 'Gamma', 'Beta']);
     });
   });
-
-  // ─── createBoard ────────────────────────────────────────────────────────────
 
   describe('createBoard — BDD: Create a new board', () => {
     it('assigns position=0 when no boards exist yet', async () => {
@@ -116,19 +100,19 @@ describe('BoardsService', () => {
     it('default column colors match spec', async () => {
       const board = await service.createBoard({ name: 'Personal' });
       const sorted = board.columns.slice().sort((a, b) => a.position - b.position);
-      expect(sorted[0].color).toBe('#5B616B'); // Backlog
-      expect(sorted[1].color).toBe('#F5C26B'); // Doing
-      expect(sorted[2].color).toBe('#F87171'); // Blocked
-      expect(sorted[3].color).toBe('#A3E635'); // Done
+      expect(sorted[0].color).toBe('#5B616B'); 
+      expect(sorted[1].color).toBe('#F5C26B'); 
+      expect(sorted[2].color).toBe('#F87171'); 
+      expect(sorted[3].color).toBe('#A3E635'); 
     });
 
     it('Done column has isDone=true; others have isDone=false', async () => {
       const board = await service.createBoard({ name: 'Personal' });
       const sorted = board.columns.slice().sort((a, b) => a.position - b.position);
-      expect(sorted[0].isDone).toBe(false); // Backlog
-      expect(sorted[1].isDone).toBe(false); // Doing
-      expect(sorted[2].isDone).toBe(false); // Blocked
-      expect(sorted[3].isDone).toBe(true);  // Done
+      expect(sorted[0].isDone).toBe(false); 
+      expect(sorted[1].isDone).toBe(false); 
+      expect(sorted[2].isDone).toBe(false); 
+      expect(sorted[3].isDone).toBe(true);  
     });
 
     it('the new board appears in listBoards after creation', async () => {
@@ -139,14 +123,11 @@ describe('BoardsService', () => {
     });
   });
 
-  // ─── getBoard ───────────────────────────────────────────────────────────────
-
   describe('getBoard — BDD: Switching boards is instant', () => {
     it('returns the board with nested columns and tasks', async () => {
       const created = await service.createBoard({ name: 'Work' });
       const backlogColumn = created.columns.find((c) => c.name === 'Backlog')!;
 
-      // Add a task to Backlog
       await tasksRepo.save(
         tasksRepo.create({
           columnId: backlogColumn.id,
@@ -188,9 +169,9 @@ describe('BoardsService', () => {
 
     it('columns with zero active tasks are still returned', async () => {
       const created = await service.createBoard({ name: 'Work' });
-      // Archive all tasks in Done (none were added, columns should still appear)
+      
       const board = await service.getBoard(created.id);
-      // All 4 default columns must be present even with empty task lists
+      
       expect(board.columns).toHaveLength(4);
     });
 
@@ -206,8 +187,6 @@ describe('BoardsService', () => {
     });
   });
 
-  // ─── updateBoard ────────────────────────────────────────────────────────────
-
   describe('updateBoard', () => {
     it('updates the board name', async () => {
       const created = await service.createBoard({ name: 'Old Name' });
@@ -219,8 +198,6 @@ describe('BoardsService', () => {
       await expect(service.updateBoard(9999, { name: 'X' })).rejects.toThrow(NotFoundException);
     });
   });
-
-  // ─── removeBoard ────────────────────────────────────────────────────────────
 
   describe('removeBoard — BDD: Cannot delete the last board', () => {
     it('throws ConflictException with code LAST_BOARD when only one board exists', async () => {
@@ -251,11 +228,10 @@ describe('BoardsService', () => {
     });
 
     it('cascades delete to columns and tasks', async () => {
-      // Create two boards so delete is allowed
+      
       const boardA = await service.createBoard({ name: 'Board A' });
       await service.createBoard({ name: 'Board B' });
 
-      // Add a task to a column on boardA
       const firstColumn = boardA.columns[0];
       await tasksRepo.save(
         tasksRepo.create({ columnId: firstColumn.id, title: 'Cascade me', position: 0 }),
@@ -263,7 +239,6 @@ describe('BoardsService', () => {
 
       await service.removeBoard(boardA.id);
 
-      // Columns and tasks referencing boardA should be gone via FK CASCADE
       const orphanColumns = await columnsRepo.find({
         where: { boardId: boardA.id },
       });
@@ -271,11 +246,34 @@ describe('BoardsService', () => {
     });
 
     it('throws NotFoundException when board id does not exist', async () => {
-      // Need two boards so we don't hit the LAST_BOARD guard
+
       await service.createBoard({ name: 'Board A' });
       await service.createBoard({ name: 'Board B' });
 
       await expect(service.removeBoard(9999)).rejects.toThrow(NotFoundException);
+    });
+
+    // SCN-4: board delete cascades file_refs of descendant tasks
+    it('SCN-4: deletes file_refs for tasks in the board when board is removed', async () => {
+      const boardA = await service.createBoard({ name: 'Board A' });
+      await service.createBoard({ name: 'Board B' });
+
+      const firstColumn = boardA.columns[0];
+      const task = await tasksRepo.save(
+        tasksRepo.create({ columnId: firstColumn.id, title: 'Task with file', position: 0 }),
+      );
+
+      const fileRefsRepo = dataSource.getRepository(FileRefEntity);
+      await fileRefsRepo.save(
+        fileRefsRepo.create({ targetType: 'task', targetId: task.id, path: '/tmp/spec.pdf', label: 'Spec' }),
+      );
+
+      await service.removeBoard(boardA.id);
+
+      const remaining = await fileRefsRepo.find({
+        where: { targetType: 'task', targetId: task.id },
+      });
+      expect(remaining).toHaveLength(0);
     });
   });
 });

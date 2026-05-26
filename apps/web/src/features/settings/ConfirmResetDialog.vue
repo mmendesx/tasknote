@@ -31,7 +31,7 @@ async function handleConfirm() {
 
   try {
     await adminApi.reset()
-    // Full reload — forces onboarding check since settings.onboarded_at is now NULL
+    
     window.location.reload()
   } catch (err) {
     resetError.value = err instanceof Error ? err.message : 'Reset failed. Please try again.'

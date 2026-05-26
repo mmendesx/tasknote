@@ -1,16 +1,3 @@
-/**
- * file-refs.service.spec.ts
- *
- * Vitest tests for FileRefsService.
- * Uses an in-memory better-sqlite3 DataSource (synchronize: true) so tests
- * are fully self-contained and require no external process.
- *
- * BDD scenarios covered:
- *   FR-6 "Add a file reference by path"        — create with valid absolute path succeeds
- *   FR-6 "Reject path with shell metacharacters" — create with ; | & ` $( newline all throw 400 INVALID_PATH
- *   FR-6 "Missing file shows broken indicator"  — exists returns false for non-existent path
- *   FR-6 "Open file in OS"                      — openFile spawns correct binary, no shell, detached
- */
 
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -19,8 +6,6 @@ import { DataSource, Repository } from 'typeorm';
 import * as childProcess from 'child_process';
 import { FileRefEntity } from './entities/file-ref.entity';
 import { FileRefsService } from './file-refs.service';
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function buildDataSource(): DataSource {
   return new DataSource({
@@ -34,8 +19,6 @@ function buildDataSource(): DataSource {
 function buildService(repo: Repository<FileRefEntity>): FileRefsService {
   return new FileRefsService(repo);
 }
-
-// ─── Test suite ───────────────────────────────────────────────────────────────
 
 describe('FileRefsService', () => {
   let dataSource: DataSource;
@@ -55,8 +38,6 @@ describe('FileRefsService', () => {
       await dataSource.destroy();
     }
   });
-
-  // ─── validatePath ─────────────────────────────────────────────────────────
 
   describe('validatePath', () => {
     it('accepts a POSIX absolute path', () => {
@@ -109,8 +90,6 @@ describe('FileRefsService', () => {
       expect(response.code).toBe('INVALID_PATH');
     });
   });
-
-  // ─── createFileRef ────────────────────────────────────────────────────────
 
   describe('createFileRef — BDD: Add a file reference by path', () => {
     it('creates a ref with valid absolute path and persists it', async () => {
@@ -187,8 +166,6 @@ describe('FileRefsService', () => {
     });
   });
 
-  // ─── updateFileRef ────────────────────────────────────────────────────────
-
   describe('updateFileRef', () => {
     it('updates the label without touching path', async () => {
       const ref = await service.createFileRef({
@@ -227,8 +204,6 @@ describe('FileRefsService', () => {
     });
   });
 
-  // ─── removeFileRef ────────────────────────────────────────────────────────
-
   describe('removeFileRef', () => {
     it('deletes an existing ref', async () => {
       const ref = await service.createFileRef({
@@ -248,11 +223,9 @@ describe('FileRefsService', () => {
     });
   });
 
-  // ─── exists — BDD: Missing file shows broken indicator ───────────────────
-
   describe('exists', () => {
     it('returns { exists: true } for /etc/hosts which is always present on POSIX', async () => {
-      // /etc/hosts exists on all POSIX systems (macOS + Linux)
+      
       const ref = await service.createFileRef({
         target_type: 'task',
         target_id: 1,
@@ -281,8 +254,6 @@ describe('FileRefsService', () => {
     });
   });
 
-  // ─── openFile — BDD: Open file in OS ─────────────────────────────────────
-
   describe('openFile', () => {
     it('invokes spawn with the correct platform binary and no shell option', async () => {
       const ref = await service.createFileRef({
@@ -292,7 +263,6 @@ describe('FileRefsService', () => {
         label: 'Test',
       });
 
-      // Capture spawn calls without actually launching a process
       const fakeChild = {
         unref: vi.fn(),
       };
@@ -311,7 +281,6 @@ describe('FileRefsService', () => {
         childProcess.SpawnOptions,
       ];
 
-      // Verify the correct platform binary is used
       const expectedOpener = { darwin: 'open', linux: 'xdg-open', win32: 'explorer.exe' }[
         process.platform
       ];
@@ -319,13 +288,10 @@ describe('FileRefsService', () => {
         expect(cmd).toBe(expectedOpener);
       }
 
-      // Path is a separate argv element — never concatenated into a string
       expect(args).toEqual(['/tmp/test-open.pdf']);
 
-      // CRITICAL: shell must never be true
       expect(opts?.shell).toBeFalsy();
 
-      // Process must be detached and unref'd
       expect(opts?.detached).toBe(true);
       expect(opts?.stdio).toBe('ignore');
       expect(fakeChild.unref).toHaveBeenCalledOnce();
@@ -335,8 +301,6 @@ describe('FileRefsService', () => {
       await expect(service.openFile(9999)).rejects.toThrow(NotFoundException);
     });
   });
-
-  // ─── listFileRefs ─────────────────────────────────────────────────────────
 
   describe('listFileRefs', () => {
     it('returns only refs for the given target_type + target_id', async () => {
@@ -370,7 +334,7 @@ describe('FileRefsService', () => {
     });
 
     it('throws 400 INVALID_TARGET_TYPE when target_type is omitted (undefined)', async () => {
-      // Simulates NestJS passing undefined when query param is missing
+      
       let caught: BadRequestException | undefined;
       try {
         await service.listFileRefs(undefined as unknown as string, 1);

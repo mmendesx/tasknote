@@ -16,9 +16,27 @@ const timezone = ref(getSystemTimezone())
 const seed = ref<'empty' | 'sample'>('empty')
 const isSubmitting = ref(false)
 
+const KNOWN_TIMEZONES = [
+  'Pacific/Midway','Pacific/Honolulu','America/Anchorage','America/Los_Angeles',
+  'America/Denver','America/Phoenix','America/Chicago','America/New_York',
+  'America/Halifax','America/St_Johns','America/Sao_Paulo',
+  'America/Argentina/Buenos_Aires','America/Noronha','Atlantic/Azores',
+  'Atlantic/Cape_Verde','UTC','Europe/London','Europe/Lisbon','Africa/Casablanca',
+  'Europe/Paris','Europe/Rome','Europe/Warsaw','Africa/Lagos','Europe/Athens',
+  'Africa/Cairo','Africa/Johannesburg','Europe/Helsinki','Europe/Moscow',
+  'Asia/Riyadh','Africa/Nairobi','Asia/Tehran','Asia/Dubai','Asia/Tbilisi',
+  'Asia/Kabul','Asia/Karachi','Asia/Tashkent','Asia/Kolkata','Asia/Kathmandu',
+  'Asia/Dhaka','Asia/Almaty','Asia/Rangoon','Asia/Bangkok','Asia/Krasnoyarsk',
+  'Asia/Shanghai','Asia/Taipei','Asia/Kuala_Lumpur','Australia/Perth','Asia/Seoul',
+  'Asia/Tokyo','Asia/Yakutsk','Australia/Adelaide','Australia/Darwin',
+  'Australia/Brisbane','Australia/Sydney','Pacific/Guam','Asia/Vladivostok',
+  'Pacific/Noumea','Asia/Magadan','Pacific/Auckland','Pacific/Fiji','Pacific/Tongatapu',
+]
+
 function getSystemTimezone(): string {
   try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+    return KNOWN_TIMEZONES.includes(tz) ? tz : 'UTC'
   } catch {
     return 'UTC'
   }
@@ -35,7 +53,7 @@ const stepContentRef = ref<HTMLElement | null>(null)
 
 function goToStep(step: Step) {
   currentStep.value = step
-  // Focus first interactive element after the DOM updates
+  
   nextTick(() => {
     const el = stepContentRef.value?.querySelector<HTMLElement>(
       'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
@@ -71,7 +89,7 @@ async function handleFinish() {
     :closable="false"
     :dismissable="false"
   >
-    <!-- Progress dots -->
+    
     <template #default>
       <div class="onboarding-progress" aria-label="Step progress" role="group">
         <span
@@ -83,15 +101,13 @@ async function handleFinish() {
         />
       </div>
 
-      <!-- Step content wrapper — used to focus first element on step change -->
       <div ref="stepContentRef">
-        <!-- Step 1: Welcome -->
+        
         <StepWelcome
           v-if="currentStep === 1"
           @next="goToStep(2)"
         />
 
-        <!-- Step 2: Profile -->
         <StepProfile
           v-else-if="currentStep === 2"
           :display-name="displayName"
@@ -102,7 +118,6 @@ async function handleFinish() {
           @next="handleProfileNext"
         />
 
-        <!-- Step 3: Seed choice -->
         <StepSeed
           v-else-if="currentStep === 3"
           :seed="seed"

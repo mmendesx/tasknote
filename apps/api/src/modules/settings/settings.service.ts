@@ -5,7 +5,6 @@ import type { UpdateSettingsDto, OnboardDto } from '@tasknote/shared';
 import { SettingsEntity } from './entities/settings.entity';
 import { SeedService } from '../seed/seed.service';
 
-// Shape returned by GET /api/settings (snake_case, matches the API contract)
 export interface SettingsResponse {
   id: 1;
   display_name: string | null;
@@ -50,10 +49,6 @@ export class SettingsService {
     private readonly seedService: SeedService,
   ) {}
 
-  /**
-   * Returns the current settings row or a default object when no row exists.
-   * Does NOT insert — insertion happens only via onboard() or upsert().
-   */
   async getOrDefault(): Promise<SettingsResponse> {
     const row = await this.settingsRepo.findOneBy({ id: 1 });
     if (!row) {
@@ -63,9 +58,6 @@ export class SettingsService {
     return toResponse(row);
   }
 
-  /**
-   * Partial update; creates the row (id=1) if it does not yet exist.
-   */
   async upsert(dto: UpdateSettingsDto): Promise<SettingsResponse> {
     let row = await this.settingsRepo.findOneBy({ id: 1 });
 
@@ -82,7 +74,6 @@ export class SettingsService {
       });
     }
 
-    // Apply only the fields present in the DTO
     if (dto.display_name !== undefined) row.displayName = dto.display_name;
     if (dto.theme !== undefined) row.theme = dto.theme;
     if (dto.accent !== undefined) row.accent = dto.accent;
@@ -94,15 +85,9 @@ export class SettingsService {
     return toResponse(saved);
   }
 
-  /**
-   * Onboards the user: sets display_name, timezone, and onboarded_at.
-   * When seed='sample', also creates a default board with sample data.
-   * Entire operation is atomic — either everything commits or nothing does.
-   * Throws 409 ALREADY_ONBOARDED if onboarded_at is already set.
-   */
   async onboard(dto: OnboardDto): Promise<SettingsResponse> {
     return this.dataSource.transaction(async (manager) => {
-      // Check inside the transaction to guard against concurrent calls
+      
       const existing = await manager.findOneBy(SettingsEntity, { id: 1 });
 
       if (existing?.onboardedAt) {
@@ -128,7 +113,7 @@ export class SettingsService {
       if (defaultBoardId !== null) {
         row.defaultBoardId = defaultBoardId;
       }
-      // Ensure fields have sane values when the row was missing
+      
       if (!existing) {
         row.theme = 'dark';
         row.accent = '#A3E635';
