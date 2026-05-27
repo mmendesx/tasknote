@@ -408,7 +408,7 @@ describe('AdminService', () => {
         await runner.release();
       }
 
-      await service.reset();
+      await service.reset({ confirm: 'RESET' });
 
       const runner2 = dataSource.createQueryRunner();
       await runner2.connect();
@@ -425,7 +425,7 @@ describe('AdminService', () => {
     it('wipes boards table after reset', async () => {
       await seedMinimalData(dataSource);
 
-      await service.reset();
+      await service.reset({ confirm: 'RESET' });
 
       const runner = dataSource.createQueryRunner();
       await runner.connect();
@@ -439,7 +439,7 @@ describe('AdminService', () => {
 
     it('wipes columns after reset', async () => {
       await seedMinimalData(dataSource);
-      await service.reset();
+      await service.reset({ confirm: 'RESET' });
 
       const runner = dataSource.createQueryRunner();
       await runner.connect();
@@ -453,7 +453,7 @@ describe('AdminService', () => {
 
     it('wipes tasks after reset', async () => {
       await seedMinimalData(dataSource);
-      await service.reset();
+      await service.reset({ confirm: 'RESET' });
 
       const runner = dataSource.createQueryRunner();
       await runner.connect();
@@ -467,7 +467,7 @@ describe('AdminService', () => {
 
     it('wipes notes after reset', async () => {
       await seedMinimalData(dataSource);
-      await service.reset();
+      await service.reset({ confirm: 'RESET' });
 
       const runner = dataSource.createQueryRunner();
       await runner.connect();
@@ -481,7 +481,7 @@ describe('AdminService', () => {
 
     it('wipes tags and task_tags after reset', async () => {
       await seedMinimalData(dataSource);
-      await service.reset();
+      await service.reset({ confirm: 'RESET' });
 
       const runner = dataSource.createQueryRunner();
       await runner.connect();
@@ -497,7 +497,7 @@ describe('AdminService', () => {
 
     it('wipes file_refs after reset', async () => {
       await seedMinimalData(dataSource);
-      await service.reset();
+      await service.reset({ confirm: 'RESET' });
 
       const runner = dataSource.createQueryRunner();
       await runner.connect();
@@ -511,7 +511,7 @@ describe('AdminService', () => {
 
     it('preserves the settings row itself (does not delete it)', async () => {
       await seedMinimalData(dataSource);
-      await service.reset();
+      await service.reset({ confirm: 'RESET' });
 
       const runner = dataSource.createQueryRunner();
       await runner.connect();
@@ -527,7 +527,7 @@ describe('AdminService', () => {
 
     it('returns { reset: true } on success', async () => {
       await seedMinimalData(dataSource);
-      const result = await service.reset();
+      const result = await service.reset({ confirm: 'RESET' });
       expect(result).toEqual({ reset: true });
     });
   });
