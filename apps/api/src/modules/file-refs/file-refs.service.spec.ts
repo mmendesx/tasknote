@@ -302,6 +302,40 @@ describe('FileRefsService', () => {
     });
   });
 
+  describe('deleteAllForBatch — ICT-52 (SCN-6, SCN-7)', () => {
+    it('SCN-6: issues a single DELETE with IN clause for [1,2,3]', async () => {
+      // Mock the query builder chain so we can assert the WHERE clause was built
+      // with parameterized IN — without depending on SQLite dialect quirks.
+      const executeMock = vi.fn().mockResolvedValue(undefined);
+      const whereMock = vi.fn().mockReturnValue({ execute: executeMock });
+      const deleteMock = vi.fn().mockReturnValue({ where: whereMock });
+      const createQueryBuilderMock = vi.fn().mockReturnValue({ delete: deleteMock });
+
+      vi.spyOn(repo, 'createQueryBuilder').mockImplementation(createQueryBuilderMock);
+
+      await service.deleteAllForBatch('task', [1, 2, 3]);
+
+      expect(createQueryBuilderMock).toHaveBeenCalledOnce();
+      expect(deleteMock).toHaveBeenCalledOnce();
+      expect(whereMock).toHaveBeenCalledOnce();
+
+      const [whereClause, params] = whereMock.mock.calls[0] as [string, Record<string, unknown>];
+      expect(whereClause).toContain(':...targetIds');
+      expect(params).toMatchObject({ targetType: 'task', targetIds: [1, 2, 3] });
+
+      expect(executeMock).toHaveBeenCalledOnce();
+    });
+
+    it('SCN-7: returns immediately without issuing SQL when targetIds is empty', async () => {
+      const createQueryBuilderMock = vi.fn();
+      vi.spyOn(repo, 'createQueryBuilder').mockImplementation(createQueryBuilderMock);
+
+      await service.deleteAllForBatch('task', []);
+
+      expect(createQueryBuilderMock).not.toHaveBeenCalled();
+    });
+  });
+
   describe('listFileRefs', () => {
     it('returns only refs for the given target_type + target_id', async () => {
       await service.createFileRef({

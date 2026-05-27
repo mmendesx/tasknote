@@ -1,9 +1,10 @@
 
 import 'reflect-metadata';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { AdminService } from './admin.service';
+import { COLUMN_ALLOWLISTS, DELETE_ORDER } from './admin.constants';
 import { SettingsEntity } from '../settings/entities/settings.entity';
 import { BoardEntity } from '../boards/entities/board.entity';
 import { ColumnEntity } from '../columns/entities/column.entity';
@@ -529,5 +530,79 @@ describe('AdminService', () => {
       const result = await service.reset();
       expect(result).toEqual({ reset: true });
     });
+  });
+});
+
+// SCN-8: DELETE_ORDER structural integrity — derived from COLUMN_ALLOWLISTS
+// These tests are module-level constant checks and require no DataSource.
+describe('admin.service — SCN-8: DELETE_ORDER structural integrity', () => {
+  it('contains exactly as many entries as COLUMN_ALLOWLISTS has keys', () => {
+    expect(DELETE_ORDER.length).toBe(Object.keys(COLUMN_ALLOWLISTS).length);
+  });
+
+  it('contains every key from COLUMN_ALLOWLISTS', () => {
+    const allowlistKeys = Object.keys(COLUMN_ALLOWLISTS);
+    for (const key of allowlistKeys) {
+      expect(DELETE_ORDER).toContain(key);
+    }
+  });
+
+  it('contains no key absent from COLUMN_ALLOWLISTS', () => {
+    const allowlistKeys = new Set(Object.keys(COLUMN_ALLOWLISTS));
+    for (const entry of DELETE_ORDER) {
+      expect(allowlistKeys.has(entry)).toBe(true);
+    }
+  });
+
+  it('has no duplicate entries', () => {
+    const seen = new Set<string>();
+    for (const entry of DELETE_ORDER) {
+      expect(seen.has(entry)).toBe(false);
+      seen.add(entry);
+    }
+  });
+});
+
+// SCN-9: importAll DELETE statements fire in DELETE_ORDER sequence.
+// Uses a pure mock DataSource — no real DB connection required.
+describe('admin.service — SCN-9: importAll deletes tables in FK-safe DELETE_ORDER sequence', () => {
+  it('fires DELETE FROM statements in task_tags → file_refs → notes → tasks → tags → columns → boards → settings order', async () => {
+    const deletedTables: string[] = [];
+
+    const mockRunner = {
+      connect: vi.fn().mockResolvedValue(undefined),
+      query: vi.fn().mockImplementation(async (sql: string) => {
+        const match = /^DELETE FROM "([^"]+)"$/.exec(sql.trim());
+        if (match) {
+          deletedTables.push(match[1]);
+        }
+        return [];
+      }),
+      startTransaction: vi.fn().mockResolvedValue(undefined),
+      commitTransaction: vi.fn().mockResolvedValue(undefined),
+      rollbackTransaction: vi.fn().mockResolvedValue(undefined),
+      release: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const mockDataSource = {
+      createQueryRunner: () => mockRunner,
+    } as unknown as import('typeorm').DataSource;
+
+    const svc = new AdminService(mockDataSource);
+
+    const emptyData = {
+      settings: [],
+      boards: [],
+      columns: [],
+      tasks: [],
+      notes: [],
+      tags: [],
+      task_tags: [],
+      file_refs: [],
+    };
+
+    await svc.importAll({ confirm: 'IMPORT', data: emptyData });
+
+    expect(deletedTables).toEqual([...DELETE_ORDER]);
   });
 });

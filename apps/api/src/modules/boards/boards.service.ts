@@ -5,11 +5,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import type { CreateBoardDto, UpdateBoardDto } from '@tasknote/shared';
 import { BoardEntity } from './entities/board.entity';
 import { ColumnEntity } from '../columns/entities/column.entity';
 import { TaskEntity } from '../tasks/entities/task.entity';
+import { NoteEntity } from '../notes/entities/note.entity';
 import { FileRefsService } from '../file-refs/file-refs.service';
 
 interface DefaultColumnSeed {
@@ -168,15 +169,27 @@ export class BoardsService {
 
     await this.dataSource.transaction(async (manager) => {
       const columns = await manager.find(ColumnEntity, { where: { boardId: id } });
-      for (const col of columns) {
-        const tasks = await manager.find(TaskEntity, { where: { columnId: col.id } });
-        for (const task of tasks) {
-          await this.fileRefsService.deleteAllFor('task', task.id, manager);
+      const columnIds = columns.map((c) => c.id);
+
+      let taskIds: number[] = [];
+      let noteIds: number[] = [];
+
+      if (columnIds.length > 0) {
+        const tasks = await manager.find(TaskEntity, { where: { columnId: In(columnIds) } });
+        taskIds = tasks.map((t) => t.id);
+
+        if (taskIds.length > 0) {
+          const notes = await manager.find(NoteEntity, { where: { taskId: In(taskIds) } });
+          noteIds = notes.map((n) => n.id);
         }
       }
+
+      await this.fileRefsService.deleteAllForBatch('task', taskIds, manager);
+      await this.fileRefsService.deleteAllForBatch('note', noteIds, manager);
+
       await manager.remove(BoardEntity, board);
     });
 
-    this.logger.log(`removeBoard: board id=${id} deleted (cascade removed columns, tasks and file_refs)`);
+    this.logger.log(`removeBoard: board id=${id} deleted (cascade removed columns, tasks, notes and file_refs)`);
   }
 }

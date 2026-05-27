@@ -1,6 +1,6 @@
 
 import 'reflect-metadata';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { DataSource, Repository } from 'typeorm';
 import { BoardEntity } from './entities/board.entity';
@@ -30,6 +30,7 @@ describe('BoardsService', () => {
   let boardsRepo: Repository<BoardEntity>;
   let columnsRepo: Repository<ColumnEntity>;
   let tasksRepo: Repository<TaskEntity>;
+  let fileRefsService: FileRefsService;
   let service: BoardsService;
 
   beforeEach(async () => {
@@ -41,7 +42,7 @@ describe('BoardsService', () => {
     tasksRepo = dataSource.getRepository(TaskEntity);
 
     const fileRefsRepo = dataSource.getRepository(FileRefEntity);
-    const fileRefsService = new FileRefsService(fileRefsRepo);
+    fileRefsService = new FileRefsService(fileRefsRepo);
     service = new BoardsService(boardsRepo, columnsRepo, tasksRepo, dataSource, fileRefsService);
   });
 
@@ -274,6 +275,73 @@ describe('BoardsService', () => {
         where: { targetType: 'task', targetId: task.id },
       });
       expect(remaining).toHaveLength(0);
+    });
+
+    // SCN-6: batched file_ref deletion — 3 tasks + 2 notes with file_refs → exactly 2 deleteAllForBatch calls
+    it('SCN-6: calls deleteAllForBatch exactly twice with correct targetType and all descendant IDs', async () => {
+      const boardA = await service.createBoard({ name: 'Board A' });
+      await service.createBoard({ name: 'Board B' });
+
+      const firstColumn = boardA.columns[0];
+      const notesRepo = dataSource.getRepository(NoteEntity);
+      const fileRefsRepo = dataSource.getRepository(FileRefEntity);
+
+      const [task1, task2, task3] = await Promise.all([
+        tasksRepo.save(tasksRepo.create({ columnId: firstColumn.id, title: 'Task 1', position: 0 })),
+        tasksRepo.save(tasksRepo.create({ columnId: firstColumn.id, title: 'Task 2', position: 1 })),
+        tasksRepo.save(tasksRepo.create({ columnId: firstColumn.id, title: 'Task 3', position: 2 })),
+      ]);
+
+      const [note1, note2] = await Promise.all([
+        notesRepo.save(notesRepo.create({ taskId: task1.id, title: 'Note 1', bodyMd: '' })),
+        notesRepo.save(notesRepo.create({ taskId: task2.id, title: 'Note 2', bodyMd: '' })),
+      ]);
+
+      await Promise.all([
+        fileRefsRepo.save(fileRefsRepo.create({ targetType: 'task', targetId: task1.id, path: '/tmp/t1.pdf', label: 'T1' })),
+        fileRefsRepo.save(fileRefsRepo.create({ targetType: 'task', targetId: task2.id, path: '/tmp/t2.pdf', label: 'T2' })),
+        fileRefsRepo.save(fileRefsRepo.create({ targetType: 'task', targetId: task3.id, path: '/tmp/t3.pdf', label: 'T3' })),
+        fileRefsRepo.save(fileRefsRepo.create({ targetType: 'note', targetId: note1.id, path: '/tmp/n1.pdf', label: 'N1' })),
+        fileRefsRepo.save(fileRefsRepo.create({ targetType: 'note', targetId: note2.id, path: '/tmp/n2.pdf', label: 'N2' })),
+      ]);
+
+      const spy = vi.spyOn(fileRefsService, 'deleteAllForBatch');
+
+      await service.removeBoard(boardA.id);
+
+      expect(spy).toHaveBeenCalledTimes(2);
+
+      const taskCall = spy.mock.calls.find((call) => call[0] === 'task');
+      const noteCall = spy.mock.calls.find((call) => call[0] === 'note');
+
+      expect(taskCall).toBeDefined();
+      expect(noteCall).toBeDefined();
+
+      expect((taskCall![1] as number[]).sort()).toEqual([task1.id, task2.id, task3.id].sort());
+      expect((noteCall![1] as number[]).sort()).toEqual([note1.id, note2.id].sort());
+    });
+
+    // SCN-7: board with no columns/tasks/notes → deleteAllForBatch called with empty arrays (no SQL DELETE)
+    it('SCN-7: calls deleteAllForBatch with empty arrays when board has no columns', async () => {
+      // Create a board with no tasks by saving it directly (bypassing createBoard default columns)
+      const emptyBoard = await boardsRepo.save(boardsRepo.create({ name: 'Empty Board', position: 99 }));
+      await service.createBoard({ name: 'Board B' }); // ensure at least 2 boards
+
+      const spy = vi.spyOn(fileRefsService, 'deleteAllForBatch');
+
+      await service.removeBoard(emptyBoard.id);
+
+      // Both calls should happen with empty arrays — deleteAllForBatch no-ops on empty
+      const taskCall = spy.mock.calls.find((call) => call[0] === 'task');
+      const noteCall = spy.mock.calls.find((call) => call[0] === 'note');
+
+      // Either not called at all, or called with empty arrays
+      if (taskCall) {
+        expect(taskCall[1]).toEqual([]);
+      }
+      if (noteCall) {
+        expect(noteCall[1]).toEqual([]);
+      }
     });
   });
 });

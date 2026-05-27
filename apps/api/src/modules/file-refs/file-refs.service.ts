@@ -135,6 +135,28 @@ export class FileRefsService {
     await repo.delete({ targetType, targetId });
   }
 
+  async deleteAllForBatch(
+    targetType: string,
+    targetIds: number[],
+    manager?: EntityManager,
+  ): Promise<void> {
+    if (targetIds.length === 0) return;
+    this.logger.log(
+      `deleteAllForBatch: deleting file_refs target_type="${targetType}" target_ids=[${targetIds.join(',')}]`,
+    );
+    const repo = manager
+      ? manager.getRepository(FileRefEntity)
+      : this.fileRefsRepo;
+    await repo
+      .createQueryBuilder()
+      .delete()
+      .where('target_type = :targetType AND target_id IN (:...targetIds)', {
+        targetType,
+        targetIds,
+      })
+      .execute();
+  }
+
   async removeFileRef(id: number): Promise<void> {
     this.logger.log(`removeFileRef: deleting id=${id}`);
 

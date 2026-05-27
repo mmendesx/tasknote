@@ -78,17 +78,17 @@ export const useNotesStore = defineStore('notes', () => {
       // Patch globalList
       const gi = globalList.value.findIndex((n) => n.id === id)
       if (gi !== -1) globalList.value[gi] = updated
-      // Patch byTask slots
-      for (const [taskId, notes] of byTask.value) {
+      // Patch byTask slots — build once, assign once
+      const newMap = new Map(byTask.value)
+      for (const [taskId, notes] of newMap) {
         const idx = notes.findIndex((n) => n.id === id)
         if (idx !== -1) {
           const copy = [...notes]
           copy[idx] = updated
-          const newMap = new Map(byTask.value)
           newMap.set(taskId, copy)
-          byTask.value = newMap
         }
       }
+      byTask.value = newMap
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to update note'
       throw err

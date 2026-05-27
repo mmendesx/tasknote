@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, Logger } from '@nes
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { z } from 'zod';
+import { COLUMN_ALLOWLISTS, DELETE_ORDER } from './admin.constants';
 
 export interface ExportPayload {
   version: '1.0';
@@ -47,6 +48,9 @@ export const ResetBodySchema = z.object({
 });
 
 export type ResetBodyDto = z.infer<typeof ResetBodySchema>;
+
+// Re-export constants so consumers can import from either admin.service or admin.constants.
+export { COLUMN_ALLOWLISTS, DELETE_ORDER } from './admin.constants';
 
 @Injectable()
 export class AdminService {
@@ -128,8 +132,8 @@ export class AdminService {
 
     try {
       
-      for (const table of ['file_refs', 'task_tags', 'tasks', 'columns', 'notes', 'tags', 'boards', 'settings']) {
-        await runner.query(`DELETE FROM "${table}"`);
+      for (const tbl of DELETE_ORDER) {
+        await runner.query(`DELETE FROM "${tbl}"`);
       }
 
       await this.insertRows(runner, 'settings', data.settings);
@@ -180,8 +184,9 @@ export class AdminService {
     await runner.startTransaction();
 
     try {
-      for (const table of ['file_refs', 'task_tags', 'tasks', 'columns', 'notes', 'tags', 'boards']) {
-        await runner.query(`DELETE FROM "${table}"`);
+      // settings is intentionally excluded: the row is preserved and cleared via UPDATE below.
+      for (const tbl of DELETE_ORDER.filter((t) => t !== 'settings')) {
+        await runner.query(`DELETE FROM "${tbl}"`);
       }
 
       await runner.query(
@@ -206,30 +211,6 @@ export class AdminService {
     return { reset: true };
   }
 
-  // Per-table column allowlists — only these keys may appear in import rows.
-  // Derived from entity definitions; must cover every column SELECT * returns.
-  private static readonly COLUMN_ALLOWLISTS: Record<string, Set<string>> = {
-    boards: new Set(['id', 'name', 'position', 'created_at', 'updated_at']),
-    columns: new Set(['id', 'board_id', 'name', 'color', 'wip_limit', 'is_done', 'position']),
-    tasks: new Set([
-      'id', 'column_id', 'title', 'description_md', 'priority', 'due_date',
-      'position', 'archived_at', 'completed_at', 'created_at', 'updated_at',
-    ]),
-    notes: new Set([
-      'id', 'task_id', 'title', 'body_md', 'pinned', 'archived_at',
-      'created_at', 'updated_at',
-    ]),
-    tags: new Set(['id', 'name', 'color']),
-    task_tags: new Set(['task_id', 'tag_id']),
-    file_refs: new Set([
-      'id', 'target_type', 'target_id', 'path', 'label', 'note', 'created_at',
-    ]),
-    settings: new Set([
-      'id', 'display_name', 'theme', 'accent', 'default_board_id',
-      'onboarded_at', 'timezone',
-    ]),
-  };
-
   private async insertRows(
     runner: import('typeorm').QueryRunner,
     table: string,
@@ -237,7 +218,7 @@ export class AdminService {
   ): Promise<void> {
     if (rows.length === 0) return;
 
-    const allowed = AdminService.COLUMN_ALLOWLISTS[table];
+    const allowed = COLUMN_ALLOWLISTS[table as keyof typeof COLUMN_ALLOWLISTS];
     if (allowed) {
       for (const row of rows) {
         const unknown = Object.keys(row).filter((k) => !allowed.has(k));

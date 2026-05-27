@@ -32,15 +32,22 @@ const priorityConfig: Record<string, { label: string; color: string }> = {
 
 const priority = computed(() => priorityConfig[props.task.priority] ?? priorityConfig.medium)
 
+function formatDueDate(val: string): string {
+  const day = val.slice(0, 10)
+  const d = new Date(`${day}T12:00:00Z`)
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
 const dueDateLabel = computed(() => {
   if (!props.task.due_date) return null
-  const d = new Date(props.task.due_date)
+  const day = props.task.due_date.slice(0, 10)
+  const d = new Date(`${day}T12:00:00Z`)
   const now = new Date()
   const diffDays = Math.ceil((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
   if (diffDays < 0) return { text: 'Overdue', overdue: true }
   if (diffDays === 0) return { text: 'Today', overdue: false }
   if (diffDays === 1) return { text: 'Tomorrow', overdue: false }
-  return { text: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), overdue: false }
+  return { text: formatDueDate(props.task.due_date), overdue: false }
 })
 
 const tagDots = computed(() => {
@@ -148,8 +155,9 @@ function handleOpen() {
       <!-- FR-11: tag container aria-label includes tag names; dots are aria-hidden -->
       <div v-if="tagDots.length > 0 || task.completed_at" class="task-card__footer">
         <div
-          v-if="tagDots.length > 0"
+          v-if="tagNames.length"
           class="task-card__tags"
+          role="group"
           :aria-label="tagsLabel"
         >
           <span
