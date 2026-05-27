@@ -4,7 +4,7 @@ import { TaskEntity } from '../../tasks/entities/task.entity';
 
 const booleanInt: typeorm.ValueTransformer = {
   to: (v: boolean | null | undefined): number => (v ? 1 : 0),
-  from: (v: number | null): boolean => v === 1,
+  from: (v: number | boolean | null): boolean => v === 1 || v === true,
 };
 
 @typeorm.Entity('columns')
