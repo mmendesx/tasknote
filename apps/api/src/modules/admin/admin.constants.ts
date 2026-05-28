@@ -5,7 +5,7 @@ export const COLUMN_ALLOWLISTS: Record<string, Set<string>> = {
   columns: new Set(['id', 'board_id', 'name', 'color', 'wip_limit', 'is_done', 'position']),
   tasks: new Set([
     'id', 'column_id', 'title', 'description_md', 'priority', 'due_date',
-    'position', 'archived_at', 'completed_at', 'created_at', 'updated_at',
+    'committed_on', 'position', 'archived_at', 'completed_at', 'created_at', 'updated_at',
   ]),
   notes: new Set([
     'id', 'task_id', 'title', 'body_md', 'pinned', 'archived_at',

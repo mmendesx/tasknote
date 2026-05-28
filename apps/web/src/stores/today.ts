@@ -49,7 +49,7 @@ export const useTodayStore = defineStore('today', () => {
 
   async function toggleDone(id: number): Promise<void> {
     try {
-      await api.tasks.deleteTask(id)
+      await api.tasks.completeTask(id)
       list.value = list.value.filter((t) => t.id !== id)
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to complete task'

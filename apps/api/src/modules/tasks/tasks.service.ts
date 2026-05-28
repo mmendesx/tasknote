@@ -279,6 +279,36 @@ export class TasksService {
     return saved;
   }
 
+  async complete(id: number): Promise<TaskEntity> {
+    this.logger.log(`complete: task id=${id}`);
+
+    const task = await this.tasksRepo.findOne({ where: { id } });
+    if (!task) {
+      this.logger.warn(`complete: task id=${id} not found`);
+      throw new NotFoundException(`Task with id '${id}' not found`);
+    }
+
+    task.completedAt = new Date();
+    const saved = await this.tasksRepo.save(task);
+    this.logger.log(`complete: task id=${id} completed_at=${saved.completedAt!.toISOString()}`);
+    return saved;
+  }
+
+  async uncomplete(id: number): Promise<TaskEntity> {
+    this.logger.log(`uncomplete: task id=${id}`);
+
+    const task = await this.tasksRepo.findOne({ where: { id } });
+    if (!task) {
+      this.logger.warn(`uncomplete: task id=${id} not found`);
+      throw new NotFoundException(`Task with id '${id}' not found`);
+    }
+
+    task.completedAt = null;
+    const saved = await this.tasksRepo.save(task);
+    this.logger.log(`uncomplete: task id=${id} completed_at cleared`);
+    return saved;
+  }
+
   async listToday(today: string): Promise<(TaskEntity & { carried_days: number })[]> {
     this.logger.log(`listToday: today=${today}`);
 

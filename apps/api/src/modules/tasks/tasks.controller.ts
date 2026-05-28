@@ -86,6 +86,18 @@ export class TasksController {
     return this.tasksService.uncommit(id);
   }
 
+  @Post(':id/complete')
+  @HttpCode(HttpStatus.OK)
+  completeTask(@Param('id', ParseIntPipe) id: number) {
+    return this.tasksService.complete(id);
+  }
+
+  @Delete(':id/complete')
+  @HttpCode(HttpStatus.OK)
+  uncompleteTask(@Param('id', ParseIntPipe) id: number) {
+    return this.tasksService.uncomplete(id);
+  }
+
   @Delete(':id/permanent')
   @HttpCode(HttpStatus.NO_CONTENT)
   permanentDelete(@Param('id', ParseIntPipe) id: number) {

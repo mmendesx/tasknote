@@ -7,6 +7,7 @@ vi.mock('@/api', () => ({
     listToday: vi.fn(),
     commitTask: vi.fn(),
     uncommitTask: vi.fn(),
+    completeTask: vi.fn(),
     deleteTask: vi.fn(),
   },
   boards: {
@@ -166,7 +167,7 @@ describe('useTodayStore — toggleDone', () => {
 
   it('removes the completed task from list with a single list reassignment', async () => {
     store.list = [makeTodayTask(10, 0), makeTodayTask(11, 1)]
-    vi.mocked(api.tasks.deleteTask).mockResolvedValueOnce(undefined)
+    vi.mocked(api.tasks.completeTask).mockResolvedValueOnce(undefined as never)
 
     let reassignments = 0
     watch(() => store.list, () => { reassignments++ }, { flush: 'sync' })
@@ -177,13 +178,13 @@ describe('useTodayStore — toggleDone', () => {
     expect(reassignments).toBe(1)
   })
 
-  it('calls api.tasks.deleteTask with the correct id', async () => {
+  it('calls api.tasks.completeTask with the correct id', async () => {
     store.list = [makeTodayTask(7, 0)]
-    vi.mocked(api.tasks.deleteTask).mockResolvedValueOnce(undefined)
+    vi.mocked(api.tasks.completeTask).mockResolvedValueOnce(undefined as never)
 
     await store.toggleDone(7)
 
-    expect(api.tasks.deleteTask).toHaveBeenCalledWith(7)
+    expect(api.tasks.completeTask).toHaveBeenCalledWith(7)
   })
 })
 

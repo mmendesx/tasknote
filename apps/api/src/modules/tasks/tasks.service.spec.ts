@@ -491,6 +491,81 @@ describe('TasksService', () => {
     });
   });
 
+  describe('complete — BDD: mark task complete without moving it', () => {
+    it('sets completed_at to a non-null Date and leaves column + archived_at unchanged', async () => {
+      const created = await service.createTask({
+        column_id: doingColumn.id,
+        title: 'Mark me done',
+        priority: 'medium',
+      });
+
+      const result = await service.complete(created.id);
+
+      expect(result.completedAt).not.toBeNull();
+      expect(result.columnId).toBe(doingColumn.id);
+      expect(result.archivedAt).toBeNull();
+    });
+
+    it('is idempotent — calling complete twice does not error', async () => {
+      const created = await service.createTask({
+        column_id: doingColumn.id,
+        title: 'Double complete',
+        priority: 'medium',
+      });
+
+      await service.complete(created.id);
+      const result = await service.complete(created.id);
+
+      expect(result.completedAt).not.toBeNull();
+    });
+
+    it('throws NotFoundException for unknown id', async () => {
+      await expect(service.complete(9999)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('uncomplete — BDD: clear completed_at without changing column', () => {
+    it('clears completed_at and leaves the task otherwise unchanged', async () => {
+      const created = await service.createTask({
+        column_id: doingColumn.id,
+        title: 'Unmark me',
+        priority: 'high',
+      });
+
+      await service.complete(created.id);
+      const result = await service.uncomplete(created.id);
+
+      expect(result.completedAt).toBeNull();
+      expect(result.columnId).toBe(doingColumn.id);
+      expect(result.title).toBe('Unmark me');
+    });
+
+    it('throws NotFoundException for unknown id', async () => {
+      await expect(service.uncomplete(9999)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('listToday — completed task via complete() is excluded', () => {
+    it('removes the task from today view after complete() is called', async () => {
+      const TODAY = '2026-05-28';
+
+      const task = await service.createTask({
+        column_id: doingColumn.id,
+        title: 'Will be completed',
+        priority: 'medium',
+      });
+      await service.commit(task.id, TODAY);
+
+      const before = await service.listToday(TODAY);
+      expect(before.find((t) => t.id === task.id)).toBeDefined();
+
+      await service.complete(task.id);
+
+      const after = await service.listToday(TODAY);
+      expect(after.find((t) => t.id === task.id)).toBeUndefined();
+    });
+  });
+
   describe('TodayQueryDtoSchema — SCN-5: rejects bad/missing today param', () => {
     it('rejects missing today value', () => {
       const result = TodayQueryDtoSchema.safeParse({});

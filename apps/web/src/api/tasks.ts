@@ -48,3 +48,11 @@ export function commitTask(id: number, today: string): Promise<Task> {
 export function uncommitTask(id: number): Promise<Task> {
   return http<Task>(`/tasks/${id}/commit`, { method: 'DELETE' })
 }
+
+export function completeTask(id: number): Promise<Task> {
+  return http<Task>(`/tasks/${id}/complete`, { method: 'POST' })
+}
+
+export function uncompleteTask(id: number): Promise<Task> {
+  return http<Task>(`/tasks/${id}/complete`, { method: 'DELETE' })
+}
