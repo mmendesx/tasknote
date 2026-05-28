@@ -1,7 +1,7 @@
 
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { DataSource, Repository } from 'typeorm';
 import { BoardEntity } from '../boards/entities/board.entity';
 import { ColumnEntity } from '../columns/entities/column.entity';
@@ -11,7 +11,7 @@ import { TagEntity } from '../tags/entities/tag.entity';
 import { FileRefEntity } from '../file-refs/entities/file-ref.entity';
 import { TasksService } from './tasks.service';
 import { FileRefsService } from '../file-refs/file-refs.service';
-import { CreateTaskDtoSchema } from '@tasknote/shared';
+import { CreateTaskDtoSchema, TodayQueryDtoSchema } from '@tasknote/shared';
 
 function buildDataSource(): DataSource {
   return new DataSource({
@@ -375,6 +375,160 @@ describe('TasksService', () => {
 
       expect(moved.completedAt).not.toBeNull();
       expect(moved.position).toBe(3);
+    });
+  });
+
+  // ─── Today lens (ICT-57..61, SCN-2..6) ────────────────────────────────────
+
+  describe('commit — SCN-2: stores noon-UTC when committing a task', () => {
+    it('sets committed_on to noon-UTC for the given calendar day', async () => {
+      const created = await service.createTask({
+        column_id: doingColumn.id,
+        title: 'Commit me',
+        priority: 'medium',
+      });
+
+      const committed = await service.commit(created.id, '2026-05-28');
+      expect(new Date(committed.committedOn!).toISOString()).toBe('2026-05-28T12:00:00.000Z');
+    });
+
+    it('throws NotFoundException when task does not exist', async () => {
+      await expect(service.commit(9999, '2026-05-28')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('uncommit — SCN-3: clears committed_on, leaves task otherwise unchanged', () => {
+    it('sets committed_on to null and preserves all other fields', async () => {
+      const created = await service.createTask({
+        column_id: doingColumn.id,
+        title: 'Uncommit me',
+        priority: 'high',
+      });
+
+      await service.commit(created.id, '2026-05-28');
+      const uncommitted = await service.uncommit(created.id);
+
+      expect(uncommitted.committedOn).toBeNull();
+      expect(uncommitted.title).toBe('Uncommit me');
+      expect(uncommitted.priority).toBe('high');
+      expect(uncommitted.columnId).toBe(doingColumn.id);
+      expect(uncommitted.id).toBe(created.id);
+    });
+
+    it('throws NotFoundException when task does not exist', async () => {
+      await expect(service.uncommit(9999)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('listToday — SCN-4: returns only open committed tasks <= today with carried_days', () => {
+    it('returns committed open tasks on or before today with correct carried_days and ordering', async () => {
+      const TODAY = '2026-05-28';
+      const TWO_DAYS_AGO = '2026-05-26';
+      const TOMORROW = '2026-05-29';
+
+      // Fixture 1: committed today, open → should appear, carried_days=0
+      const freshTask = await service.createTask({
+        column_id: doingColumn.id,
+        title: 'Fresh today',
+        priority: 'medium',
+      });
+      await service.commit(freshTask.id, TODAY);
+
+      // Fixture 2: committed 2 days ago, open → should appear, carried_days=2, sorts first
+      const carriedTask = await service.createTask({
+        column_id: doingColumn.id,
+        title: 'Carried from past',
+        priority: 'medium',
+      });
+      await service.commit(carriedTask.id, TWO_DAYS_AGO);
+
+      // Fixture 3: committed today but completed → excluded
+      const completedTask = await tasksRepo.save(
+        tasksRepo.create({
+          columnId: doneColumn.id,
+          title: 'Completed today',
+          priority: 'medium',
+          position: 0,
+          completedAt: new Date(),
+        }),
+      );
+      await service.commit(completedTask.id, TODAY);
+
+      // Fixture 4: committed today but archived → excluded
+      const archivedTask = await service.createTask({
+        column_id: doingColumn.id,
+        title: 'Archived today',
+        priority: 'medium',
+      });
+      await service.commit(archivedTask.id, TODAY);
+      await service.softDelete(archivedTask.id);
+
+      // Fixture 5: not committed (null) → excluded
+      await service.createTask({
+        column_id: doingColumn.id,
+        title: 'Not committed',
+        priority: 'medium',
+      });
+
+      // Fixture 6: committed tomorrow → excluded (future)
+      const futureTask = await service.createTask({
+        column_id: doingColumn.id,
+        title: 'Future commit',
+        priority: 'medium',
+      });
+      await service.commit(futureTask.id, TOMORROW);
+
+      const results = await service.listToday(TODAY);
+
+      expect(results).toHaveLength(2);
+
+      // Carried task sorts first (earlier committed_on)
+      expect(results[0].id).toBe(carriedTask.id);
+      expect(results[0].carried_days).toBe(2);
+
+      expect(results[1].id).toBe(freshTask.id);
+      expect(results[1].carried_days).toBe(0);
+    });
+  });
+
+  describe('TodayQueryDtoSchema — SCN-5: rejects bad/missing today param', () => {
+    it('rejects missing today value', () => {
+      const result = TodayQueryDtoSchema.safeParse({});
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects today with wrong format', () => {
+      const result = TodayQueryDtoSchema.safeParse({ today: '28-05-2026' });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects today with partial match', () => {
+      const result = TodayQueryDtoSchema.safeParse({ today: '2026-5-28' });
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts a valid YYYY-MM-DD today value', () => {
+      const result = TodayQueryDtoSchema.safeParse({ today: '2026-05-28' });
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('commit/listToday — SCN-6: noon-UTC normalization round-trip', () => {
+    it('committed_on stored as noon-UTC survives DB round-trip correctly', async () => {
+      const created = await service.createTask({
+        column_id: doingColumn.id,
+        title: 'Round-trip test',
+        priority: 'medium',
+      });
+
+      await service.commit(created.id, '2026-05-28');
+
+      const results = await service.listToday('2026-05-28');
+      const found = results.find((t) => t.id === created.id);
+
+      expect(found).toBeDefined();
+      expect(new Date(found!.committedOn!).toISOString()).toBe('2026-05-28T12:00:00.000Z');
+      expect(found!.carried_days).toBe(0);
     });
   });
 

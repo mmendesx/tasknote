@@ -78,6 +78,7 @@ const taskBase = z.object({
   description_md: z.string().nullable().optional(),
   priority: priorityField,
   due_date: calendarOrIsoDateField.nullable().optional(),
+  committed_on: calendarOrIsoDateField.nullable().optional(),
 });
 
 export const CreateTaskDtoSchema = taskBase.extend({
@@ -95,6 +96,17 @@ export const MoveTaskDtoSchema = z.object({
 export type CreateTaskDto = z.infer<typeof CreateTaskDtoSchema>;
 export type UpdateTaskDto = z.infer<typeof UpdateTaskDtoSchema>;
 export type MoveTaskDto = z.infer<typeof MoveTaskDtoSchema>;
+
+export const TodayQueryDtoSchema = z.object({
+  today: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
+export const CommitTaskDtoSchema = z.object({
+  today: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
+export type TodayQueryDto = z.infer<typeof TodayQueryDtoSchema>;
+export type CommitTaskDto = z.infer<typeof CommitTaskDtoSchema>;
 
 // ─── Note DTOs ────────────────────────────────────────────────────────────────
 

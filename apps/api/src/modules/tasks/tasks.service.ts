@@ -65,6 +65,7 @@ export class TasksService {
         descriptionMd: dto.description_md ?? null,
         priority: dto.priority ?? 'medium',
         dueDate: dto.due_date ? normalizeDueDate(dto.due_date) : null,
+        committedOn: dto.committed_on ? normalizeDueDate(dto.committed_on) : null,
         position: nextPosition,
       });
 
@@ -160,6 +161,9 @@ export class TasksService {
       if (dto.due_date !== undefined) {
         task.dueDate = dto.due_date ? normalizeDueDate(dto.due_date) : null;
       }
+      if (dto.committed_on !== undefined) {
+        task.committedOn = dto.committed_on ? normalizeDueDate(dto.committed_on) : null;
+      }
 
       const updated = await manager.save(TaskEntity, task);
       this.logger.log(`updateTask: task id=${id} updated`);
@@ -242,6 +246,66 @@ export class TasksService {
       const updated = await manager.save(TaskEntity, task);
       this.logger.log(`moveTask: task id=${dto.task_id} moved successfully`);
       return updated;
+    });
+  }
+
+  async commit(id: number, today: string): Promise<TaskEntity> {
+    this.logger.log(`commit: task id=${id} today=${today}`);
+
+    const task = await this.tasksRepo.findOne({ where: { id } });
+    if (!task) {
+      this.logger.warn(`commit: task id=${id} not found`);
+      throw new NotFoundException(`Task with id '${id}' not found`);
+    }
+
+    task.committedOn = normalizeDueDate(today);
+    const saved = await this.tasksRepo.save(task);
+    this.logger.log(`commit: task id=${id} committed_on=${saved.committedOn?.toISOString()}`);
+    return saved;
+  }
+
+  async uncommit(id: number): Promise<TaskEntity> {
+    this.logger.log(`uncommit: task id=${id}`);
+
+    const task = await this.tasksRepo.findOne({ where: { id } });
+    if (!task) {
+      this.logger.warn(`uncommit: task id=${id} not found`);
+      throw new NotFoundException(`Task with id '${id}' not found`);
+    }
+
+    task.committedOn = null;
+    const saved = await this.tasksRepo.save(task);
+    this.logger.log(`uncommit: task id=${id} committed_on cleared`);
+    return saved;
+  }
+
+  async listToday(today: string): Promise<(TaskEntity & { carried_days: number })[]> {
+    this.logger.log(`listToday: today=${today}`);
+
+    const noon = normalizeDueDate(today);
+
+    const tasks = await this.tasksRepo
+      .createQueryBuilder('task')
+      .where('task.committed_on IS NOT NULL')
+      .andWhere('task.committed_on <= :noon', { noon: noon.toISOString() })
+      .andWhere('task.completed_at IS NULL')
+      .andWhere('task.archived_at IS NULL')
+      .orderBy('task.committed_on', 'ASC')
+      .addOrderBy('task.position', 'ASC')
+      .getMany();
+
+    this.logger.log(`listToday: found ${tasks.length} tasks`);
+
+    return tasks.map((task) => {
+      // Parse both dates as UTC calendar days (DST-safe)
+      const committedStr = new Date(task.committedOn!).toISOString().slice(0, 10);
+      const [cYear, cMonth, cDay] = committedStr.split('-').map(Number) as [number, number, number];
+      const [tYear, tMonth, tDay] = today.split('-').map(Number) as [number, number, number];
+      const carriedDays = Math.round(
+        (Date.UTC(tYear, tMonth - 1, tDay) - Date.UTC(cYear, cMonth - 1, cDay)) / 86_400_000,
+      );
+
+      return Object.assign(task, { carried_days: carriedDays });
     });
   }
 

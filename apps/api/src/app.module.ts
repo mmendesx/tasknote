@@ -25,6 +25,7 @@ import { TagEntity } from './modules/tags/entities/tag.entity';
 import { FileRefEntity } from './modules/file-refs/entities/file-ref.entity';
 
 import { Initial1700000000000 } from './database/migrations/1700000000000-Initial';
+import { AddCommittedOn1700000000001 } from './database/migrations/1700000000001-AddCommittedOn';
 
 import type { BetterSqlite3ConnectionOptions } from 'typeorm/driver/better-sqlite3/BetterSqlite3ConnectionOptions';
 
@@ -51,7 +52,7 @@ import type { BetterSqlite3ConnectionOptions } from 'typeorm/driver/better-sqlit
             TagEntity,
             FileRefEntity,
           ],
-          migrations: [Initial1700000000000],
+          migrations: [Initial1700000000000, AddCommittedOn1700000000001],
           migrationsRun: true,
           synchronize: false,
           

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -38,6 +39,15 @@ export class TasksController {
     return this.tasksService.listArchived(boardId);
   }
 
+  @Get('today')
+  listToday(@Query('today') today: string | undefined) {
+    const parsed = shared.TodayQueryDtoSchema.safeParse({ today });
+    if (!parsed.success) {
+      throw new BadRequestException({ code: 'INVALID_TODAY' });
+    }
+    return this.tasksService.listToday(parsed.data.today);
+  }
+
   @Get(':id')
   getTask(@Param('id', ParseIntPipe) id: number) {
     return this.tasksService.getOne(id);
@@ -60,6 +70,20 @@ export class TasksController {
   @Post(':id/restore')
   restore(@Param('id', ParseIntPipe) id: number) {
     return this.tasksService.restore(id);
+  }
+
+  @Post(':id/commit')
+  commitTask(
+    @Param('id', ParseIntPipe) id: number,
+    @Body(new ZodValidationPipe(shared.CommitTaskDtoSchema)) dto: shared.CommitTaskDto,
+  ) {
+    return this.tasksService.commit(id, dto.today);
+  }
+
+  @Delete(':id/commit')
+  @HttpCode(HttpStatus.OK)
+  uncommitTask(@Param('id', ParseIntPipe) id: number) {
+    return this.tasksService.uncommit(id);
   }
 
   @Delete(':id/permanent')

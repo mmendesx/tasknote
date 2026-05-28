@@ -33,6 +33,9 @@ export class TaskEntity {
   @typeorm.Column({ type: 'datetime', name: 'completed_at', nullable: true, default: null })
   completedAt!: Date | null;
 
+  @typeorm.Column({ type: 'datetime', name: 'committed_on', nullable: true, default: null })
+  committedOn!: Date | null;
+
   @typeorm.CreateDateColumn({ type: 'datetime', name: 'created_at' })
   createdAt!: Date;
 
