@@ -11,6 +11,7 @@ import { Button } from '@tasknote/ui'
 import KanbanColumn from './KanbanColumn.vue'
 import TaskDrawer from './TaskDrawer.vue'
 import BoardTagFilter from '@/features/tags/BoardTagFilter.vue'
+import { localDateString } from '@/stores/today'
 
 const route = useRoute()
 const router = useRouter()
@@ -22,6 +23,8 @@ const isDesktop = useIsDesktop()
 const tagColors = computed<Record<number, string>>(() =>
   Object.fromEntries(tagsStore.list.map((t) => [t.id, t.color]))
 )
+
+const today = localDateString()
 
 const boardId = computed<number | null>(() => {
   const param = route.params.id
@@ -200,6 +203,7 @@ async function createFirstBoard() {
         :key="col.id"
         :column="col"
         :tag-colors="tagColors"
+        :today="today"
         role="listitem"
         @open-task="handleOpenTask"
         @move-task="handleMoveTask"

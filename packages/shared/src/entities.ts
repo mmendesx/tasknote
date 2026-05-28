@@ -42,6 +42,7 @@ export interface Task {
   description_md: string | null;
   priority: Priority;
   due_date: Date | null;
+  committed_on?: string | null;
   position: number;
   archived_at: Date | null;
   completed_at: Date | null;

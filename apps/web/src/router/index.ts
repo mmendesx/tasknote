@@ -3,6 +3,7 @@ import BoardView from '@/features/board/BoardView.vue'
 import NotesView from '@/views/NotesView.vue'
 import ArchiveView from '@/views/ArchiveView.vue'
 import SettingsView from '@/views/SettingsView.vue'
+import TodayView from '@/views/TodayView.vue'
 import { useNavigationState } from '@/composables/useNavigationState'
 
 const { isNavigating, routeLabel } = useNavigationState()
@@ -10,6 +11,11 @@ const { isNavigating, routeLabel } = useNavigationState()
 const router = createRouter({
   history: createWebHistory(),
   routes: [
+    {
+      path: '/today',
+      name: 'today',
+      component: TodayView,
+    },
     {
       path: '/',
       name: 'board-default',

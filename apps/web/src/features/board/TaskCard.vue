@@ -11,6 +11,7 @@ import type { MenuItemDef } from '@tasknote/ui'
 const props = defineProps<{
   task: Task
   tagColors?: Record<number, string>
+  today?: string
 }>()
 
 const tagsStore = useTagsStore()
@@ -66,6 +67,17 @@ const tagNames = computed(() =>
 const tagsLabel = computed(() =>
   tagNames.value.length > 0 ? `Tags: ${tagNames.value.join(', ')}` : undefined
 )
+
+// ICT-66: committed-on marker
+const committedMarker = computed<'today' | 'earlier' | null>(() => {
+  if (!props.task.committed_on) return null
+  const committed = String(props.task.committed_on).slice(0, 10)
+  const refDay = props.today ?? null
+  if (!refDay) return null
+  if (committed === refDay) return 'today'
+  if (committed < refDay && !props.task.completed_at && !props.task.archived_at) return 'earlier'
+  return null
+})
 
 // FR-7: "Move task" dropdown items (one per column in the board)
 const moveColumnItems = computed<MenuItemDef[]>(() => {
@@ -153,7 +165,7 @@ function handleOpen() {
       </div>
 
       <!-- FR-11: tag container aria-label includes tag names; dots are aria-hidden -->
-      <div v-if="tagDots.length > 0 || task.completed_at" class="task-card__footer">
+      <div v-if="tagDots.length > 0 || task.completed_at || committedMarker" class="task-card__footer">
         <div
           v-if="tagNames.length"
           class="task-card__tags"
@@ -177,6 +189,18 @@ function handleOpen() {
             <path d="M2 6l3 3 5-5" stroke="var(--color-status-done)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
         </span>
+
+        <!-- ICT-66: committed-on marker dot -->
+        <span
+          v-if="committedMarker === 'today'"
+          class="task-card__committed task-card__committed--today"
+          aria-label="Committed today"
+        />
+        <span
+          v-else-if="committedMarker === 'earlier'"
+          class="task-card__committed task-card__committed--earlier"
+          aria-label="Committed earlier"
+        />
       </div>
     </button>
 
@@ -380,5 +404,24 @@ function handleOpen() {
 .task-card__menu-btn:focus-visible {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 1px;
+}
+
+/* ICT-66: committed-on marker */
+.task-card__committed {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.task-card__committed--today {
+  background-color: var(--color-accent);
+}
+
+.task-card__committed--earlier {
+  background-color: var(--color-text-muted);
+  opacity: 0.5;
 }
 </style>

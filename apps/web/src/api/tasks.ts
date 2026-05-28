@@ -34,3 +34,17 @@ export function listArchivedTasks(boardId?: number): Promise<Task[]> {
   const query = boardId !== undefined ? `?board_id=${boardId}` : ''
   return http<Task[]>(`/tasks/archived${query}`)
 }
+
+export type TodayTask = Task & { carried_days: number }
+
+export function listToday(today: string): Promise<TodayTask[]> {
+  return http<TodayTask[]>(`/tasks/today?today=${today}`)
+}
+
+export function commitTask(id: number, today: string): Promise<Task> {
+  return http<Task>(`/tasks/${id}/commit`, { method: 'POST', body: { today } })
+}
+
+export function uncommitTask(id: number): Promise<Task> {
+  return http<Task>(`/tasks/${id}/commit`, { method: 'DELETE' })
+}

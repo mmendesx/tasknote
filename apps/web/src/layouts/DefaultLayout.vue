@@ -192,6 +192,7 @@ const routeLabel = computed(() => {
   const labels: Record<string, string> = {
     'board-default': 'Board',
     board: 'Board',
+    today: 'Today',
     notes: 'Notes',
     'note-detail': 'Notes',
     archive: 'Archive',
@@ -272,6 +273,27 @@ const routeLabel = computed(() => {
       </div>
 
       <nav class="sidebar__nav">
+        <div class="nav-section">
+          <RouterLink
+            to="/today"
+            class="nav-item focus-ring"
+            :class="{ 'nav-item--active': route.name === 'today' }"
+            :aria-current="route.name === 'today' ? 'page' : undefined"
+            @click="closeDrawer"
+          >
+            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" class="nav-item__icon">
+              <circle cx="8" cy="8" r="4" stroke="currentColor" stroke-width="1.5" />
+              <path
+                d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M2.93 2.93l1.06 1.06M12.01 12.01l1.06 1.06M2.93 13.07l1.06-1.06M12.01 3.99l1.06-1.06"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+              />
+            </svg>
+            <span class="nav-item__label">Today</span>
+          </RouterLink>
+        </div>
+
         <div class="nav-section">
           <div class="nav-section__header">
             <p class="nav-section__label">Boards</p>

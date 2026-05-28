@@ -9,6 +9,7 @@ import TaskCard from './TaskCard.vue'
 const props = defineProps<{
   column: ColumnWithTasks
   tagColors?: Record<number, string>
+  today?: string
 }>()
 
 const emit = defineEmits<{
@@ -128,6 +129,7 @@ function onListDragEnd(evt: DragEvent) {
         :key="task.id"
         :task="task"
         :tag-colors="tagColors"
+        :today="today"
         @open="(id) => emit('openTask', id)"
       />
 

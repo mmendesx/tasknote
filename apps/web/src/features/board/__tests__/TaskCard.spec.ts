@@ -119,6 +119,80 @@ describe('ICT-49 — formatDueDate: robust due_date parsing', () => {
   })
 })
 
+// --- ICT-66: Committed marker ---
+
+describe('ICT-66 — TaskCard committed marker', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('shows today marker when committed_on matches today prop', () => {
+    const wrapper = mount(TaskCard, {
+      global: { plugins: [createPinia()] },
+      props: {
+        task: makeTask({ committed_on: '2026-05-28' }),
+        today: '2026-05-28',
+      },
+    })
+
+    const marker = wrapper.find('.task-card__committed--today')
+    expect(marker.exists()).toBe(true)
+    expect(marker.attributes('aria-label')).toBe('Committed today')
+  })
+
+  it('shows earlier marker when committed_on is before today and task is open', () => {
+    const wrapper = mount(TaskCard, {
+      global: { plugins: [createPinia()] },
+      props: {
+        task: makeTask({ committed_on: '2026-05-20', completed_at: null, archived_at: null }),
+        today: '2026-05-28',
+      },
+    })
+
+    const marker = wrapper.find('.task-card__committed--earlier')
+    expect(marker.exists()).toBe(true)
+    expect(marker.attributes('aria-label')).toBe('Committed earlier')
+  })
+
+  it('shows no marker when committed_on is null', () => {
+    const wrapper = mount(TaskCard, {
+      global: { plugins: [createPinia()] },
+      props: {
+        task: makeTask({ committed_on: null }),
+        today: '2026-05-28',
+      },
+    })
+
+    expect(wrapper.find('.task-card__committed--today').exists()).toBe(false)
+    expect(wrapper.find('.task-card__committed--earlier').exists()).toBe(false)
+  })
+
+  it('shows no marker when today prop is not provided', () => {
+    const wrapper = mount(TaskCard, {
+      global: { plugins: [createPinia()] },
+      props: {
+        task: makeTask({ committed_on: '2026-05-28' }),
+        // today prop omitted
+      },
+    })
+
+    expect(wrapper.find('.task-card__committed--today').exists()).toBe(false)
+    expect(wrapper.find('.task-card__committed--earlier').exists()).toBe(false)
+  })
+
+  it('shows no earlier marker when task is completed', () => {
+    const wrapper = mount(TaskCard, {
+      global: { plugins: [createPinia()] },
+      props: {
+        task: makeTask({ committed_on: '2026-05-20', completed_at: new Date() }),
+        today: '2026-05-28',
+      },
+    })
+
+    expect(wrapper.find('.task-card__committed--earlier').exists()).toBe(false)
+  })
+})
+
 // --- ICT-50: Tags container role=group ---
 
 describe('ICT-50 — tags container role=group', () => {
