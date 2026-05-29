@@ -312,3 +312,177 @@ describe('SCN-7: quick-add from Today stamps committed_on = today', () => {
     expect(vi.mocked(api.tasks.createTask)).not.toHaveBeenCalled()
   })
 })
+
+// ---------------------------------------------------------------------------
+// SCN-7 (no-column) — disabled control + visible hint when no board exists
+// ---------------------------------------------------------------------------
+
+function mountTodayViewNoBoard(tasks: TodayTask[] = []) {
+  const pinia = createPinia()
+  setActivePinia(pinia)
+
+  const loadToday = vi.fn().mockResolvedValue(undefined)
+
+  vi.mocked(useTodayStore).mockReturnValue({
+    list: tasks,
+    loading: false,
+    error: null,
+    loadToday,
+    uncommit: vi.fn().mockResolvedValue(undefined),
+    toggleDone: vi.fn().mockResolvedValue(undefined),
+  } as unknown as ReturnType<typeof useTodayStore>)
+
+  vi.mocked(useBoardsStore).mockReturnValue({
+    list: [],
+    loading: false,
+    error: null,
+    defaultBoardId: null,
+    load: vi.fn().mockResolvedValue(undefined),
+    create: vi.fn(),
+    update: vi.fn(),
+    remove: vi.fn(),
+  } as unknown as ReturnType<typeof useBoardsStore>)
+
+  // No board resolves — getBoard won't be called
+  vi.mocked(api.boards.getBoard).mockResolvedValue(undefined as any)
+
+  return { wrapper: mount(TodayView, { global: { plugins: [pinia] } }), loadToday }
+}
+
+describe('SCN-7 (no-column): quick-add disabled with hint when no board configured', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+  })
+
+  it('shows the quick-add input disabled with a visible hint in empty state', async () => {
+    const { wrapper } = mountTodayViewNoBoard([])
+    await flushPromises()
+
+    const input = wrapper.find('#today-quick-add')
+    expect(input.exists()).toBe(true)
+    expect((input.element as HTMLInputElement).disabled).toBe(true)
+
+    const btn = wrapper.find('.today-view__quick-btn')
+    expect((btn.element as HTMLButtonElement).disabled).toBe(true)
+
+    expect(wrapper.text()).toContain("Create a board first to add today's tasks.")
+  })
+
+  it('does not call createTask when no board is configured and submit is attempted', async () => {
+    vi.mocked(api.tasks.createTask).mockResolvedValue({} as any)
+
+    const { wrapper } = mountTodayViewNoBoard([])
+    await flushPromises()
+
+    // Directly invoke submitQuickAdd by setting value and calling the exposed method
+    // The button is disabled, but we test the guard in submitQuickAdd via keydown
+    const input = wrapper.find('#today-quick-add')
+    await input.setValue('Some task')
+    // Simulate Enter keydown to exercise the code path through handleQuickAddKeydown
+    await input.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+
+    expect(vi.mocked(api.tasks.createTask)).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// SCN-8 — new row appears in Today list after quick-add success
+// ---------------------------------------------------------------------------
+
+function mountTodayViewWithReactiveStore(initialTasks: TodayTask[] = []) {
+  const pinia = createPinia()
+  setActivePinia(pinia)
+
+  const { reactive } = require('vue')
+
+  const storeObj = reactive({
+    list: [...initialTasks] as TodayTask[],
+    loading: false,
+    error: null as string | null,
+    loadToday: vi.fn(),
+    uncommit: vi.fn().mockResolvedValue(undefined),
+    toggleDone: vi.fn().mockResolvedValue(undefined),
+  })
+
+  storeObj.loadToday.mockImplementation(async (today: string) => {
+    storeObj.list = await api.tasks.listToday(today)
+  })
+
+  vi.mocked(useTodayStore).mockReturnValue(storeObj as unknown as ReturnType<typeof useTodayStore>)
+
+  vi.mocked(useBoardsStore).mockReturnValue({
+    list: [{ id: 10, name: 'Main' }],
+    loading: false,
+    error: null,
+    defaultBoardId: 10,
+    load: vi.fn().mockResolvedValue(undefined),
+    create: vi.fn(),
+    update: vi.fn(),
+    remove: vi.fn(),
+  } as unknown as ReturnType<typeof useBoardsStore>)
+
+  vi.mocked(api.boards.getBoard).mockResolvedValue({
+    id: 10,
+    name: 'Main',
+    columns: [{ id: 99, name: 'Backlog', position: 0, tasks: [], wip_limit: null }],
+  } as any)
+
+  return {
+    wrapper: mount(TodayView, { global: { plugins: [pinia] } }),
+    storeObj,
+  }
+}
+
+describe('SCN-8: new row appears in Today list after quick-add success', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+  })
+
+  it('renders the new task row and clears the input after successful add', async () => {
+    const newTask = makeTodayTask(42, 0, 'Deploy hotfix')
+    vi.mocked(api.tasks.createTask).mockResolvedValue({} as any)
+    // First call (mount): empty list. Second call (after create): contains new task.
+    vi.mocked(api.tasks.listToday)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([newTask])
+
+    const { wrapper } = mountTodayViewWithReactiveStore([])
+    await flushPromises()
+
+    // Empty state — use the empty-state input
+    const input = wrapper.find('#today-quick-add')
+    expect(input.exists()).toBe(true)
+
+    await input.setValue('Deploy hotfix')
+    await wrapper.find('.today-view__quick-btn').trigger('click')
+    await flushPromises()
+
+    // Task row should now be visible
+    const rows = wrapper.findAll('.today-row__title')
+    expect(rows.some((r) => r.text() === 'Deploy hotfix')).toBe(true)
+
+    // Input in the populated state (bottom bar) should be cleared
+    const bottomInput = wrapper.find('#today-bottom-add')
+    expect((bottomInput.element as HTMLInputElement).value).toBe('')
+  })
+
+  it('creates with committed_on matching localDateString()', async () => {
+    const newTask = makeTodayTask(55, 0, 'Review PR')
+    vi.mocked(api.tasks.createTask).mockResolvedValue({} as any)
+    vi.mocked(api.tasks.listToday)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([newTask])
+
+    const { wrapper } = mountTodayViewWithReactiveStore([])
+    await flushPromises()
+
+    await wrapper.find('#today-quick-add').setValue('Review PR')
+    await wrapper.find('.today-view__quick-btn').trigger('click')
+    await flushPromises()
+
+    expect(vi.mocked(api.tasks.createTask)).toHaveBeenCalledWith(
+      expect.objectContaining({ committed_on: localDateString() })
+    )
+  })
+})

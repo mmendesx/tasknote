@@ -56,7 +56,10 @@ async function submitQuickAdd(): Promise<void> {
     quickAddError.value = 'Title is required'
     return
   }
-  if (!defaultColumnId.value) return
+  if (!defaultColumnId.value) {
+    quickAddError.value = 'Create a board first to add today\'s tasks.'
+    return
+  }
 
   isQuickAdding.value = true
   quickAddError.value = null
@@ -134,7 +137,7 @@ async function handleToggleDone(id: number): Promise<void> {
         <p class="today-view__empty-message">
           Nothing committed for today &mdash; add something from standup.
         </p>
-        <div v-if="defaultColumnId" class="today-view__quick-add">
+        <div class="today-view__quick-add">
           <label for="today-quick-add" class="sr-only">Add a task for today</label>
           <input
             id="today-quick-add"
@@ -142,15 +145,15 @@ async function handleToggleDone(id: number): Promise<void> {
             type="text"
             class="today-view__quick-input"
             placeholder="Add a task for today…"
-            :disabled="isQuickAdding"
+            :disabled="isQuickAdding || !defaultColumnId"
             :aria-invalid="quickAddError !== null"
-            :aria-describedby="quickAddError ? 'today-quick-add-error' : undefined"
+            :aria-describedby="quickAddError ? 'today-quick-add-error' : 'today-quick-add-hint'"
             @keydown="handleQuickAddKeydown"
           />
           <button
             type="button"
             class="today-view__quick-btn"
-            :disabled="isQuickAdding || !quickAddTitle.trim()"
+            :disabled="isQuickAdding || !quickAddTitle.trim() || !defaultColumnId"
             @click="submitQuickAdd"
           >
             {{ isQuickAdding ? 'Adding…' : 'Add' }}
@@ -163,10 +166,14 @@ async function handleToggleDone(id: number): Promise<void> {
           >
             {{ quickAddError }}
           </p>
+          <p
+            v-else-if="!defaultColumnId"
+            id="today-quick-add-hint"
+            class="today-view__empty-hint"
+          >
+            Create a board first to add today's tasks.
+          </p>
         </div>
-        <p v-else class="today-view__empty-hint">
-          Create a board with at least one column to start adding tasks.
-        </p>
       </div>
     </template>
 
@@ -237,7 +244,7 @@ async function handleToggleDone(id: number): Promise<void> {
         </li>
       </ul>
 
-      <div v-if="defaultColumnId" class="today-view__add-row">
+      <div class="today-view__add-row">
         <label for="today-bottom-add" class="sr-only">Add a task for today</label>
         <input
           id="today-bottom-add"
@@ -245,15 +252,15 @@ async function handleToggleDone(id: number): Promise<void> {
           type="text"
           class="today-view__quick-input"
           placeholder="Add a task for today…"
-          :disabled="isQuickAdding"
+          :disabled="isQuickAdding || !defaultColumnId"
           :aria-invalid="quickAddError !== null"
-          :aria-describedby="quickAddError ? 'today-bottom-add-error' : undefined"
+          :aria-describedby="quickAddError ? 'today-bottom-add-error' : (!defaultColumnId ? 'today-bottom-add-hint' : undefined)"
           @keydown="handleQuickAddKeydown"
         />
         <button
           type="button"
           class="today-view__quick-btn"
-          :disabled="isQuickAdding || !quickAddTitle.trim()"
+          :disabled="isQuickAdding || !quickAddTitle.trim() || !defaultColumnId"
           @click="submitQuickAdd"
         >
           {{ isQuickAdding ? 'Adding…' : 'Add' }}
@@ -265,6 +272,13 @@ async function handleToggleDone(id: number): Promise<void> {
           class="today-view__quick-error"
         >
           {{ quickAddError }}
+        </p>
+        <p
+          v-else-if="!defaultColumnId"
+          id="today-bottom-add-hint"
+          class="today-view__empty-hint"
+        >
+          Create a board first to add today's tasks.
         </p>
       </div>
     </template>

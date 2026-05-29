@@ -80,22 +80,43 @@ export const useCurrentBoardStore = defineStore('currentBoard', () => {
     await optimistic(
       () => {
         if (!board.value) return
-        
+
         let movingTask: Task | undefined
+        let fromColumnId: number | undefined
+
         for (const col of board.value.columns) {
           const idx = col.tasks.findIndex((t) => t.id === taskId)
           if (idx !== -1) {
-            ;[movingTask] = col.tasks.splice(idx, 1)
+            movingTask = col.tasks[idx]
+            fromColumnId = col.id
             break
           }
         }
-        if (!movingTask) return
+        if (!movingTask || fromColumnId === undefined) return
 
-        const targetCol = board.value.columns.find((c) => c.id === toColumnId)
-        if (targetCol) {
-          movingTask.column_id = toColumnId
-          movingTask.position = toPosition
-          targetCol.tasks.splice(toPosition, 0, movingTask)
+        const updatedTask: Task = { ...movingTask, column_id: toColumnId, position: toPosition }
+
+        if (fromColumnId === toColumnId) {
+          // Same-column reorder: one new array
+          const col = board.value.columns.find((c) => c.id === fromColumnId)!
+          const without = col.tasks.filter((t) => t.id !== taskId)
+          const clamped = Math.min(toPosition, without.length)
+          const reordered = [...without.slice(0, clamped), updatedTask, ...without.slice(clamped)]
+          col.tasks = reordered
+        } else {
+          // Cross-column move: replace both task arrays
+          board.value.columns = board.value.columns.map((col) => {
+            if (col.id === fromColumnId) {
+              return { ...col, tasks: col.tasks.filter((t) => t.id !== taskId) }
+            }
+            if (col.id === toColumnId) {
+              const without = col.tasks.filter((t) => t.id !== taskId)
+              const clamped = Math.min(toPosition, without.length)
+              const inserted = [...without.slice(0, clamped), updatedTask, ...without.slice(clamped)]
+              return { ...col, tasks: inserted }
+            }
+            return col
+          })
         }
       },
       () => api.tasks.moveTask({ task_id: taskId, column_id: toColumnId, position: toPosition }),
@@ -149,14 +170,15 @@ export const useCurrentBoardStore = defineStore('currentBoard', () => {
     if (!col) return undefined
 
     const snap = snapshot(board.value)
-    
-    col.tasks.unshift(tempTask)
+
+    // Replace reference so watchers fire
+    col.tasks = [tempTask, ...col.tasks]
 
     try {
       const realTask = await api.tasks.createTask(dto)
-      
-      const idx = col.tasks.findIndex((t) => t.id === tempId)
-      if (idx !== -1) col.tasks.splice(idx, 1, realTask)
+
+      // Swap temp → real by replacing the array reference again
+      col.tasks = col.tasks.map((t) => (t.id === tempId ? realTask : t))
       return realTask
     } catch (err) {
       board.value = snap
@@ -173,9 +195,9 @@ export const useCurrentBoardStore = defineStore('currentBoard', () => {
       () => {
         if (!board.value) return
         for (const col of board.value.columns) {
-          const task = col.tasks.find((t) => t.id === taskId)
-          if (task) {
-            Object.assign(task, dto)
+          const idx = col.tasks.findIndex((t) => t.id === taskId)
+          if (idx !== -1) {
+            col.tasks = col.tasks.map((t) => (t.id === taskId ? { ...t, ...dto } : t))
             break
           }
         }
@@ -192,9 +214,8 @@ export const useCurrentBoardStore = defineStore('currentBoard', () => {
       () => {
         if (!board.value) return
         for (const col of board.value.columns) {
-          const idx = col.tasks.findIndex((t) => t.id === taskId)
-          if (idx !== -1) {
-            col.tasks.splice(idx, 1)
+          if (col.tasks.some((t) => t.id === taskId)) {
+            col.tasks = col.tasks.filter((t) => t.id !== taskId)
             break
           }
         }
@@ -211,11 +232,12 @@ export const useCurrentBoardStore = defineStore('currentBoard', () => {
       () => {
         if (!board.value) return
         for (const col of board.value.columns) {
-          const task = col.tasks.find((t) => t.id === taskId) as
-            | (Task & { tag_ids?: number[] })
-            | undefined
-          if (task) {
-            task.tag_ids = [...(task.tag_ids ?? []), tagId]
+          if (col.tasks.some((t) => t.id === taskId)) {
+            col.tasks = col.tasks.map((t) => {
+              if (t.id !== taskId) return t
+              const typed = t as Task & { tag_ids?: number[] }
+              return { ...typed, tag_ids: [...(typed.tag_ids ?? []), tagId] }
+            })
             break
           }
         }
@@ -232,11 +254,12 @@ export const useCurrentBoardStore = defineStore('currentBoard', () => {
       () => {
         if (!board.value) return
         for (const col of board.value.columns) {
-          const task = col.tasks.find((t) => t.id === taskId) as
-            | (Task & { tag_ids?: number[] })
-            | undefined
-          if (task) {
-            task.tag_ids = (task.tag_ids ?? []).filter((id) => id !== tagId)
+          if (col.tasks.some((t) => t.id === taskId)) {
+            col.tasks = col.tasks.map((t) => {
+              if (t.id !== taskId) return t
+              const typed = t as Task & { tag_ids?: number[] }
+              return { ...typed, tag_ids: (typed.tag_ids ?? []).filter((id) => id !== tagId) }
+            })
             break
           }
         }
