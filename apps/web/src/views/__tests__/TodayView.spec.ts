@@ -188,8 +188,9 @@ describe('TodayView — row actions', () => {
     const tasks = [makeTodayTask(1, 0, 'My Task')]
     const wrapper = mountTodayView(tasks)
 
-    const doneBtn = wrapper.find('.today-row__done-btn')
+    const doneBtn = wrapper.find('.today-row__done')
     expect(doneBtn.attributes('aria-label')).toContain("Mark 'My Task' as done")
+    expect(doneBtn.text()).toContain('Done')
   })
 
   it('uncommit button has accessible aria-label', () => {

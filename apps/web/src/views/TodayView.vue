@@ -49,6 +49,7 @@ function closeDrawer(): void {
 const quickAddTitle = ref('')
 const isQuickAdding = ref(false)
 const quickAddError = ref<string | null>(null)
+const completingIds = ref<Set<number>>(new Set())
 
 async function submitQuickAdd(): Promise<void> {
   const trimmed = quickAddTitle.value.trim()
@@ -98,10 +99,16 @@ async function handleUncommit(id: number): Promise<void> {
 }
 
 async function handleToggleDone(id: number): Promise<void> {
+  completingIds.value = new Set(completingIds.value).add(id)
   try {
+    // toggleDone marks the task complete and removes it from the today list
     await todayStore.toggleDone(id)
   } catch {
     // error state surfaced via store.error
+  } finally {
+    const next = new Set(completingIds.value)
+    next.delete(id)
+    completingIds.value = next
   }
 }
 </script>
@@ -178,72 +185,6 @@ async function handleToggleDone(id: number): Promise<void> {
     </template>
 
     <template v-else>
-      <ul class="today-list" role="list" aria-label="Today's tasks">
-        <li
-          v-for="task in todayStore.list"
-          :key="task.id"
-          class="today-row"
-        >
-          <button
-            type="button"
-            class="today-row__done-btn"
-            :aria-label="`Mark '${task.title}' as done`"
-            @click="handleToggleDone(task.id)"
-          >
-            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" aria-hidden="true">
-              <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.5" />
-            </svg>
-          </button>
-
-          <button
-            type="button"
-            class="today-row__body"
-            :aria-label="`Open task: ${task.title}`"
-            @click="openTask(task.id)"
-          >
-            <span class="today-row__title">{{ task.title }}</span>
-            <span class="today-row__meta">
-              <span
-                v-if="task.carried_days > 0"
-                class="today-row__carried"
-                :aria-label="`Carried ${task.carried_days} day${task.carried_days === 1 ? '' : 's'}`"
-              >
-                carried {{ task.carried_days }}d
-              </span>
-              <span
-                v-if="task.due_date"
-                class="today-row__due"
-              >
-                {{ String(task.due_date).slice(0, 10) }}
-              </span>
-              <span
-                class="today-row__priority"
-                :data-priority="task.priority"
-              >
-                {{ task.priority }}
-              </span>
-            </span>
-          </button>
-
-          <button
-            type="button"
-            class="today-row__uncommit-btn"
-            :aria-label="`Remove '${task.title}' from today`"
-            title="Remove from today"
-            @click="handleUncommit(task.id)"
-          >
-            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" aria-hidden="true">
-              <path
-                d="M3 8h10"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linecap="round"
-              />
-            </svg>
-          </button>
-        </li>
-      </ul>
-
       <div class="today-view__add-row">
         <label for="today-bottom-add" class="sr-only">Add a task for today</label>
         <input
@@ -281,6 +222,80 @@ async function handleToggleDone(id: number): Promise<void> {
           Create a board first to add today's tasks.
         </p>
       </div>
+
+      <ul class="today-list" role="list" aria-label="Today's tasks">
+        <li
+          v-for="task in todayStore.list"
+          :key="task.id"
+          class="today-row"
+        >
+          <button
+            type="button"
+            class="today-row__body"
+            :aria-label="`Open task: ${task.title}`"
+            @click="openTask(task.id)"
+          >
+            <span class="today-row__title">{{ task.title }}</span>
+            <span class="today-row__meta">
+              <span
+                v-if="task.carried_days > 0"
+                class="today-row__carried"
+                :aria-label="`Carried ${task.carried_days} day${task.carried_days === 1 ? '' : 's'}`"
+              >
+                carried {{ task.carried_days }}d
+              </span>
+              <span
+                v-if="task.due_date"
+                class="today-row__due"
+              >
+                {{ String(task.due_date).slice(0, 10) }}
+              </span>
+              <span
+                class="today-row__priority"
+                :data-priority="task.priority"
+              >
+                {{ task.priority }}
+              </span>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            class="today-row__done"
+            :aria-label="`Mark '${task.title}' as done`"
+            :disabled="completingIds.has(task.id)"
+            @click="handleToggleDone(task.id)"
+          >
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" aria-hidden="true">
+              <path
+                d="M3 8.5l3.5 3.5L13 5"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            {{ completingIds.has(task.id) ? 'Done…' : 'Done' }}
+          </button>
+
+          <button
+            type="button"
+            class="today-row__uncommit-btn"
+            :aria-label="`Remove '${task.title}' from today`"
+            title="Remove from today"
+            @click="handleUncommit(task.id)"
+          >
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" aria-hidden="true">
+              <path
+                d="M3 8h10"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+              />
+            </svg>
+          </button>
+        </li>
+      </ul>
     </template>
 
     <TaskDrawer
@@ -443,24 +458,35 @@ async function handleToggleDone(id: number): Promise<void> {
   background: var(--color-surface-elevated);
 }
 
-.today-row__done-btn {
-  display: flex;
+.today-row__done {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
+  gap: 5px;
   flex-shrink: 0;
-  width: 28px;
   height: 28px;
-  border-radius: 50%;
-  color: var(--color-text-muted);
+  padding: 0 12px;
+  border-radius: var(--radius-control);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-status-done, #4ade80);
   background: transparent;
-  border: none;
+  border: 1px solid var(--color-status-done, #4ade80);
   cursor: pointer;
-  padding: 0;
-  transition: color var(--motion-duration-fast);
+  transition:
+    color var(--motion-duration-fast),
+    background-color var(--motion-duration-fast),
+    border-color var(--motion-duration-fast),
+    opacity var(--motion-duration-fast);
 }
 
-.today-row__done-btn:hover {
-  color: var(--color-status-done);
+.today-row__done:hover {
+  color: var(--color-bg);
+  background: var(--color-status-done, #4ade80);
+}
+
+.today-row__done:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .today-row__body {
