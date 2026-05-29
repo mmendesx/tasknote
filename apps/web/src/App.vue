@@ -110,7 +110,11 @@ watch(routeLabel, (label) => {
 
   <DefaultLayout>
     <RouterView v-slot="{ Component }">
-      <Transition name="page" mode="out-in">
+      <!-- No mode="out-in": it deadlocked after the Settings view — the leaving
+           view's transitionend never fired, so the next view stayed unmounted
+           (blank main content). Default simultaneous transition keeps the fade
+           without gating the incoming view on the outgoing one's transition end. -->
+      <Transition name="page">
         <component :is="Component" :key="$route.name" />
       </Transition>
     </RouterView>
