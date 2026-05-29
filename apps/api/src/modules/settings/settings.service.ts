@@ -31,7 +31,7 @@ function toResponse(entity: SettingsEntity): SettingsResponse {
     display_name: entity.displayName || null,
     theme: entity.theme,
     accent: entity.accent,
-    default_board_id: entity.defaultBoardId,
+    default_board_id: entity.defaultBoardId ?? null,
     onboarded_at: entity.onboardedAt ? entity.onboardedAt.toISOString() : null,
     timezone: entity.timezone,
   };

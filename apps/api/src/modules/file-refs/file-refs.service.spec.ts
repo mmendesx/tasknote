@@ -7,6 +7,8 @@ import * as childProcess from 'child_process';
 import { FileRefEntity } from './entities/file-ref.entity';
 import { FileRefsService } from './file-refs.service';
 
+vi.mock('child_process', () => ({ spawn: vi.fn() }));
+
 function buildDataSource(): DataSource {
   return new DataSource({
     type: 'better-sqlite3',
@@ -266,9 +268,8 @@ describe('FileRefsService', () => {
       const fakeChild = {
         unref: vi.fn(),
       };
-      const spawnSpy = vi
-        .spyOn(childProcess, 'spawn')
-        .mockReturnValue(fakeChild as unknown as ReturnType<typeof childProcess.spawn>);
+      const spawnSpy = vi.mocked(childProcess.spawn);
+      spawnSpy.mockReturnValue(fakeChild as unknown as ReturnType<typeof childProcess.spawn>);
 
       const result = await service.openFile(ref.id);
 

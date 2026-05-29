@@ -172,6 +172,52 @@ describe('TagsService', () => {
       const taskAfter = await tasksRepo.findOne({ where: { id: task.id }, relations: ['tags'] });
       expect(taskAfter!.tags).toHaveLength(0);
     });
+
+    it('SCN-2: tag linked to 3 tasks — all task_tags rows removed on delete', async () => {
+      const { column } = await seedBoardColumnTask(dataSource);
+      const tag = await service.createTag({ name: 'multi-task', color: '#AABBCC' });
+
+      // Create 3 tasks on the existing column and link the tag to each
+      const task1 = await tasksRepo.save(tasksRepo.create({ columnId: column.id, title: 'Task A', position: 1 }));
+      const task2 = await tasksRepo.save(tasksRepo.create({ columnId: column.id, title: 'Task B', position: 2 }));
+      const task3 = await tasksRepo.save(tasksRepo.create({ columnId: column.id, title: 'Task C', position: 3 }));
+
+      await service.addTagToTask(task1.id, tag.id);
+      await service.addTagToTask(task2.id, tag.id);
+      await service.addTagToTask(task3.id, tag.id);
+
+      // Confirm 3 join rows exist
+      const rowsBefore = await dataSource.query(
+        'SELECT COUNT(*) AS count FROM task_tags WHERE tag_id = ?',
+        [tag.id],
+      ) as Array<{ count: number | string }>;
+      expect(Number(rowsBefore[0].count)).toBe(3);
+
+      await service.removeTag(tag.id);
+
+      // All join rows must be gone
+      const rowsAfter = await dataSource.query(
+        'SELECT COUNT(*) AS count FROM task_tags WHERE tag_id = ?',
+        [tag.id],
+      ) as Array<{ count: number | string }>;
+      expect(Number(rowsAfter[0].count)).toBe(0);
+
+      // Each task should show 0 tags
+      for (const t of [task1, task2, task3]) {
+        const reloaded = await tasksRepo.findOne({ where: { id: t.id }, relations: ['tags'] });
+        expect(reloaded!.tags).toHaveLength(0);
+      }
+    });
+
+    it('SCN-3: tag linked to no tasks — removeTag succeeds without error', async () => {
+      const tag = await service.createTag({ name: 'orphan', color: '#112233' });
+
+      // No addTagToTask calls — tag has zero task_tags rows
+      await expect(service.removeTag(tag.id)).resolves.toBeUndefined();
+
+      const tags = await service.listTags();
+      expect(tags).toHaveLength(0);
+    });
   });
 
   describe('addTagToTask', () => {

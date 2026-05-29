@@ -73,11 +73,21 @@ export class TagsService {
   async removeTag(id: number): Promise<void> {
     this.logger.log(`removeTag: deleting tag id=${id}`);
 
-    const result = await this.tagsRepo.delete(id);
-    if (result.affected === 0) {
-      this.logger.warn(`removeTag: tag id=${id} not found`);
-      throw new NotFoundException(`Tag with id '${id}' not found`);
-    }
+    await this.dataSource.transaction(async (manager) => {
+      // Delete join rows first to avoid FK violation — task_tags has no ON DELETE CASCADE
+      await manager
+        .createQueryBuilder()
+        .delete()
+        .from('task_tags')
+        .where('tag_id = :id', { id })
+        .execute();
+
+      const result = await manager.delete(TagEntity, id);
+      if (result.affected === 0) {
+        this.logger.warn(`removeTag: tag id=${id} not found`);
+        throw new NotFoundException(`Tag with id '${id}' not found`);
+      }
+    });
 
     this.logger.log(`removeTag: tag id=${id} deleted (cascade removed task_tags rows)`);
   }
