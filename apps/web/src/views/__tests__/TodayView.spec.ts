@@ -35,9 +35,11 @@ vi.mock('@/features/board/TaskDrawer.vue', () => ({
   },
 }))
 
+import { flushPromises } from '@vue/test-utils'
 import TodayView from '../TodayView.vue'
-import { useTodayStore } from '@/stores/today'
+import { useTodayStore, localDateString } from '@/stores/today'
 import { useBoardsStore } from '@/stores/boards'
+import * as api from '@/api'
 import type { TodayTask } from '@/api/tasks'
 
 function makeTodayTask(id: number, carried_days: number, title = `Task ${id}`): TodayTask {
@@ -196,5 +198,117 @@ describe('TodayView — row actions', () => {
 
     const uncommitBtn = wrapper.find('.today-row__uncommit-btn')
     expect(uncommitBtn.attributes('aria-label')).toContain("Remove 'My Task' from today")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// SCN-7 — quick-add from Today auto-commits
+// ---------------------------------------------------------------------------
+
+function mountTodayViewWithBoard(tasks: TodayTask[] = []) {
+  const pinia = createPinia()
+  setActivePinia(pinia)
+
+  const loadToday = vi.fn().mockResolvedValue(undefined)
+  const uncommit = vi.fn().mockResolvedValue(undefined)
+  const toggleDone = vi.fn().mockResolvedValue(undefined)
+
+  vi.mocked(useTodayStore).mockReturnValue({
+    list: tasks,
+    loading: false,
+    error: null,
+    loadToday,
+    uncommit,
+    toggleDone,
+  } as unknown as ReturnType<typeof useTodayStore>)
+
+  vi.mocked(useBoardsStore).mockReturnValue({
+    list: [{ id: 10, name: 'Main' }],
+    loading: false,
+    error: null,
+    defaultBoardId: 10,
+    load: vi.fn().mockResolvedValue(undefined),
+    create: vi.fn(),
+    update: vi.fn(),
+    remove: vi.fn(),
+  } as unknown as ReturnType<typeof useBoardsStore>)
+
+  vi.mocked(api.boards.getBoard).mockResolvedValue({
+    id: 10,
+    name: 'Main',
+    columns: [{ id: 99, name: 'Backlog', position: 0, tasks: [], wip_limit: null }],
+  } as any)
+
+  return { wrapper: mount(TodayView, { global: { plugins: [pinia] } }), loadToday }
+}
+
+describe('SCN-7: quick-add from Today stamps committed_on = today', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+  })
+
+  it('SCN-7: calls createTask with committed_on equal to today local date string', async () => {
+    vi.mocked(api.tasks.createTask).mockResolvedValue({} as any)
+    vi.mocked(api.tasks.listToday).mockResolvedValue([])
+
+    const { wrapper } = mountTodayViewWithBoard([])
+    await flushPromises()
+
+    const input = wrapper.find('#today-quick-add')
+    expect(input.exists()).toBe(true)
+
+    await input.setValue('Write tests')
+    await wrapper.find('.today-view__quick-btn').trigger('click')
+    await flushPromises()
+
+    expect(vi.mocked(api.tasks.createTask)).toHaveBeenCalledOnce()
+    expect(vi.mocked(api.tasks.createTask)).toHaveBeenCalledWith(
+      expect.objectContaining({ committed_on: localDateString() })
+    )
+  })
+
+  it('SCN-7: calls createTask with the submitted title', async () => {
+    vi.mocked(api.tasks.createTask).mockResolvedValue({} as any)
+    vi.mocked(api.tasks.listToday).mockResolvedValue([])
+
+    const { wrapper } = mountTodayViewWithBoard([])
+    await flushPromises()
+
+    await wrapper.find('#today-quick-add').setValue('Stand-up prep')
+    await wrapper.find('.today-view__quick-btn').trigger('click')
+    await flushPromises()
+
+    expect(vi.mocked(api.tasks.createTask)).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Stand-up prep' })
+    )
+  })
+
+  it('SCN-7: refreshes the today list after task creation', async () => {
+    vi.mocked(api.tasks.createTask).mockResolvedValue({} as any)
+    vi.mocked(api.tasks.listToday).mockResolvedValue([])
+
+    const { wrapper, loadToday } = mountTodayViewWithBoard([])
+    await flushPromises()
+
+    await wrapper.find('#today-quick-add').setValue('Morning review')
+    await wrapper.find('.today-view__quick-btn').trigger('click')
+    await flushPromises()
+
+    // loadToday is called once on mount, then again after create
+    expect(loadToday).toHaveBeenCalledTimes(2)
+    expect(loadToday).toHaveBeenLastCalledWith(localDateString())
+  })
+
+  it('SCN-7: does not call createTask when title is empty', async () => {
+    vi.mocked(api.tasks.createTask).mockResolvedValue({} as any)
+
+    const { wrapper } = mountTodayViewWithBoard([])
+    await flushPromises()
+
+    await wrapper.find('#today-quick-add').setValue('   ')
+    await wrapper.find('.today-view__quick-btn').trigger('click')
+    await flushPromises()
+
+    expect(vi.mocked(api.tasks.createTask)).not.toHaveBeenCalled()
   })
 })

@@ -23,11 +23,20 @@ const titleField = z
 
 const isoDateField = z.string().datetime({ message: 'Must be a valid ISO 8601 date-time string' });
 
+// A YYYY-MM-DD calendar day that is also a REAL date.
+// The bare regex validates shape only — "2026-13-40" passes it but is not a date,
+// and "2026-02-30" silently rolls over to Mar 2 when parsed. The round-trip refine
+// rejects both: the parsed day re-serialized must equal the input.
+const calendarDayField = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be a YYYY-MM-DD date string')
+  .refine((s) => {
+    const d = new Date(`${s}T12:00:00.000Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+  }, 'Must be a real calendar date');
+
 // Accepts either YYYY-MM-DD (calendar day) or a full ISO 8601 datetime string (backward compat).
-const calendarOrIsoDateField = z.union([
-  z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be a YYYY-MM-DD date string'),
-  isoDateField,
-]);
+const calendarOrIsoDateField = z.union([calendarDayField, isoDateField]);
 
 const priorityField = z.enum(PRIORITY_VALUES);
 const themeField = z.enum(THEME_VALUES);
@@ -98,11 +107,11 @@ export type UpdateTaskDto = z.infer<typeof UpdateTaskDtoSchema>;
 export type MoveTaskDto = z.infer<typeof MoveTaskDtoSchema>;
 
 export const TodayQueryDtoSchema = z.object({
-  today: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  today: calendarDayField,
 });
 
 export const CommitTaskDtoSchema = z.object({
-  today: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  today: calendarDayField,
 });
 
 export type TodayQueryDto = z.infer<typeof TodayQueryDtoSchema>;

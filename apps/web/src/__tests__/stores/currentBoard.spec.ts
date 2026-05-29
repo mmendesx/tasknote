@@ -160,3 +160,72 @@ describe('useCurrentBoardStore.moveTask — optimistic update', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// SCN-8 — quick-add from board does NOT auto-commit (store layer)
+//
+// QuickAddTaskInput emits a plain title string; the actual API call happens
+// inside currentBoard.createTask. This is where the "no committed_on" guarantee
+// must be verified — if this test fails, the board path has a real bug.
+// ---------------------------------------------------------------------------
+
+describe('SCN-8: quick-add from board does NOT auto-commit', () => {
+  let store: ReturnType<typeof useCurrentBoardStore>;
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    store = useCurrentBoardStore();
+    store.board = makeBoard();
+    vi.resetAllMocks();
+  });
+
+  it('SCN-8: createTask passes the dto to the API without committed_on', async () => {
+    vi.mocked(api.tasks.createTask).mockResolvedValueOnce({
+      id: 200,
+      column_id: 10,
+      title: 'New task',
+      description_md: null,
+      priority: 'low',
+      due_date: null,
+      position: 0,
+      archived_at: null,
+      completed_at: null,
+      created_at: new Date(),
+      updated_at: new Date(),
+    } as never);
+
+    await store.createTask(10, { title: 'New task', column_id: 10, priority: 'low' });
+
+    expect(api.tasks.createTask).toHaveBeenCalledOnce();
+    const dto = vi.mocked(api.tasks.createTask).mock.calls[0][0];
+    expect((dto as Record<string, unknown>).committed_on).toBeUndefined();
+  });
+
+  it('SCN-8: createTask with an explicit null committed_on does not set a date', async () => {
+    vi.mocked(api.tasks.createTask).mockResolvedValueOnce({
+      id: 201,
+      column_id: 10,
+      title: 'Another task',
+      description_md: null,
+      priority: 'medium',
+      due_date: null,
+      position: 0,
+      archived_at: null,
+      completed_at: null,
+      created_at: new Date(),
+      updated_at: new Date(),
+    } as never);
+
+    await store.createTask(10, {
+      title: 'Another task',
+      column_id: 10,
+      priority: 'medium',
+      committed_on: null as any,
+    });
+
+    const dto = vi.mocked(api.tasks.createTask).mock.calls[0][0];
+    // Whether callers pass null or omit the field, no date string must be sent
+    const committedOn = (dto as Record<string, unknown>).committed_on;
+    expect(committedOn == null).toBe(true);
+  });
+});

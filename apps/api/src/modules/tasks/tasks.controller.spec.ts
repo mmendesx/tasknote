@@ -39,7 +39,9 @@ describe('TasksController — SCN-5: GET /tasks/today rejects bad/missing today'
     const service = buildStubService();
     const controller = new TasksController(service);
 
-    const badValues = ['28-05-2026', '2026-5-28', 'today', '', 'not-a-date'];
+    // Includes shape-valid-but-impossible dates: 2026-13-40 would 500 (RangeError),
+    // 2026-02-30 would silently roll to Mar 2. Both must 400 INVALID_TODAY.
+    const badValues = ['28-05-2026', '2026-5-28', 'today', '', 'not-a-date', '2026-13-40', '2026-02-30', '2026-00-10'];
     for (const bad of badValues) {
       expect(() => controller.listToday(bad)).toThrow(BadRequestException);
     }
