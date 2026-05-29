@@ -4,6 +4,7 @@ import { ref, computed } from 'vue'
 import { Button, Input, DatePicker, Select } from '@tasknote/ui'
 import type { SelectOption } from '@tasknote/ui'
 import MilkdownEditor from './MilkdownEditor.vue'
+import PriorityChips from './PriorityChips.vue'
 import type { Task, ColumnWithTasks, Priority } from '@tasknote/shared'
 
 const props = defineProps<{
@@ -25,13 +26,6 @@ const emit = defineEmits<{
 }>()
 
 const archiveConfirm = ref(false)
-
-const priorityOptions: SelectOption[] = [
-  { value: 'low',    label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high',   label: 'High' },
-  { value: 'urgent', label: 'Urgent' },
-]
 
 const columnOptions = computed<SelectOption[]>(() =>
   props.columns.map((c) => ({ value: c.id, label: c.name }))
@@ -65,13 +59,13 @@ function formatDate(d: Date | string | null | undefined): string {
       />
     </div>
 
-    <Select
-      id="task-priority"
-      label="Priority"
-      :model-value="priority"
-      :options="priorityOptions"
-      @update:model-value="emit('update:priority', $event as Priority)"
-    />
+    <div class="flex flex-col gap-1">
+      <label class="text-xs font-medium text-text-secondary">Priority</label>
+      <PriorityChips
+        :model-value="priority"
+        @update:model-value="emit('update:priority', $event)"
+      />
+    </div>
 
     <DatePicker
       :model-value="dueDate"

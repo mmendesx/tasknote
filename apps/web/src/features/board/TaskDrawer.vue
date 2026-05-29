@@ -2,13 +2,14 @@
 
 import { ref, watch, computed } from 'vue'
 import { TabsRoot, TabsList, TabsTrigger, TabsContent } from 'reka-ui'
-import { Drawer, DatePicker, Button, Select, useToast } from '@tasknote/ui'
+import { Dialog, DatePicker, Button, Select, useToast } from '@tasknote/ui'
 import type { SelectOption } from '@tasknote/ui'
 import TaskDetailsTab from './TaskDetailsTab.vue'
 import TaskNotesTab from './TaskNotesTab.vue'
 import TaskFilesTab from './TaskFilesTab.vue'
 import TagPicker from '@/features/tags/TagPicker.vue'
 import MilkdownEditor from '@/features/editor/MilkdownEditor.vue'
+import PriorityChips from './PriorityChips.vue'
 import { useCurrentBoardStore } from '@/stores/currentBoard'
 import { useNotesStore } from '@/stores/notes'
 import { useFileRefsStore } from '@/stores/fileRefs'
@@ -70,7 +71,7 @@ async function saveNewTask(): Promise<void> {
       emit('created', created.id)
     }
   } catch {
-    
+
   } finally {
     isSavingCreate.value = false
   }
@@ -83,15 +84,9 @@ const priority  = ref<Priority>('medium')
 const dueDate   = ref('')
 const loading   = ref(false)
 
-const columns        = computed(() => boardStore.board?.columns ?? [])
-const drawerTitle    = computed(() => isCreateMode.value ? 'New task' : (task.value?.title ?? 'Task'))
+const columns      = computed(() => boardStore.board?.columns ?? [])
+const dialogTitle  = computed(() => isCreateMode.value ? 'New task' : (task.value?.title ?? 'Task'))
 
-const priorityOptions: SelectOption[] = [
-  { value: 'low',    label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high',   label: 'High' },
-  { value: 'urgent', label: 'Urgent' },
-]
 const columnOptions = computed<SelectOption[]>(() =>
   columns.value.map((c) => ({ value: c.id, label: c.name }))
 )
@@ -112,7 +107,7 @@ const tagIds = computed<number[]>(() => {
 })
 
 function onTagIdsChange(ids: number[]): void {
-  
+
   void ids
 }
 
@@ -208,41 +203,37 @@ async function onArchive(): Promise<void> {
 </script>
 
 <template>
-  <Drawer
+  <Dialog
     :open="open"
-    :title="drawerTitle"
-    width="32rem"
+    :title="dialogTitle"
     @update:open="emit('update:open', $event)"
   >
-    
-    <template v-if="isCreateMode">
-      <form id="task-create-form" class="create-form" @submit.prevent="saveNewTask">
-        <div class="create-form__field">
-          <label for="create-title" class="create-form__label">Title <span class="create-form__required">*</span></label>
-          <input
-            id="create-title"
-            v-model="createTitle"
-            type="text"
-            class="create-form__input"
-            placeholder="Task title"
-            required
-            autofocus
-          />
-        </div>
+    <div class="task-modal__body">
+      <template v-if="isCreateMode">
+        <form id="task-create-form" class="create-form" @submit.prevent="saveNewTask">
+          <div class="create-form__field">
+            <label for="create-title" class="create-form__label">Title <span class="create-form__required">*</span></label>
+            <input
+              id="create-title"
+              v-model="createTitle"
+              type="text"
+              class="create-form__input"
+              placeholder="Task title"
+              required
+              autofocus
+            />
+          </div>
 
-        <div class="create-form__field create-form__field--desc">
-          <label class="create-form__label">Description</label>
-          <MilkdownEditor v-model="createDescMd" />
-        </div>
+          <div class="create-form__field create-form__field--desc">
+            <label class="create-form__label">Description</label>
+            <MilkdownEditor v-model="createDescMd" />
+          </div>
 
-        <div class="create-form__row">
-          <Select
-            id="create-priority"
-            label="Priority"
-            :model-value="createPriority"
-            :options="priorityOptions"
-            @update:model-value="createPriority = $event as Priority"
-          />
+          <div class="create-form__field">
+            <label class="create-form__label">Priority</label>
+            <PriorityChips v-model="createPriority" />
+          </div>
+
           <Select
             id="create-column"
             label="Column"
@@ -250,84 +241,83 @@ async function onArchive(): Promise<void> {
             :options="columnOptions"
             @update:model-value="createColumnId = Number($event)"
           />
-        </div>
 
-        <div class="create-form__field">
-          <DatePicker
-            v-model="createDueDate"
-            label="Due date"
-          />
-        </div>
-
-      </form>
-    </template>
-
-    <div v-else-if="loading" class="flex items-center justify-center py-12 text-text-muted text-sm">
-      Loading…
-    </div>
-
-    <template v-else-if="task">
-      <TabsRoot default-value="details" class="flex flex-col gap-0">
-        <TabsList
-          class="flex gap-1 border-b border-border mb-4"
-          aria-label="Task sections"
-        >
-          <TabsTrigger
-            v-for="tab in ['details', 'notes', 'files']"
-            :key="tab"
-            :value="tab"
-            class="px-3 py-1.5 text-sm capitalize text-text-secondary rounded-t
-                   data-[state=active]:text-text-primary data-[state=active]:border-b-2
-                   data-[state=active]:border-accent data-[state=active]:-mb-px
-                   hover:text-text-primary transition-colors
-                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-          >
-            {{ tab }}
-            <span v-if="tab === 'notes' && taskNotes.length" class="ml-1 text-xs text-text-muted">
-              ({{ taskNotes.length }})
-            </span>
-            <span v-if="tab === 'files' && fileRefs.length" class="ml-1 text-xs text-text-muted">
-              ({{ fileRefs.length }})
-            </span>
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="details" class="outline-none">
-          <TaskDetailsTab
-            :task="task"
-            :title="title"
-            :desc-md="descMd"
-            :priority="priority"
-            :due-date="dueDate"
-            :columns="columns"
-            @update:title="onTitleChange"
-            @update:desc-md="onDescChange"
-            @update:priority="onPriorityChange"
-            @update:due-date="onDueDateChange"
-            @column-change="onColumnChange"
-            @archive="onArchive"
-          />
-          <div v-if="tagsStore.list.length" class="mt-4">
-            <TagPicker
-              :model-value="tagIds"
-              :task-id="task.id"
-              @update:model-value="onTagIdsChange"
+          <div class="create-form__field">
+            <DatePicker
+              v-model="createDueDate"
+              label="Due date"
             />
           </div>
-        </TabsContent>
+        </form>
+      </template>
 
-        <TabsContent value="notes" class="outline-none">
-          <TaskNotesTab :task-id="task.id" :notes="taskNotes" />
-        </TabsContent>
+      <div v-else-if="loading" class="flex items-center justify-center py-12 text-text-muted text-sm">
+        Loading…
+      </div>
 
-        <TabsContent value="files" class="outline-none">
-          <TaskFilesTab :task-id="task.id" :file-refs="fileRefs" />
-        </TabsContent>
-      </TabsRoot>
-    </template>
+      <template v-else-if="task">
+        <TabsRoot default-value="details" class="flex flex-col gap-0">
+          <TabsList
+            class="flex gap-1 border-b border-border mb-4"
+            aria-label="Task sections"
+          >
+            <TabsTrigger
+              v-for="tab in ['details', 'notes', 'files']"
+              :key="tab"
+              :value="tab"
+              class="px-3 py-1.5 text-sm capitalize text-text-secondary rounded-t
+                     data-[state=active]:text-text-primary data-[state=active]:border-b-2
+                     data-[state=active]:border-accent data-[state=active]:-mb-px
+                     hover:text-text-primary transition-colors
+                     focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              {{ tab }}
+              <span v-if="tab === 'notes' && taskNotes.length" class="ml-1 text-xs text-text-muted">
+                ({{ taskNotes.length }})
+              </span>
+              <span v-if="tab === 'files' && fileRefs.length" class="ml-1 text-xs text-text-muted">
+                ({{ fileRefs.length }})
+              </span>
+            </TabsTrigger>
+          </TabsList>
 
-    <div v-else class="flex items-center justify-center py-12 text-text-muted text-sm">
-      No task selected.
+          <TabsContent value="details" class="outline-none">
+            <TaskDetailsTab
+              :task="task"
+              :title="title"
+              :desc-md="descMd"
+              :priority="priority"
+              :due-date="dueDate"
+              :columns="columns"
+              @update:title="onTitleChange"
+              @update:desc-md="onDescChange"
+              @update:priority="onPriorityChange"
+              @update:due-date="onDueDateChange"
+              @column-change="onColumnChange"
+              @archive="onArchive"
+            />
+            <div v-if="tagsStore.list.length" class="mt-4">
+              <TagPicker
+                :model-value="tagIds"
+                :task-id="task.id"
+                @update:model-value="onTagIdsChange"
+              />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="notes" class="outline-none">
+            <TaskNotesTab :task-id="task.id" :notes="taskNotes" />
+          </TabsContent>
+
+          <TabsContent value="files" class="outline-none">
+            <TaskFilesTab :task-id="task.id" :file-refs="fileRefs" />
+          </TabsContent>
+        </TabsRoot>
+      </template>
+
+      <div v-else class="flex items-center justify-center py-12 text-text-muted text-sm">
+        No task selected.
+      </div>
     </div>
 
     <template #footer>
@@ -369,10 +359,18 @@ async function onArchive(): Promise<void> {
         </Button>
       </template>
     </template>
-  </Drawer>
+  </Dialog>
 </template>
 
 <style scoped>
+.task-modal__body {
+  max-height: 70vh;
+  overflow-y: auto;
+  /* Compensate for Dialog's p-6 padding on the body slot */
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+
 .create-form {
   display: flex;
   flex-direction: column;
@@ -401,12 +399,6 @@ async function onArchive(): Promise<void> {
 
 .create-form__field--desc :deep(.ProseMirror) {
   min-height: 3.5rem;
-}
-
-.create-form__row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
 }
 
 .create-form__input,
