@@ -7,6 +7,7 @@ import { useCurrentBoardStore } from '@/stores/currentBoard'
 import { useTagsStore } from '@/stores/tags'
 import { DropdownMenu } from '@tasknote/ui'
 import type { MenuItemDef } from '@tasknote/ui'
+import { priorityConfig } from './priorityConfig'
 
 const props = defineProps<{
   task: Task
@@ -24,12 +25,6 @@ const isDesktop = useIsDesktop()
 const { animate, prefersReducedMotion } = useAnime()
 const boardStore = useCurrentBoardStore()
 
-const priorityConfig: Record<string, { label: string; color: string }> = {
-  low:    { label: 'Low',    color: 'var(--color-status-todo)' },
-  medium: { label: 'Medium', color: 'var(--color-status-doing)' },
-  high:   { label: 'High',   color: 'var(--color-status-blocked)' },
-  urgent: { label: 'Urgent', color: 'var(--color-accent)' },
-}
 
 const priority = computed(() => priorityConfig[props.task.priority] ?? priorityConfig.medium)
 

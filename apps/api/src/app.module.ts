@@ -1,6 +1,8 @@
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { SnakeCaseInterceptor } from './common/interceptors/snake-case.interceptor';
 
 import { HealthController } from './health.controller';
 import { resolveDbPath, ensureDbDirectory } from './database/data-source';
@@ -76,5 +78,11 @@ import type { BetterSqlite3ConnectionOptions } from 'typeorm/driver/better-sqlit
     MaintenanceModule,
   ],
   controllers: [HealthController],
+  providers: [
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: SnakeCaseInterceptor,
+    },
+  ],
 })
 export class AppModule {}
