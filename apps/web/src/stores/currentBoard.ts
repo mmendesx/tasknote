@@ -31,9 +31,7 @@ export const useCurrentBoardStore = defineStore('currentBoard', () => {
     return board.value.columns.map((col) => ({
       ...col,
       tasks: col.tasks.filter((t) =>
-        tagFilter.value.every((tagId) =>
-          (t as Task & { tag_ids?: number[] }).tag_ids?.includes(tagId)
-        )
+        tagFilter.value.every((tagId) => t.tag_ids?.includes(tagId))
       ),
     }))
   })
@@ -233,11 +231,9 @@ export const useCurrentBoardStore = defineStore('currentBoard', () => {
         if (!board.value) return
         for (const col of board.value.columns) {
           if (col.tasks.some((t) => t.id === taskId)) {
-            col.tasks = col.tasks.map((t) => {
-              if (t.id !== taskId) return t
-              const typed = t as Task & { tag_ids?: number[] }
-              return { ...typed, tag_ids: [...(typed.tag_ids ?? []), tagId] }
-            })
+            col.tasks = col.tasks.map((t) =>
+              t.id === taskId ? { ...t, tag_ids: [...(t.tag_ids ?? []), tagId] } : t
+            )
             break
           }
         }
@@ -255,11 +251,11 @@ export const useCurrentBoardStore = defineStore('currentBoard', () => {
         if (!board.value) return
         for (const col of board.value.columns) {
           if (col.tasks.some((t) => t.id === taskId)) {
-            col.tasks = col.tasks.map((t) => {
-              if (t.id !== taskId) return t
-              const typed = t as Task & { tag_ids?: number[] }
-              return { ...typed, tag_ids: (typed.tag_ids ?? []).filter((id) => id !== tagId) }
-            })
+            col.tasks = col.tasks.map((t) =>
+              t.id === taskId
+                ? { ...t, tag_ids: (t.tag_ids ?? []).filter((id) => id !== tagId) }
+                : t
+            )
             break
           }
         }
