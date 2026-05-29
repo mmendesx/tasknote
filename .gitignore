@@ -16,12 +16,10 @@ apps/api/src/**/*.js
 apps/api/src/**/*.js.map
 apps/api/src/**/*.d.ts
 apps/api/src/**/*.d.ts.map
-apps/api/nest-cli.json
 packages/shared/src/**/*.js
 packages/shared/src/**/*.js.map
 packages/shared/src/**/*.d.ts
 packages/shared/src/**/*.d.ts.map
-packages/shared/tsconfig.esm.json
 
 # SQLite databases (never commit local DB files)
 *.sqlite

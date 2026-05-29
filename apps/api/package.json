@@ -4,7 +4,10 @@
   "private": true,
   "description": "TaskNote NestJS API (port 3001)",
   "scripts": {
+    "clean": "rm -rf dist && find src \\( -name '*.js' -o -name '*.js.map' -o -name '*.d.ts' -o -name '*.d.ts.map' \\) -delete",
+    "predev": "pnpm clean",
     "dev": "nest start --watch",
+    "prebuild": "pnpm clean",
     "build": "tsc && tsc-alias",
     "start": "node dist/main.js",
     "lint": "eslint src --ext .ts",
