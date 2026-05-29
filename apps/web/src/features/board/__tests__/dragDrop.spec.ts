@@ -35,6 +35,8 @@ type SortableOptions = {
 type SortableEvent = {
   item: HTMLElement
   to: HTMLElement
+  from?: HTMLElement
+  oldIndex?: number
   newIndex: number
 }
 
@@ -427,5 +429,77 @@ describe('SCN-D4 — KanbanColumn onEnd guard: missing dataset does not emit mov
     })
 
     expect(wrapper.emitted('moveTask')).toBeFalsy()
+  })
+})
+
+// ─── SCN-D5  cross-column drop reverts SortableJS DOM move (duplicate-card bug) ─
+//
+// Bug: dropping a task onto another column showed the card duplicated until F5.
+// SortableJS physically transplants the <li> into the target column's DOM, but
+// Vue still owns that node and the store re-renders the card in the target —
+// two cards. onEnd must move the node back so Vue's reactive render is sole truth.
+// jsdom can't reproduce the visual duplicate, but it locks the revert logic.
+
+describe('SCN-D5 — cross-column onEnd reverts the transplanted DOM node', () => {
+  beforeEach(() => {
+    sortableCalls.length = 0
+    const pinia = createPinia()
+    setActivePinia(pinia)
+  })
+
+  it('moves the item node back under `from` on cross-column drop, and still emits', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+
+    const wrapper = mount(KanbanColumn, {
+      props: { column: makeThreeColumnBoard().columns[0] },
+      global: { plugins: [pinia] },
+    })
+    await flushPromises()
+
+    const { options } = findTaskSortable(sortableCalls)
+
+    // Simulate SortableJS having already transplanted the <li> from source → target.
+    const fromEl = document.createElement('ul')
+    const toEl = document.createElement('ul')
+    toEl.dataset.columnId = '11'
+    const item = document.createElement('li')
+    item.dataset.taskId = '100'
+    toEl.appendChild(item) // node currently lives in the TARGET (the duplicate)
+
+    options.onEnd!({ item, from: fromEl, to: toEl, oldIndex: 0, newIndex: 1 })
+
+    // Reverted: node back under `from`, gone from `to`.
+    expect(item.parentElement).toBe(fromEl)
+    expect(toEl.contains(item)).toBe(false)
+    // Store still told to perform the move.
+    const emitted = wrapper.emitted<[number, number, number][]>('moveTask')
+    expect(emitted![0]).toEqual([100, 11, 1])
+  })
+
+  it('does NOT touch the DOM on same-column reorder (to === from)', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+
+    const wrapper = mount(KanbanColumn, {
+      props: { column: makeThreeColumnBoard().columns[0] },
+      global: { plugins: [pinia] },
+    })
+    await flushPromises()
+
+    const { options } = findTaskSortable(sortableCalls)
+
+    const listEl = document.createElement('ul')
+    listEl.dataset.columnId = '11'
+    const item = document.createElement('li')
+    item.dataset.taskId = '100'
+    listEl.appendChild(item)
+
+    // Same-column: to === from. Must leave DOM alone (vueuse onUpdate owns it).
+    options.onEnd!({ item, from: listEl, to: listEl, oldIndex: 0, newIndex: 2 })
+
+    expect(item.parentElement).toBe(listEl)
+    const emitted = wrapper.emitted<[number, number, number][]>('moveTask')
+    expect(emitted![0]).toEqual([100, 11, 2])
   })
 })
