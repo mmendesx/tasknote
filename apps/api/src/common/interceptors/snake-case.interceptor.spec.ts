@@ -84,6 +84,31 @@ describe('toSnakeCaseDeep', () => {
       ],
     });
   });
+
+  it('does not stack-overflow on a circular reference', () => {
+    const obj: Record<string, unknown> = { taskId: 7, dueDate: '2026-06-15' };
+    obj.self = obj; // genuine cycle
+
+    expect(() => toSnakeCaseDeep(obj)).not.toThrow();
+
+    const result = toSnakeCaseDeep(obj) as Record<string, unknown>;
+    // non-circular keys still snake-cased
+    expect(result.task_id).toBe(7);
+    expect(result.due_date).toBe('2026-06-15');
+    // the circular branch is returned as-is rather than recursed into
+    expect(result.self).toBe(obj);
+  });
+
+  it('does not treat distinct-but-repeated objects as cycles', () => {
+    const shared = { fooBar: 1 };
+    const result = toSnakeCaseDeep({ a: shared, b: shared }) as Record<
+      string,
+      unknown
+    >;
+    // both branches fully mapped — repetition is not a cycle
+    expect(result.a).toEqual({ foo_bar: 1 });
+    expect(result.b).toEqual({ foo_bar: 1 });
+  });
 });
 
 // ---------------------------------------------------------------------------

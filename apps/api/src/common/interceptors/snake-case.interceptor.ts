@@ -11,7 +11,7 @@ function toSnakeKey(key: string): string {
   return key.replace(/[A-Z]/g, (m) => '_' + m.toLowerCase());
 }
 
-export function toSnakeCaseDeep(value: unknown): unknown {
+function snakeCaseDeep(value: unknown, seen: WeakSet<object>): unknown {
   // null and primitives — return as-is
   if (value === null || typeof value !== 'object') {
     return value;
@@ -22,19 +22,39 @@ export function toSnakeCaseDeep(value: unknown): unknown {
     return value;
   }
 
-  // Arrays — recurse each element
+  // Circular reference — return as-is rather than recursing into a cycle.
+  // `seen` tracks the CURRENT recursion path (ancestors), not every object
+  // ever visited: we remove the value before returning so a shared but
+  // non-cyclic object (a DAG diamond) is still fully mapped on each branch.
+  // Safe today (loaded relations don't populate back-references), but guards
+  // against a stack overflow if an inverse relation is ever eager-loaded.
+  if (seen.has(value)) {
+    return value;
+  }
+  seen.add(value);
+
+  let result: unknown;
   if (Array.isArray(value)) {
-    return value.map(toSnakeCaseDeep);
+    // Arrays — recurse each element
+    result = value.map((item) => snakeCaseDeep(item, seen));
+  } else {
+    // Objects (including TypeORM class instances) — rebuild with snake_case keys
+    const obj: Record<string, unknown> = {};
+    for (const key of Object.keys(value as Record<string, unknown>)) {
+      obj[toSnakeKey(key)] = snakeCaseDeep(
+        (value as Record<string, unknown>)[key],
+        seen,
+      );
+    }
+    result = obj;
   }
 
-  // Objects (including TypeORM class instances) — rebuild with snake_case keys
-  const result: Record<string, unknown> = {};
-  for (const key of Object.keys(value as Record<string, unknown>)) {
-    result[toSnakeKey(key)] = toSnakeCaseDeep(
-      (value as Record<string, unknown>)[key],
-    );
-  }
+  seen.delete(value);
   return result;
+}
+
+export function toSnakeCaseDeep(value: unknown): unknown {
+  return snakeCaseDeep(value, new WeakSet<object>());
 }
 
 @Injectable()
