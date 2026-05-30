@@ -61,16 +61,23 @@ const { option: sortableOption } = useSortable(taskListRef, localTasks, {
     const toColumnId = Number((evt.to as HTMLElement).dataset.columnId)
     const toPosition = evt.newIndex ?? 0
 
-    // Cross-column move only: SortableJS physically transplants the <li> into the
-    // target column's DOM, but Vue still owns that node and the store mutation
-    // re-renders the card in the target — duplicating it until refresh. Revert
-    // SortableJS's DOM move so Vue's reactive render is the single source of truth.
-    // (Same-column reorder goes through vueuse's onUpdate → moveArrayElement and is
-    // left untouched — reverting it would fight vueuse's already-mutated localTasks.)
+    // Cross-column move: SortableJS physically transplants the <li> into the target
+    // column's DOM (a raw node Vue no longer owns), and vueuse mutates the bound
+    // `localTasks` of both columns. The store then re-renders the card from its own
+    // state, so the card appears twice — the orphan transplanted node + the
+    // store-rendered node — until a refresh.
+    //
+    // Let the store be the single source of truth: REMOVE the orphan transplanted
+    // node and resync both columns' `localTasks` from props. The store's optimistic
+    // update reassigns props.column.tasks for source AND target (spec-7 ref-swap),
+    // so each column re-renders its cards from authoritative state. Don't reinsert
+    // the node into the source — that would leave an untracked orphan there instead.
+    // Same-column reorder goes through vueuse's onUpdate and is left untouched.
     if (evt.from && evt.to !== evt.from) {
-      const { from, oldIndex, item } = evt
-      const refNode = from.children[oldIndex ?? 0] ?? null
-      from.insertBefore(item, refNode)
+      const { item } = evt
+      item.parentNode?.removeChild(item)
+      // Discard vueuse's localTasks mutation; the store re-render is authoritative.
+      nextTick(() => { localTasks.value = [...props.column.tasks] })
     }
 
     if (!taskId || !toColumnId) return

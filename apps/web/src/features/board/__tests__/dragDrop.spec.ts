@@ -18,6 +18,7 @@
 import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest'
 import { mount, shallowMount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import { defineComponent, h } from 'vue'
 import type { Ref } from 'vue'
 import type { ColumnWithTasks } from '@tasknote/shared'
 
@@ -447,7 +448,7 @@ describe('SCN-D5 — cross-column onEnd reverts the transplanted DOM node', () =
     setActivePinia(pinia)
   })
 
-  it('moves the item node back under `from` on cross-column drop, and still emits', async () => {
+  it('removes the orphan transplanted node on cross-column drop, and still emits', async () => {
     const pinia = createPinia()
     setActivePinia(pinia)
 
@@ -469,9 +470,12 @@ describe('SCN-D5 — cross-column onEnd reverts the transplanted DOM node', () =
 
     options.onEnd!({ item, from: fromEl, to: toEl, oldIndex: 0, newIndex: 1 })
 
-    // Reverted: node back under `from`, gone from `to`.
-    expect(item.parentElement).toBe(fromEl)
+    // The orphan transplanted node is removed entirely — the store re-render is the
+    // single source of truth, so the node must not linger in EITHER column.
+    // (Reinserting it under `from` would leave an untracked orphan there instead.)
+    expect(item.parentElement).toBeNull()
     expect(toEl.contains(item)).toBe(false)
+    expect(fromEl.contains(item)).toBe(false)
     // Store still told to perform the move.
     const emitted = wrapper.emitted<[number, number, number][]>('moveTask')
     expect(emitted![0]).toEqual([100, 11, 1])
@@ -501,5 +505,198 @@ describe('SCN-D5 — cross-column onEnd reverts the transplanted DOM node', () =
     expect(item.parentElement).toBe(listEl)
     const emitted = wrapper.emitted<[number, number, number][]>('moveTask')
     expect(emitted![0]).toEqual([100, 11, 2])
+  })
+})
+
+// ─── SCN-D6  Full-chain: drag cross-column renders exactly one card in target ─
+//
+// ICT-92 regression guard.
+//
+// Bug: after a cross-column drag the target column shows the task duplicated.
+// Root cause: SortableJS physically moves the DOM node into the target; then
+// the store re-renders the card there, producing two nodes. The onEnd revert
+// must move the DOM node back to `from` so Vue's reactive render is the sole
+// authority.
+//
+// These tests mount both source and target KanbanColumns in a reactive wrapper
+// that wires moveTask → store.moveTask — i.e. the full production chain.
+// The drag is simulated by:
+//   1. Physically appending the rendered task node to the target container
+//      (mimicking what SortableJS does before onEnd fires).
+//   2. Calling the captured onEnd with real rendered DOM refs.
+//   3. Flushing all microtasks/watcher ticks with flushPromises().
+//   4. Asserting target has exactly ONE task-card and source has ZERO.
+
+describe('SCN-D6 — ICT-92 full-chain: cross-column drag renders exactly one card', () => {
+  // Wrapper component: renders all board columns, wires moveTask → store.
+  // Accepts the pinia so the wrapper uses the same reactive context as the test.
+  function mountBoardWithStore(
+    store: ReturnType<typeof useCurrentBoardStore>,
+    pinia: ReturnType<typeof createPinia>
+  ) {
+    const Wrapper = defineComponent({
+      setup() {
+        return () =>
+          h(
+            'div',
+            store.board!.columns.map((col: ColumnWithTasks) =>
+              h(KanbanColumn, {
+                key: col.id,
+                column: col,
+                onMoveTask: (taskId: number, toColId: number, toPos: number) => {
+                  store.moveTask(taskId, toColId, toPos)
+                },
+              })
+            )
+          )
+      },
+    })
+    return mount(Wrapper, { global: { plugins: [pinia] } })
+  }
+
+  // Find the task-sortable whose `list` ref contains a task with the given id.
+  function findSortableForTask(
+    calls: CapturedSortable[],
+    taskId: number
+  ): CapturedSortable {
+    const found = calls.find((c) => {
+      if (c.options.group !== 'tasks') return false
+      const list = (c.list as Ref<Array<{ id: number }>>).value
+      return list.some((t) => t.id === taskId)
+    })
+    if (!found) throw new Error(`Task sortable for task ${taskId} not found`)
+    return found
+  }
+
+  beforeEach(() => {
+    sortableCalls.length = 0
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    vi.mocked(api.tasks.moveTask).mockResolvedValue(undefined as never)
+  })
+
+  it('SCN-D6a: drag into NON-empty target → exactly 1 card in target, 0 in source', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const store = useCurrentBoardStore()
+    // Source: col 10 has Task Alpha (id 100). Target: col 11 has Task Beta (id 200).
+    store.board = makeThreeColumnBoard()
+
+    const wrapper = mountBoardWithStore(store, pinia)
+    await flushPromises()
+
+    // Find the source column's task-sortable (the one that owns task 100).
+    const { options } = findSortableForTask(sortableCalls, 100)
+
+    // Get the real rendered containers for column 10 (source) and 11 (target).
+    const sections = wrapper.findAll('section')
+    const sourceContainer = sections[0].find('[data-column-id]').element as HTMLElement
+    const targetContainer = sections[1].find('[data-column-id]').element as HTMLElement
+
+    // Locate the rendered task card node for task 100 inside the source container.
+    const taskNodes = Array.from(sourceContainer.querySelectorAll('[data-task-id]')) as HTMLElement[]
+    const item = taskNodes.find((n) => n.dataset.taskId === '100')!
+    expect(item).toBeDefined()
+
+    // Simulate SortableJS: physically move the node from source → target (as it
+    // does before firing onEnd).
+    targetContainer.appendChild(item)
+
+    // Fire our onEnd handler (the capturing mock hands this to us).
+    options.onEnd!({ item, from: sourceContainer, to: targetContainer, oldIndex: 0, newIndex: 1 })
+
+    // Let store optimistic-update + Vue watchers + re-render all flush.
+    await flushPromises()
+
+    // Assert: target has exactly 1 task card, source has exactly 1 (its own, Task Beta is column 11).
+    // After the move, source (col 10) should have 0, target (col 11) should have 2 (own + moved).
+    // Actually target keeps its own Beta AND gets Alpha → 2 total. Source loses Alpha → 0.
+    const targetCards = sections[1].findAll('.task-card')
+    const sourceCards = sections[0].findAll('.task-card')
+    expect(sourceCards).toHaveLength(0)
+    expect(targetCards).toHaveLength(2) // Beta (existing) + Alpha (moved)
+    // Verify no duplicate: task 100 appears exactly once in target
+    const targetTaskIds = Array.from(
+      sections[1].element.querySelectorAll('[data-task-id]')
+    ).map((n) => (n as HTMLElement).dataset.taskId)
+    const alpha100Count = targetTaskIds.filter((id) => id === '100').length
+    expect(alpha100Count).toBe(1)
+  })
+
+  it('SCN-D6b: drag into EMPTY target → exactly 1 card in target, 0 in source', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const store = useCurrentBoardStore()
+    // Source: col 10 has Task Alpha (id 100). Target: col 12 is empty.
+    store.board = makeThreeColumnBoard()
+
+    const wrapper = mountBoardWithStore(store, pinia)
+    await flushPromises()
+
+    const { options } = findSortableForTask(sortableCalls, 100)
+
+    const sections = wrapper.findAll('section')
+    const sourceContainer = sections[0].find('[data-column-id]').element as HTMLElement
+    const targetContainer = sections[2].find('[data-column-id]').element as HTMLElement
+
+    const item = sourceContainer.querySelector('[data-task-id="100"]') as HTMLElement
+    expect(item).not.toBeNull()
+
+    // SortableJS moves node to empty target.
+    targetContainer.appendChild(item)
+
+    options.onEnd!({ item, from: sourceContainer, to: targetContainer, oldIndex: 0, newIndex: 0 })
+    await flushPromises()
+
+    const sourceCards = sections[0].findAll('.task-card')
+    const targetCards = sections[2].findAll('.task-card')
+    expect(sourceCards).toHaveLength(0)
+    expect(targetCards).toHaveLength(1)
+
+    // No duplicate: task 100 in target exactly once.
+    const targetTaskIds = Array.from(
+      sections[2].element.querySelectorAll('[data-task-id]')
+    ).map((n) => (n as HTMLElement).dataset.taskId)
+    expect(targetTaskIds.filter((id) => id === '100')).toHaveLength(1)
+  })
+
+  it('SCN-D6c: drag at mid-list index → exactly 1 card in target, 0 in source', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const store = useCurrentBoardStore()
+    // Extend board: target col 11 has TWO tasks (Beta 200, Gamma 300).
+    // Source col 10 has Alpha (100). We drag Alpha to mid-index (position 1).
+    const board = makeThreeColumnBoard()
+    board.columns[1].tasks.push(makeTask(300, 'Task Gamma', 11))
+    store.board = board
+
+    const wrapper = mountBoardWithStore(store, pinia)
+    await flushPromises()
+
+    const { options } = findSortableForTask(sortableCalls, 100)
+
+    const sections = wrapper.findAll('section')
+    const sourceContainer = sections[0].find('[data-column-id]').element as HTMLElement
+    const targetContainer = sections[1].find('[data-column-id]').element as HTMLElement
+
+    const item = sourceContainer.querySelector('[data-task-id="100"]') as HTMLElement
+    expect(item).not.toBeNull()
+
+    // SortableJS inserts at position 1 (between Beta and Gamma).
+    const refNode = targetContainer.children[1] ?? null
+    targetContainer.insertBefore(item, refNode)
+
+    options.onEnd!({ item, from: sourceContainer, to: targetContainer, oldIndex: 0, newIndex: 1 })
+    await flushPromises()
+
+    const sourceCards = sections[0].findAll('.task-card')
+    const targetCards = sections[1].findAll('.task-card')
+    expect(sourceCards).toHaveLength(0)
+    expect(targetCards).toHaveLength(3) // Beta + Alpha (moved) + Gamma
+
+    const targetTaskIds = Array.from(
+      sections[1].element.querySelectorAll('[data-task-id]')
+    ).map((n) => (n as HTMLElement).dataset.taskId)
+    expect(targetTaskIds.filter((id) => id === '100')).toHaveLength(1)
   })
 })
