@@ -485,13 +485,14 @@ const routeLabel = computed(() => {
           :aria-current="route.name === 'settings' ? 'page' : undefined"
           @click="closeDrawer"
         >
-          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" class="nav-item__icon">
-            <circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.5" />
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" class="nav-item__icon">
+            <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8" />
             <path
-              d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M2.93 2.93l1.06 1.06M12.01 12.01l1.06 1.06M2.93 13.07l1.06-1.06M12.01 3.99l1.06-1.06"
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
               stroke="currentColor"
-              stroke-width="1.5"
+              stroke-width="1.8"
               stroke-linecap="round"
+              stroke-linejoin="round"
             />
           </svg>
           <span class="nav-item__label">Settings</span>
@@ -579,13 +580,14 @@ const routeLabel = computed(() => {
             class="topbar__action-btn focus-ring"
             aria-label="Settings"
           >
-            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" width="16" height="16">
-              <circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.5" />
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" width="16" height="16">
+              <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8" />
               <path
-                d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M2.93 2.93l1.06 1.06M12.01 12.01l1.06 1.06M2.93 13.07l1.06-1.06M12.01 3.99l1.06-1.06"
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
                 stroke="currentColor"
-                stroke-width="1.5"
+                stroke-width="1.8"
                 stroke-linecap="round"
+                stroke-linejoin="round"
               />
             </svg>
           </RouterLink>
