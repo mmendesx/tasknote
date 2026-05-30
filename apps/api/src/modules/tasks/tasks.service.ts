@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import type { CreateTaskDto, UpdateTaskDto, MoveTaskDto } from '@tasknote/shared';
 import { TaskEntity } from './entities/task.entity';
 import { ColumnEntity } from '../columns/entities/column.entity';
@@ -279,34 +279,166 @@ export class TasksService {
     return saved;
   }
 
+  /**
+   * ICT-87: Resolves the Done column for the board that owns the given column.
+   * Loads all columns for the board and returns the first one where isDone=true
+   * ordered by position ascending. Returns null if no Done column exists.
+   * Must be called within an active transaction (manager).
+   */
+  private async resolveDoneColumn(
+    manager: EntityManager,
+    columnId: number,
+  ): Promise<ColumnEntity | null> {
+    const column = await manager.findOne(ColumnEntity, { where: { id: columnId } });
+    if (!column) return null;
+
+    const allColumns = await manager.find(ColumnEntity, {
+      where: { boardId: column.boardId },
+      order: { position: 'ASC' },
+    });
+
+    return allColumns.find((c) => c.isDone) ?? null;
+  }
+
+  /**
+   * ICT-87: Resolves the lowest-position non-Done column for the board that
+   * owns the given column. Returns null if no non-Done column exists.
+   * Must be called within an active transaction (manager).
+   */
+  private async resolveFirstNonDoneColumn(
+    manager: EntityManager,
+    columnId: number,
+  ): Promise<ColumnEntity | null> {
+    const column = await manager.findOne(ColumnEntity, { where: { id: columnId } });
+    if (!column) return null;
+
+    const allColumns = await manager.find(ColumnEntity, {
+      where: { boardId: column.boardId },
+      order: { position: 'ASC' },
+    });
+
+    return allColumns.find((c) => !c.isDone) ?? null;
+  }
+
+  /**
+   * ICT-88: Marks a task complete and moves it to the board's Done column.
+   * - If a Done column exists and the task is not already there: moves to Done,
+   *   appends to end (max position + 1), sets completedAt.
+   * - If task is already in Done: ensures completedAt is set (idempotent, no re-append).
+   * - If no Done column: fallback — sets completedAt only, emits a warning.
+   * All changes are atomic in a single transaction.
+   */
   async complete(id: number): Promise<TaskEntity> {
     this.logger.log(`complete: task id=${id}`);
 
-    const task = await this.tasksRepo.findOne({ where: { id } });
-    if (!task) {
-      this.logger.warn(`complete: task id=${id} not found`);
-      throw new NotFoundException(`Task with id '${id}' not found`);
-    }
+    return this.dataSource.transaction(async (manager) => {
+      const task = await manager.findOne(TaskEntity, { where: { id } });
+      if (!task) {
+        this.logger.warn(`complete: task id=${id} not found`);
+        throw new NotFoundException(`Task with id '${id}' not found`);
+      }
 
-    task.completedAt = new Date();
-    const saved = await this.tasksRepo.save(task);
-    this.logger.log(`complete: task id=${id} completed_at=${saved.completedAt!.toISOString()}`);
-    return saved;
+      const doneCol = await this.resolveDoneColumn(manager, task.columnId);
+
+      if (!doneCol) {
+        // NFR fallback: no Done column on this board — set completedAt only
+        this.logger.warn(
+          `complete: task id=${id} board has no Done column — setting completed_at only`,
+        );
+        task.completedAt = new Date();
+        const saved = await manager.save(TaskEntity, task);
+        this.logger.log(`complete: task id=${id} completed_at=${saved.completedAt!.toISOString()} (no Done column)`);
+        return saved;
+      }
+
+      if (task.columnId === doneCol.id) {
+        // Idempotent: already in Done — ensure completedAt is set, no re-append
+        if (!task.completedAt) {
+          task.completedAt = new Date();
+          await manager.save(TaskEntity, task);
+          this.logger.log(`complete: task id=${id} already in Done, set missing completed_at`);
+        } else {
+          this.logger.log(`complete: task id=${id} already in Done with completed_at — no-op`);
+        }
+        return task;
+      }
+
+      // Move task to Done column, append to end
+      const result = await manager
+        .createQueryBuilder(TaskEntity, 't')
+        .select('MAX(t.position)', 'maxPos')
+        .where('t.column_id = :columnId', { columnId: doneCol.id })
+        .getRawOne<{ maxPos: number | null }>();
+
+      const nextPosition = (result?.maxPos ?? -1) + 1;
+
+      task.columnId = doneCol.id;
+      task.position = nextPosition;
+      task.completedAt = new Date();
+
+      const saved = await manager.save(TaskEntity, task);
+      this.logger.log(
+        `complete: task id=${id} moved to Done column id=${doneCol.id} position=${nextPosition} completed_at=${saved.completedAt!.toISOString()}`,
+      );
+      return saved;
+    });
   }
 
+  /**
+   * ICT-89: Clears completedAt and moves the task out of the Done column.
+   * - If the task is currently in a Done column: moves to the lowest-position
+   *   non-Done column on the same board (appends to end), clears completedAt.
+   * - If no non-Done column exists: clears completedAt, leaves columnId unchanged.
+   * - If task is not in a Done column: clears completedAt only, no move.
+   * All changes are atomic in a single transaction.
+   */
   async uncomplete(id: number): Promise<TaskEntity> {
     this.logger.log(`uncomplete: task id=${id}`);
 
-    const task = await this.tasksRepo.findOne({ where: { id } });
-    if (!task) {
-      this.logger.warn(`uncomplete: task id=${id} not found`);
-      throw new NotFoundException(`Task with id '${id}' not found`);
-    }
+    return this.dataSource.transaction(async (manager) => {
+      const task = await manager.findOne(TaskEntity, { where: { id } });
+      if (!task) {
+        this.logger.warn(`uncomplete: task id=${id} not found`);
+        throw new NotFoundException(`Task with id '${id}' not found`);
+      }
 
-    task.completedAt = null;
-    const saved = await this.tasksRepo.save(task);
-    this.logger.log(`uncomplete: task id=${id} completed_at cleared`);
-    return saved;
+      // Check whether task's current column is a Done column
+      const currentColumn = await manager.findOne(ColumnEntity, { where: { id: task.columnId } });
+      const isInDoneColumn = currentColumn?.isDone === true;
+
+      task.completedAt = null;
+
+      if (isInDoneColumn) {
+        const nonDoneCol = await this.resolveFirstNonDoneColumn(manager, task.columnId);
+
+        if (nonDoneCol) {
+          const result = await manager
+            .createQueryBuilder(TaskEntity, 't')
+            .select('MAX(t.position)', 'maxPos')
+            .where('t.column_id = :columnId', { columnId: nonDoneCol.id })
+            .getRawOne<{ maxPos: number | null }>();
+
+          const nextPosition = (result?.maxPos ?? -1) + 1;
+
+          task.columnId = nonDoneCol.id;
+          task.position = nextPosition;
+
+          this.logger.log(
+            `uncomplete: task id=${id} moved from Done column id=${currentColumn!.id} to column id=${nonDoneCol.id} position=${nextPosition}`,
+          );
+        } else {
+          this.logger.warn(
+            `uncomplete: task id=${id} in Done column but board has no non-Done column — clearing completed_at only`,
+          );
+        }
+      } else {
+        this.logger.log(`uncomplete: task id=${id} not in Done column — clearing completed_at only`);
+      }
+
+      const saved = await manager.save(TaskEntity, task);
+      this.logger.log(`uncomplete: task id=${id} completed_at cleared`);
+      return saved;
+    });
   }
 
   async listToday(today: string): Promise<(TaskEntity & { carried_days: number })[]> {

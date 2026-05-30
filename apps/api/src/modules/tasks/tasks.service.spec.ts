@@ -491,32 +491,69 @@ describe('TasksService', () => {
     });
   });
 
-  describe('complete — BDD: mark task complete without moving it', () => {
-    it('sets completed_at to a non-null Date and leaves column + archived_at unchanged', async () => {
+  // ─── complete / uncomplete (ICT-87..90, SCN-1..5) ─────────────────────────
+
+  describe('complete — SCN-1: moves task to Done column and sets completed_at', () => {
+    it('SCN-1: moves task from Doing to Done, appends after existing Done tasks, sets completed_at', async () => {
+      // Pre-seed a task already in Done so append is meaningful
+      await tasksRepo.save(
+        tasksRepo.create({ columnId: doneColumn.id, title: 'Pre-existing Done task', position: 0 }),
+      );
+
       const created = await service.createTask({
         column_id: doingColumn.id,
-        title: 'Mark me done',
+        title: 'Move me to Done',
         priority: 'medium',
       });
 
       const result = await service.complete(created.id);
 
+      expect(result.columnId).toBe(doneColumn.id);
       expect(result.completedAt).not.toBeNull();
-      expect(result.columnId).toBe(doingColumn.id);
+      expect(result.position).toBe(1); // appended after position=0
       expect(result.archivedAt).toBeNull();
     });
 
-    it('is idempotent — calling complete twice does not error', async () => {
-      const created = await service.createTask({
-        column_id: doingColumn.id,
-        title: 'Double complete',
-        priority: 'medium',
-      });
+    it('SCN-2: no Done column — sets completed_at only, columnId unchanged, no throw', async () => {
+      // Create a fresh board with no Done column
+      const boardRepo = dataSource.getRepository(BoardEntity);
+      const columnRepo = dataSource.getRepository(ColumnEntity);
 
-      await service.complete(created.id);
-      const result = await service.complete(created.id);
+      const board = await boardRepo.save(boardRepo.create({ name: 'No Done Board', position: 1 }));
+      const col = await columnRepo.save(
+        columnRepo.create({ boardId: board.id, name: 'Only Column', color: '#aaa', isDone: false, position: 0 }),
+      );
+
+      const task = await service.createTask({ column_id: col.id, title: 'Orphan task', priority: 'medium' });
+      const result = await service.complete(task.id);
 
       expect(result.completedAt).not.toBeNull();
+      expect(result.columnId).toBe(col.id);
+    });
+
+    it('SCN-3: task already in Done with completedAt — complete() is idempotent, no re-append, no error', async () => {
+      // Seed two Done tasks to establish existing positions
+      await tasksRepo.save([
+        tasksRepo.create({ columnId: doneColumn.id, title: 'Done A', position: 0 }),
+        tasksRepo.create({ columnId: doneColumn.id, title: 'Done B', position: 1 }),
+      ]);
+
+      const existingCompletedAt = new Date('2026-01-15T10:00:00.000Z');
+      const alreadyDone = await tasksRepo.save(
+        tasksRepo.create({
+          columnId: doneColumn.id,
+          title: 'Already Done',
+          position: 2,
+          completedAt: existingCompletedAt,
+        }),
+      );
+
+      const result = await service.complete(alreadyDone.id);
+
+      expect(result.columnId).toBe(doneColumn.id);
+      expect(result.completedAt).not.toBeNull();
+      // Position must not have changed (no re-append)
+      expect(result.position).toBe(2);
     });
 
     it('throws NotFoundException for unknown id', async () => {
@@ -524,20 +561,41 @@ describe('TasksService', () => {
     });
   });
 
-  describe('uncomplete — BDD: clear completed_at without changing column', () => {
-    it('clears completed_at and leaves the task otherwise unchanged', async () => {
+  describe('uncomplete — SCN-4/5: moves task out of Done column and clears completed_at', () => {
+    it('SCN-4: completed task in Done → uncomplete moves to lowest non-Done column, clears completed_at', async () => {
+      // complete() will move the task to Done first
       const created = await service.createTask({
         column_id: doingColumn.id,
-        title: 'Unmark me',
+        title: 'Was Done',
         priority: 'high',
       });
 
       await service.complete(created.id);
+
       const result = await service.uncomplete(created.id);
 
       expect(result.completedAt).toBeNull();
+      // backlogColumn has position=0, lowest non-done column
+      expect(result.columnId).toBe(backlogColumn.id);
+      expect(result.title).toBe('Was Done');
+    });
+
+    it('SCN-5: task with completedAt in non-Done column → uncomplete clears completedAt, columnId unchanged', async () => {
+      // Directly insert a task in Doing with completedAt set (edge case — legacy data)
+      const task = await tasksRepo.save(
+        tasksRepo.create({
+          columnId: doingColumn.id,
+          title: 'Non-Done but completed',
+          priority: 'medium',
+          position: 0,
+          completedAt: new Date(),
+        }),
+      );
+
+      const result = await service.uncomplete(task.id);
+
+      expect(result.completedAt).toBeNull();
       expect(result.columnId).toBe(doingColumn.id);
-      expect(result.title).toBe('Unmark me');
     });
 
     it('throws NotFoundException for unknown id', async () => {
