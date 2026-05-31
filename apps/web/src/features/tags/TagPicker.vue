@@ -231,10 +231,13 @@ function handleKeydown(event: KeyboardEvent): void {
   cursor: pointer; color: var(--color-text-primary); transition: background-color 0.1s;
 }
 .tag-picker__option:hover,
-.tag-picker__option:focus-visible,
 .tag-picker__option--selected {
-  background-color: color-mix(in srgb, var(--color-accent) 8%, transparent);
-  outline: none;
+  background-color: var(--color-surface-elevated);
+}
+.tag-picker__option:focus-visible {
+  background-color: var(--color-surface-elevated);
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
 }
 .tag-picker__empty { padding: 10px 12px; font-size: var(--text-sm); color: var(--color-text-muted); text-align: center; }
 .tag-picker__close {

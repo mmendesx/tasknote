@@ -266,8 +266,9 @@ async function onArchive(): Promise<void> {
               :key="tab"
               :value="tab"
               class="px-3 py-1.5 text-sm capitalize text-text-secondary rounded-t
-                     data-[state=active]:text-text-primary data-[state=active]:border-b-2
-                     data-[state=active]:border-accent data-[state=active]:-mb-px
+                     data-[state=active]:text-text-primary data-[state=active]:font-semibold
+                     data-[state=active]:border-b-2 data-[state=active]:border-text-muted
+                     data-[state=active]:-mb-px
                      hover:text-text-primary transition-colors
                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >

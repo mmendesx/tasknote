@@ -150,14 +150,15 @@ function clearFilter(): void {
 }
 
 .board-tag-filter__chip--active {
-  background-color: color-mix(in srgb, var(--color-accent) 14%, transparent);
-  color: var(--color-accent);
-  border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  background-color: var(--color-surface-elevated);
+  color: var(--color-text-primary);
+  border-color: var(--color-text-muted);
+  font-weight: 600;
 }
 
 .board-tag-filter__chip--active:hover {
-  background-color: color-mix(in srgb, var(--color-accent) 20%, transparent);
-  color: var(--color-accent);
+  background-color: var(--color-surface-elevated);
+  color: var(--color-text-primary);
 }
 
 .board-tag-filter__dot {

@@ -151,8 +151,8 @@ function getPreview(note: Note): string {
 }
 
 .note-item--selected {
-  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
-  border-left: 2px solid var(--color-accent);
+  background: var(--color-surface-elevated);
+  border-left: 2px solid var(--color-text-muted);
 }
 
 .note-item__header {

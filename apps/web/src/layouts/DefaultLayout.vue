@@ -1092,7 +1092,7 @@ const routeLabel = computed(() => {
 }
 
 .nav-notes__panel :deep(.note-item--selected) {
-  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+  background: var(--color-surface-elevated);
   border-left: none;
 }
 

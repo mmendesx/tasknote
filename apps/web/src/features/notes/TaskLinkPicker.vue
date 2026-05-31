@@ -165,7 +165,7 @@ function handleBlur(): void {
 }
 
 .task-link-picker__trigger:hover {
-  border-color: var(--color-accent);
+  border-color: var(--color-text-muted);
 }
 
 .task-link-picker__dropdown {
@@ -202,7 +202,7 @@ function handleBlur(): void {
 }
 
 .task-link-picker__item:hover {
-  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  background: var(--color-surface-elevated);
 }
 
 .task-link-picker__empty {

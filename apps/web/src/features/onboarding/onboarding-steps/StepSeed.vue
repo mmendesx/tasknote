@@ -152,8 +152,8 @@ function selectSeed(option: SeedOption) {
 }
 
 .seed-card--selected {
-  border-color: var(--color-accent);
-  background-color: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
+  border-color: var(--color-text-primary);
+  background-color: var(--color-surface-elevated);
 }
 
 .seed-card:focus-visible {
