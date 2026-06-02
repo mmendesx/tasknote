@@ -61,23 +61,13 @@ const { option: sortableOption } = useSortable(taskListRef, localTasks, {
     const toColumnId = Number((evt.to as HTMLElement).dataset.columnId)
     const toPosition = evt.newIndex ?? 0
 
-    // Cross-column move: SortableJS physically transplants the <li> into the target
-    // column's DOM (a raw node Vue no longer owns), and vueuse mutates the bound
-    // `localTasks` of both columns. The store then re-renders the card from its own
-    // state, so the card appears twice — the orphan transplanted node + the
-    // store-rendered node — until a refresh.
-    //
-    // Let the store be the single source of truth: REMOVE the orphan transplanted
-    // node and resync both columns' `localTasks` from props. The store's optimistic
-    // update reassigns props.column.tasks for source AND target (spec-7 ref-swap),
-    // so each column re-renders its cards from authoritative state. Don't reinsert
-    // the node into the source — that would leave an untracked orphan there instead.
-    // Same-column reorder goes through vueuse's onUpdate and is left untouched.
+    // Cross-column move: SortableJS transplants the <li> into the target column's
+    // DOM, leaving an orphan node Vue no longer tracks. Remove it so the store's
+    // re-render is the single source of truth — the store ref-swaps props.column.tasks
+    // for both source and target (spec-7), and the `props.column.tasks` watch above
+    // resyncs each column's localTasks. Same-column reorder (vueuse onUpdate) untouched.
     if (evt.from && evt.to !== evt.from) {
-      const { item } = evt
-      item.parentNode?.removeChild(item)
-      // Discard vueuse's localTasks mutation; the store re-render is authoritative.
-      nextTick(() => { localTasks.value = [...props.column.tasks] })
+      evt.item.parentNode?.removeChild(evt.item)
     }
 
     if (!taskId || !toColumnId) return

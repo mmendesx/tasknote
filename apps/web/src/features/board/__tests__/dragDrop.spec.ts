@@ -15,7 +15,7 @@
  * the pointer/touch event model that SortableJS relies on.
  */
 
-import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest'
 import { mount, shallowMount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { defineComponent, h } from 'vue'
@@ -192,6 +192,14 @@ function findTaskSortable(calls: CapturedSortable[]): CapturedSortable {
   if (!found) throw new Error('Task sortable not captured — check useSortable mock')
   return found
 }
+
+// The optimistic `store.moveTask` path queues a Vue reactive job. Drain it here
+// while the active pinia is still alive, so no job survives into the next test
+// file's teardown (where the store refs are gone → unhandled rejection / suite
+// exit-1). Keeps the suite deterministic.
+afterEach(async () => {
+  await flushPromises()
+})
 
 // ─── SCN-D1  Column reorder wiring ───────────────────────────────────────────
 
@@ -371,6 +379,13 @@ describe('SCN-D3 — BoardView move-task event calls currentBoardStore.moveTask'
 
     expect(moveTaskSpy).toHaveBeenCalledOnce()
     expect(moveTaskSpy).toHaveBeenCalledWith(100, 11, 2)
+
+    // Unmount, then drain any async work BoardView's onMounted queued (getBoard /
+    // boards.load) while this pinia is still active. Otherwise a late-resolving
+    // promise re-evaluates the boards-store computeds against a torn-down pinia in a
+    // later test file → unhandled rejection / suite exit-1.
+    wrapper.unmount()
+    await flushPromises()
   })
 })
 
