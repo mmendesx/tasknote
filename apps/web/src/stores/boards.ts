@@ -10,7 +10,7 @@ export const useBoardsStore = defineStore('boards', () => {
   const error = ref<string | null>(null)
 
   const defaultBoardId = computed<number | null>(() => {
-    if (list.value.length === 0) return null
+    if (!list.value?.length) return null
     const sorted = [...list.value].sort((a, b) => a.position - b.position)
     return sorted[0].id
   })

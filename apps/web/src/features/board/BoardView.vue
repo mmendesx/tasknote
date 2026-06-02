@@ -21,7 +21,7 @@ const tagsStore = useTagsStore()
 const isDesktop = useIsDesktop()
 
 const tagColors = computed<Record<number, string>>(() =>
-  Object.fromEntries(tagsStore.list.map((t) => [t.id, t.color]))
+  Object.fromEntries((tagsStore.list ?? []).map((t) => [t.id, t.color]))
 )
 
 const today = localDateString()
