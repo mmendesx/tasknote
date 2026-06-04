@@ -20,26 +20,6 @@ const label   = ref('')
 const note    = ref('')
 const loading = ref(false)
 
-const fileInputRef = ref<HTMLInputElement | null>(null)
-
-function openFilePicker(): void {
-  fileInputRef.value?.click()
-}
-
-function onFileSelected(evt: Event): void {
-  const file = (evt.target as HTMLInputElement).files?.[0]
-  if (!file) return
-
-  const filePath = (file as File & { path?: string }).path ?? file.name
-  path.value = filePath
-
-  if (!label.value) {
-    label.value = file.name.replace(/\.[^.]+$/, '')
-  }
-
-  if (fileInputRef.value) fileInputRef.value.value = ''
-}
-
 const pathError = computed<string | undefined>(() => {
   if (!path.value) return undefined
   if (!ABSOLUTE_PATH_PATTERN.test(path.value)) {
@@ -89,39 +69,14 @@ async function submit(): Promise<void> {
 
 <template>
   <form class="flex flex-col gap-3" @submit.prevent="submit">
-    
-    <input
-      ref="fileInputRef"
-      type="file"
-      class="sr-only"
-      aria-hidden="true"
-      tabindex="-1"
-      @change="onFileSelected"
-    />
 
-    <div class="file-path-row">
-      <Input
-        v-model="path"
-        label="File path"
-        placeholder="/Users/me/docs/spec.pdf"
-        :error="path ? pathError : undefined"
-        required
-        class="file-path-input"
-      />
-      <Button
-        type="button"
-        variant="secondary"
-        size="sm"
-        class="file-pick-btn"
-        title="Browse for file"
-        @click="openFilePicker"
-      >
-        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" aria-hidden="true">
-          <path d="M2 3h4l2 2h6v9H2V3z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
-        </svg>
-        Browse
-      </Button>
-    </div>
+    <Input
+      v-model="path"
+      label="File path"
+      placeholder="/Users/me/docs/spec.pdf"
+      :error="path ? pathError : undefined"
+      required
+    />
 
     <Input
       v-model="label"
@@ -148,20 +103,3 @@ async function submit(): Promise<void> {
   </form>
 </template>
 
-<style scoped>
-.file-path-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-}
-
-.file-path-input {
-  flex: 1;
-  min-width: 0;
-}
-
-.file-pick-btn {
-  flex-shrink: 0;
-  margin-bottom: 1px; 
-}
-</style>
