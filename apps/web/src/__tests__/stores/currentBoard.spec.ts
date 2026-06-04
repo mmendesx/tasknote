@@ -162,6 +162,59 @@ describe('useCurrentBoardStore.moveTask — optimistic update', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Regression: consecutive optimistic ops must not break on the snapshot clone.
+//
+// The optimistic snapshot used structuredClone(toRaw(board)). toRaw only unwraps
+// the OUTER proxy; after the first optimistic mutation, nested column/task
+// reactive proxies survived and structuredClone threw "could not be cloned" —
+// silently aborting EVERY mutation after the first (update, move, delete, tag).
+// snapshot() now JSON-clones, which is proxy-safe. These tests lock that: a
+// second consecutive optimistic op still reaches the API.
+// ---------------------------------------------------------------------------
+
+describe('consecutive optimistic mutations survive the snapshot clone', () => {
+  let store: ReturnType<typeof useCurrentBoardStore>;
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    store = useCurrentBoardStore();
+    store.board = makeBoard();
+    vi.resetAllMocks();
+  });
+
+  it('updateTask twice in a row both call the API (no snapshot throw)', async () => {
+    vi.mocked(api.tasks.updateTask).mockResolvedValue({} as never);
+
+    await store.updateTask(100, { title: 'First' });
+    await store.updateTask(100, { title: 'Second' });
+
+    expect(api.tasks.updateTask).toHaveBeenCalledTimes(2);
+    expect(api.tasks.updateTask).toHaveBeenNthCalledWith(1, 100, { title: 'First' });
+    expect(api.tasks.updateTask).toHaveBeenNthCalledWith(2, 100, { title: 'Second' });
+  });
+
+  it('moveTask then updateTask both call the API', async () => {
+    vi.mocked(api.tasks.moveTask).mockResolvedValue({} as never);
+    vi.mocked(api.tasks.updateTask).mockResolvedValue({} as never);
+
+    await store.moveTask(100, 11, 0);
+    await store.updateTask(100, { priority: 'high' });
+
+    expect(api.tasks.moveTask).toHaveBeenCalledTimes(1);
+    expect(api.tasks.updateTask).toHaveBeenCalledTimes(1);
+  });
+
+  it('snapshot() does not throw on a board that has been optimistically mutated', async () => {
+    vi.mocked(api.tasks.updateTask).mockResolvedValue({} as never);
+
+    // First op replaces task objects via the optimistic map; the second op must
+    // still snapshot the now-mutated board without a clone error.
+    await store.updateTask(100, { title: 'A' });
+    await expect(store.updateTask(100, { title: 'B' })).resolves.not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // SCN-8 — quick-add from board does NOT auto-commit (store layer)
 //
 // QuickAddTaskInput emits a plain title string; the actual API call happens

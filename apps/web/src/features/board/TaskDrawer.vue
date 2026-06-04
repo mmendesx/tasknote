@@ -111,6 +111,17 @@ function onTagIdsChange(ids: number[]): void {
   void ids
 }
 
+// Single source of truth for the edit fields: set both the baseline (task.value)
+// and the editable refs from a task. Used on load AND after a save, so the
+// dirty-check never drifts from the inputs.
+function syncFromTask(t: Task): void {
+  task.value     = t
+  title.value    = t.title
+  descMd.value   = t.description_md ?? ''
+  priority.value = t.priority
+  dueDate.value  = t.due_date ? String(t.due_date).slice(0, 10) : ''
+}
+
 watch(
   () => props.taskId,
   async (id) => {
@@ -118,11 +129,7 @@ watch(
     loading.value = true
     try {
       const t = await api.tasks.getTask(id)
-      task.value     = t
-      title.value    = t.title
-      descMd.value   = t.description_md ?? ''
-      priority.value = t.priority
-      dueDate.value  = t.due_date ? t.due_date.slice(0, 10) : ''
+      syncFromTask(t)
     } catch (err) {
       toast.error('Load failed', err instanceof Error ? err.message : 'Could not load task')
     } finally {
@@ -173,9 +180,16 @@ async function saveTask(): Promise<void> {
       due_date:       dueDate.value || null,
     })
     const refreshed = await api.tasks.getTask(props.taskId)
-    task.value = refreshed
+    // Re-sync the edit fields to the saved server state so the dirty-check
+    // baseline and the inputs stay coherent. Without this, a second edit could
+    // mis-evaluate isDirty (server-normalized fields drift from the edit refs)
+    // and the save would silently no-op.
+    syncFromTask(refreshed)
     toast.success('Saved', 'Task updated')
-  } catch {
+  } catch (err) {
+    // Surface the failure instead of swallowing it — a silent catch made a
+    // failed save look like "nothing happened".
+    toast.error('Save failed', err instanceof Error ? err.message : 'Could not save task')
   } finally {
     isSaving.value = false
   }

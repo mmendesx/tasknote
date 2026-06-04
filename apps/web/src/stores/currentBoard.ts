@@ -1,4 +1,4 @@
-import { ref, computed, toRaw } from 'vue'
+import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { useToast } from '@tasknote/ui'
 import * as api from '@/api'
@@ -12,7 +12,12 @@ function nextTempId(): number {
 }
 
 function snapshot(board: BoardWithColumns): BoardWithColumns {
-  return structuredClone(toRaw(board))
+  // Deep clone via JSON: the board is pure serializable data (no Dates-as-objects
+  // — the API sends ISO strings — no functions). structuredClone(toRaw(board))
+  // only unwraps the OUTER proxy; nested column/task reactive proxies survive and
+  // make structuredClone throw "could not be cloned" after an optimistic mutation,
+  // which silently aborted every save after the first.
+  return JSON.parse(JSON.stringify(board)) as BoardWithColumns
 }
 
 export const useCurrentBoardStore = defineStore('currentBoard', () => {
