@@ -149,18 +149,16 @@ async function createFirstBoard() {
 
     <BoardTagFilter :board-id="boardId" />
 
-    <div v-if="currentBoardStore.board" class="board-view__toolbar">
+    <Teleport to="#topbar-actions-portal">
       <Button
+        v-if="currentBoardStore.board"
         variant="primary"
         size="sm"
         @click="addTask"
       >
-        <svg viewBox="0 0 12 12" width="12" height="12" fill="none" aria-hidden="true">
-          <path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-        </svg>
-        Add task
+        + New task
       </Button>
-    </div>
+    </Teleport>
 
     <div v-if="currentBoardStore.loading" class="board-view__state" aria-live="polite">
       <span class="state-spinner" aria-hidden="true" />
@@ -300,17 +298,6 @@ async function createFirstBoard() {
 .board-create-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-}
-
-.board-view__toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface);
-  flex-shrink: 0;
-  gap: 8px;
 }
 
 :global(.col-ghost) {
