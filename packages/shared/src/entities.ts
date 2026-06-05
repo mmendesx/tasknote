@@ -2,6 +2,7 @@
 // These are NOT Zod-validated; they describe the data after it leaves the DB.
 
 import type { PRIORITY_VALUES, THEME_VALUES, TARGET_TYPE_VALUES } from './constants.js';
+import type { DiagramScene } from './dtos.js';
 
 export type Priority = (typeof PRIORITY_VALUES)[number];
 export type Theme = (typeof THEME_VALUES)[number];
@@ -81,6 +82,14 @@ export interface FileRef {
   label: string;
   note: string | null;
   created_at: Date;
+}
+
+export interface Diagram {
+  id: number;
+  title: string;
+  scene_json: DiagramScene;
+  created_at: Date;
+  updated_at: Date;
 }
 
 // ─── Nested / aggregate types ────────────────────────────────────────────────

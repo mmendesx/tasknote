@@ -177,6 +177,90 @@ export const UpdateFileRefDtoSchema = fileRefBase.omit({ target_type: true, targ
 export type CreateFileRefDto = z.infer<typeof CreateFileRefDtoSchema>;
 export type UpdateFileRefDto = z.infer<typeof UpdateFileRefDtoSchema>;
 
+// ─── Diagram DTOs ────────────────────────────────────────────────────────────
+
+export const DiagramViewportSchema = z.object({
+  scrollX: z.number(),
+  scrollY: z.number(),
+  zoom: z.number().positive(),
+});
+
+export const DiagramElementSchema = z.discriminatedUnion('type', [
+  z.object({
+    id: z.string(),
+    type: z.literal('rectangle'),
+    x: z.number(),
+    y: z.number(),
+    width: z.number(),
+    height: z.number(),
+    stroke: z.string(),
+    fill: z.string().nullable().optional(),
+    strokeWidth: z.number(),
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal('ellipse'),
+    x: z.number(),
+    y: z.number(),
+    width: z.number(),
+    height: z.number(),
+    stroke: z.string(),
+    fill: z.string().nullable().optional(),
+    strokeWidth: z.number(),
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal('line'),
+    points: z.tuple([z.tuple([z.number(), z.number()]), z.tuple([z.number(), z.number()])]),
+    stroke: z.string(),
+    strokeWidth: z.number(),
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal('arrow'),
+    points: z.tuple([z.tuple([z.number(), z.number()]), z.tuple([z.number(), z.number()])]),
+    stroke: z.string(),
+    strokeWidth: z.number(),
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal('text'),
+    x: z.number(),
+    y: z.number(),
+    text: z.string(),
+    fontSize: z.number(),
+    color: z.string(),
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal('pen'),
+    points: z.array(z.tuple([z.number(), z.number()])),
+    stroke: z.string(),
+    strokeWidth: z.number(),
+  }),
+]);
+
+export const DiagramSceneSchema = z.object({
+  version: z.number(),
+  elements: z.array(DiagramElementSchema),
+  appState: z.object({
+    viewport: DiagramViewportSchema,
+  }),
+});
+
+export const CreateDiagramDtoSchema = z.object({
+  title: z.string().max(MAX_TITLE_LENGTH).optional(),
+  scene_json: DiagramSceneSchema.optional(),
+});
+
+export const UpdateDiagramDtoSchema = CreateDiagramDtoSchema.partial();
+
+export type DiagramViewport = z.infer<typeof DiagramViewportSchema>;
+export type DiagramElement = z.infer<typeof DiagramElementSchema>;
+export type DiagramScene = z.infer<typeof DiagramSceneSchema>;
+export type CreateDiagramDto = z.infer<typeof CreateDiagramDtoSchema>;
+export type UpdateDiagramDto = z.infer<typeof UpdateDiagramDtoSchema>;
+
 // ─── Settings DTOs ────────────────────────────────────────────────────────────
 
 const settingsBase = z.object({
