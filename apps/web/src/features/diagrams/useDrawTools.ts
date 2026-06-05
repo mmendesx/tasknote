@@ -1,6 +1,6 @@
 import { ref, nextTick } from 'vue'
 import { screenToScene } from '@/stores/diagrams'
-import type { DiagramViewport } from '@tasknote/shared'
+import type { DiagramBinding, DiagramViewport } from '@tasknote/shared'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -39,7 +39,7 @@ export const DRAWING_TOOLS = new Set(['rectangle', 'ellipse', 'line', 'arrow', '
 export type DrawState =
   | { kind: 'idle' }
   | { kind: 'shape'; tool: 'rectangle' | 'ellipse'; ax: number; ay: number }
-  | { kind: 'linear'; tool: 'line' | 'arrow'; ax: number; ay: number }
+  | { kind: 'linear'; tool: 'line' | 'arrow'; ax: number; ay: number; startShapeId?: string | null }
   | { kind: 'pen'; points: [number, number][] }
   | { kind: 'text'; x: number; y: number; elId: string }
 
@@ -105,15 +105,20 @@ export function buildEllipseElement(ax: number, ay: number, bx: number, by: numb
 export function buildLinearElement(
   tool: 'line' | 'arrow',
   ax: number, ay: number, bx: number, by: number,
+  startBinding: DiagramBinding | null = null,
+  endBinding: DiagramBinding | null = null,
 ) {
+  const isBound = startBinding !== null || endBinding !== null
   const dx = bx - ax, dy = by - ay
-  if (Math.hypot(dx, dy) < MIN_DRAG_PX) return null
+  if (!isBound && Math.hypot(dx, dy) < MIN_DRAG_PX) return null
   return {
     id: generateId(),
     type: tool,
     points: [[ax, ay], [bx, by]] as [[number, number], [number, number]],
     stroke: STROKE_COLOR,
     strokeWidth: STROKE_WIDTH,
+    startBinding,
+    endBinding,
   }
 }
 

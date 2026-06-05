@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, watch, onMounted, onUnmounted, ref, nextTick } from 'vue'
-import type { DiagramElement, DiagramViewport } from '@tasknote/shared'
+import type { DiagramBinding, DiagramElement, DiagramViewport } from '@tasknote/shared'
 import { useDiagramsStore, screenToScene } from '@/stores/diagrams'
 import {
   DRAWING_TOOLS,
@@ -17,6 +17,7 @@ import {
   computeElementBbox,
   buildMovePatch,
 } from './useSelection'
+import { resolveShapeIdAtPoint, elementCenter, findElementById } from './connectors'
 import DiagramElementView from './DiagramElementView.vue'
 import DiagramPreview from './DiagramPreview.vue'
 
@@ -184,7 +185,10 @@ function handleDrawPointerDown(event: PointerEvent): void {
     drawState.value = { kind: 'shape', tool, ax: pt.x, ay: pt.y }
     previewShape.value = { type: tool, x: pt.x, y: pt.y, width: 0, height: 0 }
   } else if (tool === 'line' || tool === 'arrow') {
-    drawState.value = { kind: 'linear', tool, ax: pt.x, ay: pt.y }
+    const startShapeId = tool === 'arrow'
+      ? resolveShapeIdAtPoint(event.clientX, event.clientY, store.elements)
+      : null
+    drawState.value = { kind: 'linear', tool, ax: pt.x, ay: pt.y, startShapeId }
     previewLinear.value = { type: tool, ax: pt.x, ay: pt.y, bx: pt.x, by: pt.y }
   } else if (tool === 'text') {
     drawState.value = { kind: 'text', x: pt.x, y: pt.y, elId: '' }
@@ -252,6 +256,43 @@ function onCanvasPointerMove(event: PointerEvent): void {
   }
 }
 
+// ── Linear endpoint resolution ────────────────────────────────────────────────
+
+type LinearEndpoints = {
+  ax: number; ay: number; bx: number; by: number
+  startBinding: DiagramBinding | null
+  endBinding: DiagramBinding | null
+}
+
+function resolveLinearEndpoints(
+  state: { tool: 'line' | 'arrow'; ax: number; ay: number; startShapeId?: string | null },
+  event: PointerEvent,
+): LinearEndpoints {
+  const rawEnd = getScenePt(event)
+
+  if (state.tool !== 'arrow') {
+    return { ax: state.ax, ay: state.ay, bx: rawEnd.x, by: rawEnd.y, startBinding: null, endBinding: null }
+  }
+
+  const startId = state.startShapeId ?? null
+  const endId = resolveShapeIdAtPoint(event.clientX, event.clientY, store.elements)
+
+  const startEl = startId ? findElementById(store.elements, startId) : undefined
+  const endEl = endId ? findElementById(store.elements, endId) : undefined
+
+  const startCenter = startEl ? elementCenter(startEl) : null
+  const endCenter = endEl ? elementCenter(endEl) : null
+
+  return {
+    ax: startCenter ? startCenter.x : state.ax,
+    ay: startCenter ? startCenter.y : state.ay,
+    bx: endCenter ? endCenter.x : rawEnd.x,
+    by: endCenter ? endCenter.y : rawEnd.y,
+    startBinding: startId ? { elementId: startId } : null,
+    endBinding: endId ? { elementId: endId } : null,
+  }
+}
+
 function onCanvasPointerUp(event: PointerEvent): void {
   if (isPanning.value) {
     isPanning.value = false
@@ -274,8 +315,8 @@ function onCanvasPointerUp(event: PointerEvent): void {
     if (el) store.addElement(el as DiagramElement)
     cancelDraw()
   } else if (state.kind === 'linear') {
-    const pt = getScenePt(event)
-    const el = buildLinearElement(state.tool, state.ax, state.ay, pt.x, pt.y)
+    const { ax, ay, bx, by, startBinding, endBinding } = resolveLinearEndpoints(state, event)
+    const el = buildLinearElement(state.tool, ax, ay, bx, by, startBinding, endBinding)
     if (el) store.addElement(el as DiagramElement)
     cancelDraw()
   } else if (state.kind === 'pen') {
