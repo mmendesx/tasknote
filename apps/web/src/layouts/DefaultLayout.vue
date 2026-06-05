@@ -5,12 +5,15 @@ import { useTheme } from '@/composables/useTheme'
 import { useMediaQuery } from '@vueuse/core'
 import { useBoardsStore } from '@/stores/boards'
 import NoteList from '@/features/notes/NoteList.vue'
+import DiagramList from '@/features/diagrams/DiagramList.vue'
 import { useNavigationState } from '@/composables/useNavigationState'
+import { useDiagramsStore } from '@/stores/diagrams'
 
 const { theme, toggleTheme } = useTheme()
 const route = useRoute()
 const router = useRouter()
 const boardsStore = useBoardsStore()
+const diagramsStore = useDiagramsStore()
 
 const isDrawerOpen = ref(false)
 const sidebarRef = ref<HTMLElement | null>(null)
@@ -185,6 +188,30 @@ const currentNoteId = computed<number | null>(() => {
   const parsed = id ? parseInt(String(id), 10) : NaN
   return isNaN(parsed) ? null : parsed
 })
+
+const diagramsExpanded = ref(false)
+
+const currentDiagramId = computed<number | null>(() => {
+  if (route.name !== 'diagram-detail') return null
+  const raw = route.params.id
+  const id = Array.isArray(raw) ? raw[0] : raw
+  const parsed = id ? parseInt(String(id), 10) : NaN
+  return isNaN(parsed) ? null : parsed
+})
+
+const isCreatingDiagram = ref(false)
+
+async function createDiagram(): Promise<void> {
+  if (isCreatingDiagram.value) return
+  isCreatingDiagram.value = true
+  try {
+    const diagram = await diagramsStore.createDiagram()
+    router.push(`/diagrams/${diagram.id}`)
+    closeDrawer()
+  } finally {
+    isCreatingDiagram.value = false
+  }
+}
 
 const routeLabel = computed(() => {
   const name = route.name as string | undefined
@@ -458,6 +485,69 @@ const routeLabel = computed(() => {
                 :selected-id="currentNoteId"
                 @select="(id) => { router.push({ name: 'note-detail', params: { id } }); closeDrawer() }"
                 @deleted="(id) => { if (currentNoteId === id) router.push({ name: 'notes' }) }"
+              />
+            </div>
+          </div>
+
+          <div
+            class="nav-notes"
+            :class="{ 'nav-notes--active': route.name === 'diagrams' || route.name === 'diagram-detail' }"
+          >
+            <div class="nav-notes__row">
+              <RouterLink
+                to="/diagrams"
+                class="nav-item nav-notes__link focus-ring"
+                :aria-current="(route.name === 'diagrams' || route.name === 'diagram-detail') ? 'page' : undefined"
+                @click="closeDrawer"
+              >
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" class="nav-item__icon">
+                  <rect x="1" y="5" width="4" height="4" rx="1" stroke="currentColor" stroke-width="1.5" />
+                  <rect x="11" y="5" width="4" height="4" rx="1" stroke="currentColor" stroke-width="1.5" />
+                  <rect x="6" y="1" width="4" height="4" rx="1" stroke="currentColor" stroke-width="1.5" />
+                  <path d="M3 9v2.5M13 9v2.5M8 5V3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                  <path d="M3 11.5H13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                </svg>
+                <span class="nav-item__label">Diagrams</span>
+              </RouterLink>
+              <button
+                class="nav-section__add focus-ring"
+                aria-label="New diagram"
+                title="New diagram"
+                :disabled="isCreatingDiagram"
+                @click="createDiagram"
+              >
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" width="14" height="14">
+                  <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                </svg>
+              </button>
+              <button
+                class="nav-notes__toggle focus-ring"
+                :aria-expanded="diagramsExpanded"
+                aria-controls="sidebar-diagrams-list"
+                :aria-label="diagramsExpanded ? 'Collapse diagrams list' : 'Expand diagrams list'"
+                :title="diagramsExpanded ? 'Collapse diagrams list' : 'Expand diagrams list'"
+                @click="diagramsExpanded = !diagramsExpanded"
+              >
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" width="12" height="12">
+                  <path
+                    :d="diagramsExpanded ? 'M3 6l5 5 5-5' : 'M6 3l5 5-5 5'"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div
+              v-if="diagramsExpanded"
+              id="sidebar-diagrams-list"
+              class="nav-notes__panel"
+            >
+              <DiagramList
+                :selected-id="currentDiagramId"
+                @select="(id) => { router.push({ name: 'diagram-detail', params: { id } }); closeDrawer() }"
+                @deleted="(id) => { if (currentDiagramId === id) router.push({ name: 'diagrams' }) }"
               />
             </div>
           </div>
@@ -1102,6 +1192,55 @@ const routeLabel = computed(() => {
 .nav-notes__panel :deep(.note-item__time),
 .nav-notes__panel :deep(.note-item__pin) {
   display: none;
+}
+
+.nav-notes__panel :deep(.diagram-list) {
+  padding-left: 0;
+}
+
+.nav-notes__panel :deep(.diagram-item) {
+  padding: 3px 8px;
+  border-bottom: none;
+  border-radius: var(--radius-control);
+  position: relative;
+}
+
+.nav-notes__panel :deep(.diagram-item)::before {
+  content: '–';
+  position: absolute;
+  left: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: var(--color-text-muted);
+  opacity: 0.4;
+  transition: opacity var(--motion-duration-fast);
+  pointer-events: none;
+  line-height: 1;
+}
+
+.nav-notes__panel :deep(.diagram-item:hover)::before,
+.nav-notes__panel :deep(.diagram-item--selected)::before {
+  opacity: 1;
+}
+
+.nav-notes__panel :deep(.diagram-item__title) {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  transition: color var(--motion-duration-fast);
+}
+
+.nav-notes__panel :deep(.diagram-item:hover .diagram-item__title) {
+  color: var(--color-text-primary);
+}
+
+.nav-notes__panel :deep(.diagram-item--selected .diagram-item__title) {
+  color: var(--color-text-primary);
+}
+
+.nav-notes__panel :deep(.diagram-item--selected) {
+  background: var(--color-surface-elevated);
+  border-left: none;
 }
 
 .sidebar__collapse-btn {
