@@ -17,6 +17,8 @@ import {
   computeElementBbox,
   buildMovePatch,
 } from './useSelection'
+import DiagramElementView from './DiagramElementView.vue'
+import DiagramPreview from './DiagramPreview.vue'
 
 // ── Props ────────────────────────────────────────────────────────────────────
 
@@ -334,20 +336,6 @@ function onCanvasWheel(event: WheelEvent): void {
   })
 }
 
-// ── Element helpers ───────────────────────────────────────────────────────────
-
-function pointsToAttr(points: [number, number][]): string {
-  return points.map(([x, y]) => `${x},${y}`).join(' ')
-}
-
-// Narrow helpers for accessing typed union fields without TS errors
-type RectEl   = Extract<DiagramElement, { type: 'rectangle' }>
-type EllEl    = Extract<DiagramElement, { type: 'ellipse' }>
-type LineEl   = Extract<DiagramElement, { type: 'line' }>
-type ArrowEl  = Extract<DiagramElement, { type: 'arrow' }>
-type TextEl   = Extract<DiagramElement, { type: 'text' }>
-type PenEl    = Extract<DiagramElement, { type: 'pen' }>
-
 // ── Cursor ────────────────────────────────────────────────────────────────────
 
 const canvasCursor = computed(() => {
@@ -415,138 +403,11 @@ const textEditState = computed(() => {
 
     <g :transform="viewportTransform">
       <!-- Committed elements -->
-      <template v-for="el in elements" :key="el.id">
-        <!-- rectangle: visible stroke -->
-        <rect
-          v-if="el.type === 'rectangle'"
-          :data-element-id="el.id"
-          :x="(el as RectEl).x"
-          :y="(el as RectEl).y"
-          :width="(el as RectEl).width"
-          :height="(el as RectEl).height"
-          :stroke="(el as RectEl).stroke"
-          :fill="(el as RectEl).fill ?? 'none'"
-          :stroke-width="(el as RectEl).strokeWidth"
-        />
-        <!-- rectangle: wide transparent hit-target for unfilled rects -->
-        <rect
-          v-if="el.type === 'rectangle' && !((el as RectEl).fill)"
-          :data-element-id="el.id"
-          :x="(el as RectEl).x"
-          :y="(el as RectEl).y"
-          :width="(el as RectEl).width"
-          :height="(el as RectEl).height"
-          stroke="transparent"
-          stroke-width="12"
-          fill="transparent"
-          class="diagram-hit-target"
-        />
-
-        <!-- ellipse: visible stroke -->
-        <ellipse
-          v-else-if="el.type === 'ellipse'"
-          :data-element-id="el.id"
-          :cx="(el as EllEl).x + (el as EllEl).width / 2"
-          :cy="(el as EllEl).y + (el as EllEl).height / 2"
-          :rx="(el as EllEl).width / 2"
-          :ry="(el as EllEl).height / 2"
-          :stroke="(el as EllEl).stroke"
-          :fill="(el as EllEl).fill ?? 'none'"
-          :stroke-width="(el as EllEl).strokeWidth"
-        />
-        <!-- ellipse: wide transparent hit-target for unfilled ellipses -->
-        <ellipse
-          v-if="el.type === 'ellipse' && !((el as EllEl).fill)"
-          :data-element-id="el.id"
-          :cx="(el as EllEl).x + (el as EllEl).width / 2"
-          :cy="(el as EllEl).y + (el as EllEl).height / 2"
-          :rx="(el as EllEl).width / 2"
-          :ry="(el as EllEl).height / 2"
-          stroke="transparent"
-          stroke-width="12"
-          fill="transparent"
-          class="diagram-hit-target"
-        />
-
-        <!-- line: visible stroke -->
-        <line
-          v-else-if="el.type === 'line'"
-          :data-element-id="el.id"
-          :x1="(el as LineEl).points[0][0]"
-          :y1="(el as LineEl).points[0][1]"
-          :x2="(el as LineEl).points[1][0]"
-          :y2="(el as LineEl).points[1][1]"
-          :stroke="(el as LineEl).stroke"
-          :stroke-width="(el as LineEl).strokeWidth"
-        />
-        <!-- line: wide transparent hit-target -->
-        <line
-          v-if="el.type === 'line'"
-          :data-element-id="el.id"
-          :x1="(el as LineEl).points[0][0]"
-          :y1="(el as LineEl).points[0][1]"
-          :x2="(el as LineEl).points[1][0]"
-          :y2="(el as LineEl).points[1][1]"
-          stroke="transparent"
-          stroke-width="12"
-          class="diagram-hit-target"
-        />
-
-        <!-- arrow: visible stroke -->
-        <line
-          v-else-if="el.type === 'arrow'"
-          :data-element-id="el.id"
-          :x1="(el as ArrowEl).points[0][0]"
-          :y1="(el as ArrowEl).points[0][1]"
-          :x2="(el as ArrowEl).points[1][0]"
-          :y2="(el as ArrowEl).points[1][1]"
-          :stroke="(el as ArrowEl).stroke"
-          :stroke-width="(el as ArrowEl).strokeWidth"
-          marker-end="url(#diagram-arrowhead)"
-        />
-        <!-- arrow: wide transparent hit-target -->
-        <line
-          v-if="el.type === 'arrow'"
-          :data-element-id="el.id"
-          :x1="(el as ArrowEl).points[0][0]"
-          :y1="(el as ArrowEl).points[0][1]"
-          :x2="(el as ArrowEl).points[1][0]"
-          :y2="(el as ArrowEl).points[1][1]"
-          stroke="transparent"
-          stroke-width="12"
-          class="diagram-hit-target"
-        />
-
-        <!-- text -->
-        <text
-          v-else-if="el.type === 'text'"
-          :data-element-id="el.id"
-          :x="(el as TextEl).x"
-          :y="(el as TextEl).y"
-          :font-size="(el as TextEl).fontSize"
-          :fill="(el as TextEl).color"
-        >{{ (el as TextEl).text }}</text>
-
-        <!-- pen: visible stroke -->
-        <polyline
-          v-else-if="el.type === 'pen'"
-          :data-element-id="el.id"
-          :points="pointsToAttr((el as PenEl).points)"
-          fill="none"
-          :stroke="(el as PenEl).stroke"
-          :stroke-width="(el as PenEl).strokeWidth"
-        />
-        <!-- pen: wide transparent hit-target -->
-        <polyline
-          v-if="el.type === 'pen'"
-          :data-element-id="el.id"
-          :points="pointsToAttr((el as PenEl).points)"
-          fill="none"
-          stroke="transparent"
-          stroke-width="12"
-          class="diagram-hit-target"
-        />
-      </template>
+      <DiagramElementView
+        v-for="el in elements"
+        :key="el.id"
+        :element="el"
+      />
 
       <!-- Selection outline -->
       <rect
@@ -564,66 +425,11 @@ const textEditState = computed(() => {
         pointer-events="none"
       />
 
-      <!-- Preview: rectangle or ellipse in progress -->
-      <rect
-        v-if="previewShape && previewShape.type === 'rectangle'"
-        class="diagram-preview"
-        :x="previewShape.x"
-        :y="previewShape.y"
-        :width="previewShape.width"
-        :height="previewShape.height"
-        stroke="#1f2937"
-        fill="none"
-        stroke-width="2"
-        stroke-dasharray="4 3"
-      />
-      <ellipse
-        v-else-if="previewShape && previewShape.type === 'ellipse'"
-        class="diagram-preview"
-        :cx="previewShape.x + previewShape.width / 2"
-        :cy="previewShape.y + previewShape.height / 2"
-        :rx="previewShape.width / 2"
-        :ry="previewShape.height / 2"
-        stroke="#1f2937"
-        fill="none"
-        stroke-width="2"
-        stroke-dasharray="4 3"
-      />
-
-      <!-- Preview: line or arrow in progress -->
-      <line
-        v-if="previewLinear && previewLinear.type === 'line'"
-        class="diagram-preview"
-        :x1="previewLinear.ax"
-        :y1="previewLinear.ay"
-        :x2="previewLinear.bx"
-        :y2="previewLinear.by"
-        stroke="#1f2937"
-        stroke-width="2"
-        stroke-dasharray="4 3"
-      />
-      <line
-        v-else-if="previewLinear && previewLinear.type === 'arrow'"
-        class="diagram-preview"
-        :x1="previewLinear.ax"
-        :y1="previewLinear.ay"
-        :x2="previewLinear.bx"
-        :y2="previewLinear.by"
-        stroke="#1f2937"
-        stroke-width="2"
-        stroke-dasharray="4 3"
-        marker-end="url(#diagram-arrowhead)"
-      />
-
-      <!-- Preview: pen stroke in progress -->
-      <polyline
-        v-if="previewPen && previewPen.length >= 2"
-        class="diagram-preview"
-        :points="pointsToAttr(previewPen)"
-        fill="none"
-        stroke="#1f2937"
-        stroke-width="2"
-        stroke-dasharray="4 3"
+      <!-- In-progress draft preview -->
+      <DiagramPreview
+        :shape="previewShape"
+        :linear="previewLinear"
+        :pen="previewPen"
       />
 
       <!-- Text editing overlay (in scene coords via foreignObject) -->
@@ -657,6 +463,9 @@ const textEditState = computed(() => {
   background-color: var(--color-bg, #ffffff);
   border: 1px solid var(--color-border, #e5e7eb);
   touch-action: none;
+  /* Drives `currentColor` for committed-element and preview strokes so they
+     stay visible (and theme-correct) in both light and dark mode. */
+  color: var(--color-text-primary, #1f2937);
 }
 
 .diagram-canvas-shell {
@@ -701,14 +510,6 @@ const textEditState = computed(() => {
   .diagram-spinner {
     animation: none;
   }
-}
-
-.diagram-preview {
-  pointer-events: none;
-}
-
-.diagram-hit-target {
-  cursor: default;
 }
 
 .diagram-selection-outline {

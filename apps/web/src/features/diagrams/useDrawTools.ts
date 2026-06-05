@@ -4,7 +4,11 @@ import type { DiagramViewport } from '@tasknote/shared'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const STROKE_COLOR = '#1f2937'
+// Stored verbatim in scene_json. 'currentColor' resolves at RENDER time against
+// the canvas's CSS `color` (a design token), so committed strokes stay visible
+// in both light and dark themes without baking a theme into persisted data and
+// without making these builders impure. Pre-existing rows keep their literal color.
+const STROKE_COLOR = 'currentColor'
 const STROKE_WIDTH = 2
 const FONT_SIZE = 16
 const MIN_DRAG_PX = 3
