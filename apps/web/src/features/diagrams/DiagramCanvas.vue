@@ -12,6 +12,11 @@ import {
   buildTextElement,
   buildPenElement,
 } from './useDrawTools'
+import {
+  useSelection,
+  computeElementBbox,
+  buildMovePatch,
+} from './useSelection'
 
 // ── Props ────────────────────────────────────────────────────────────────────
 
@@ -76,11 +81,41 @@ const {
   cancelDraw,
 } = useDrawState()
 
-// ── Escape handler ────────────────────────────────────────────────────────────
+// ── Selection state ───────────────────────────────────────────────────────────
+
+const { moveState, beginMove, clearMove } = useSelection()
+
+const selectedElement = computed<DiagramElement | null>(() => {
+  if (!store.selectedId) return null
+  return store.elements.find((e) => e.id === store.selectedId) ?? null
+})
+
+const selectionBBox = computed(() => {
+  if (!selectedElement.value) return null
+  return computeElementBbox(selectedElement.value)
+})
+
+// ── Escape + Delete handler ───────────────────────────────────────────────────
+
+function isTextInputFocused(): boolean {
+  const active = document.activeElement
+  if (!active) return false
+  const tag = active.tagName
+  return tag === 'INPUT' || tag === 'TEXTAREA' || (active as HTMLElement).isContentEditable
+}
 
 function onKeyDown(event: KeyboardEvent): void {
-  if (event.key !== 'Escape') return
-  cancelDraw()
+  if (event.key === 'Escape') {
+    cancelDraw()
+    return
+  }
+  if (event.key === 'Delete' || event.key === 'Backspace') {
+    if (isTextInputFocused()) return
+    const idToRemove = store.selectedId
+    if (!idToRemove) return
+    store.removeElement(idToRemove)
+    store.selectElement(null)
+  }
 }
 
 onMounted(() => window.addEventListener('keydown', onKeyDown))
@@ -94,46 +129,75 @@ function getScenePt(event: PointerEvent): { x: number; y: number } {
   return getScenePoint(event, el, store.viewport)
 }
 
+// ── Select tool hit-test ──────────────────────────────────────────────────────
+
+function hitElementId(event: PointerEvent): string | null {
+  const target = event.target as Element | null
+  if (!target) return null
+  const hit = target.closest('[data-element-id]')
+  return hit ? (hit.getAttribute('data-element-id') ?? null) : null
+}
+
+function capturePointer(event: PointerEvent): void {
+  const target = event.currentTarget as SVGElement
+  if (target?.setPointerCapture) {
+    target.setPointerCapture(event.pointerId)
+  }
+}
+
+// ── Pointer-down branch handlers ──────────────────────────────────────────────
+
+function handlePanPointerDown(event: PointerEvent): void {
+  isPanning.value = true
+  panOrigin.value = { x: event.clientX, y: event.clientY }
+  panViewportStart.value = { ...store.viewport }
+  capturePointer(event)
+}
+
+function handleSelectPointerDown(event: PointerEvent): void {
+  const elementId = hitElementId(event)
+  if (elementId) {
+    store.selectElement(elementId)
+    const original = store.elements.find((e) => e.id === elementId)
+    if (original) {
+      beginMove(elementId, event.clientX, event.clientY, { ...original } as DiagramElement)
+    }
+    capturePointer(event)
+  } else {
+    store.selectElement(null)
+    clearMove()
+  }
+}
+
+function handleDrawPointerDown(event: PointerEvent): void {
+  const pt = getScenePt(event)
+  const tool = store.tool
+
+  if (tool === 'rectangle' || tool === 'ellipse') {
+    drawState.value = { kind: 'shape', tool, ax: pt.x, ay: pt.y }
+    previewShape.value = { type: tool, x: pt.x, y: pt.y, width: 0, height: 0 }
+  } else if (tool === 'line' || tool === 'arrow') {
+    drawState.value = { kind: 'linear', tool, ax: pt.x, ay: pt.y }
+    previewLinear.value = { type: tool, ax: pt.x, ay: pt.y, bx: pt.x, by: pt.y }
+  } else if (tool === 'text') {
+    drawState.value = { kind: 'text', x: pt.x, y: pt.y, elId: '' }
+    pendingText.value = ''
+    nextTick(() => textInputRef.value?.focus())
+  } else if (tool === 'pen') {
+    drawState.value = { kind: 'pen', points: [[pt.x, pt.y]] }
+    previewPen.value = [[pt.x, pt.y]]
+  }
+
+  capturePointer(event)
+}
+
 // ── Pointer handlers ──────────────────────────────────────────────────────────
 
-// Seam for ICT-6/7: this function handles canvas-level pointer interactions.
+// Seam for ICT-6/7: dispatches by tool to the appropriate handler.
 function onCanvasPointerDown(event: PointerEvent): void {
-  if (isPanTool()) {
-    isPanning.value = true
-    panOrigin.value = { x: event.clientX, y: event.clientY }
-    panViewportStart.value = { ...store.viewport }
-    const target = event.currentTarget as SVGElement
-    if (target?.setPointerCapture) {
-      target.setPointerCapture(event.pointerId)
-    }
-    return
-  }
-
-  if (isDrawingTool()) {
-    const pt = getScenePt(event)
-    const tool = store.tool
-
-    if (tool === 'rectangle' || tool === 'ellipse') {
-      drawState.value = { kind: 'shape', tool, ax: pt.x, ay: pt.y }
-      previewShape.value = { type: tool, x: pt.x, y: pt.y, width: 0, height: 0 }
-    } else if (tool === 'line' || tool === 'arrow') {
-      drawState.value = { kind: 'linear', tool, ax: pt.x, ay: pt.y }
-      previewLinear.value = { type: tool, ax: pt.x, ay: pt.y, bx: pt.x, by: pt.y }
-    } else if (tool === 'text') {
-      drawState.value = { kind: 'text', x: pt.x, y: pt.y, elId: '' }
-      pendingText.value = ''
-      nextTick(() => textInputRef.value?.focus())
-    } else if (tool === 'pen') {
-      drawState.value = { kind: 'pen', points: [[pt.x, pt.y]] }
-      previewPen.value = [[pt.x, pt.y]]
-    }
-
-    const target = event.currentTarget as SVGElement
-    if (target?.setPointerCapture) {
-      target.setPointerCapture(event.pointerId)
-    }
-    return
-  }
+  if (isPanTool()) return handlePanPointerDown(event)
+  if (store.tool === 'select') return handleSelectPointerDown(event)
+  if (isDrawingTool()) return handleDrawPointerDown(event)
 }
 
 function onCanvasPointerMove(event: PointerEvent): void {
@@ -146,6 +210,18 @@ function onCanvasPointerMove(event: PointerEvent): void {
       scrollY: panViewportStart.value.scrollY + dy / zoom,
       zoom,
     })
+    return
+  }
+
+  const mv = moveState.value
+  if (mv) {
+    const zoom = store.viewport.zoom
+    const dxScreen = event.clientX - mv.startScreenX
+    const dyScreen = event.clientY - mv.startScreenY
+    const dxScene = dxScreen / zoom
+    const dyScene = dyScreen / zoom
+    const patch = buildMovePatch(mv.originalElement, dxScene, dyScene)
+    store.updateElement(mv.id, patch)
     return
   }
 
@@ -172,6 +248,12 @@ function onCanvasPointerMove(event: PointerEvent): void {
 function onCanvasPointerUp(event: PointerEvent): void {
   if (isPanning.value) {
     isPanning.value = false
+    return
+  }
+
+  if (moveState.value) {
+    // Final commit already applied via pointermove; just end the move.
+    clearMove()
     return
   }
 
@@ -266,6 +348,7 @@ type PenEl    = Extract<DiagramElement, { type: 'pen' }>
 const canvasCursor = computed(() => {
   if (isPanTool()) return isPanning.value ? 'grabbing' : 'grab'
   if (isDrawingTool()) return 'crosshair'
+  if (store.tool === 'select') return moveState.value ? 'move' : 'default'
   return 'default'
 })
 
@@ -328,9 +411,10 @@ const textEditState = computed(() => {
     <g :transform="viewportTransform">
       <!-- Committed elements -->
       <template v-for="el in elements" :key="el.id">
-        <!-- rectangle -->
+        <!-- rectangle: visible stroke -->
         <rect
           v-if="el.type === 'rectangle'"
+          :data-element-id="el.id"
           :x="(el as RectEl).x"
           :y="(el as RectEl).y"
           :width="(el as RectEl).width"
@@ -339,10 +423,24 @@ const textEditState = computed(() => {
           :fill="(el as RectEl).fill ?? 'none'"
           :stroke-width="(el as RectEl).strokeWidth"
         />
+        <!-- rectangle: wide transparent hit-target for unfilled rects -->
+        <rect
+          v-if="el.type === 'rectangle' && !((el as RectEl).fill)"
+          :data-element-id="el.id"
+          :x="(el as RectEl).x"
+          :y="(el as RectEl).y"
+          :width="(el as RectEl).width"
+          :height="(el as RectEl).height"
+          stroke="transparent"
+          stroke-width="12"
+          fill="transparent"
+          class="diagram-hit-target"
+        />
 
-        <!-- ellipse -->
+        <!-- ellipse: visible stroke -->
         <ellipse
           v-else-if="el.type === 'ellipse'"
+          :data-element-id="el.id"
           :cx="(el as EllEl).x + (el as EllEl).width / 2"
           :cy="(el as EllEl).y + (el as EllEl).height / 2"
           :rx="(el as EllEl).width / 2"
@@ -351,10 +449,24 @@ const textEditState = computed(() => {
           :fill="(el as EllEl).fill ?? 'none'"
           :stroke-width="(el as EllEl).strokeWidth"
         />
+        <!-- ellipse: wide transparent hit-target for unfilled ellipses -->
+        <ellipse
+          v-if="el.type === 'ellipse' && !((el as EllEl).fill)"
+          :data-element-id="el.id"
+          :cx="(el as EllEl).x + (el as EllEl).width / 2"
+          :cy="(el as EllEl).y + (el as EllEl).height / 2"
+          :rx="(el as EllEl).width / 2"
+          :ry="(el as EllEl).height / 2"
+          stroke="transparent"
+          stroke-width="12"
+          fill="transparent"
+          class="diagram-hit-target"
+        />
 
-        <!-- line -->
+        <!-- line: visible stroke -->
         <line
           v-else-if="el.type === 'line'"
+          :data-element-id="el.id"
           :x1="(el as LineEl).points[0][0]"
           :y1="(el as LineEl).points[0][1]"
           :x2="(el as LineEl).points[1][0]"
@@ -362,10 +474,23 @@ const textEditState = computed(() => {
           :stroke="(el as LineEl).stroke"
           :stroke-width="(el as LineEl).strokeWidth"
         />
+        <!-- line: wide transparent hit-target -->
+        <line
+          v-if="el.type === 'line'"
+          :data-element-id="el.id"
+          :x1="(el as LineEl).points[0][0]"
+          :y1="(el as LineEl).points[0][1]"
+          :x2="(el as LineEl).points[1][0]"
+          :y2="(el as LineEl).points[1][1]"
+          stroke="transparent"
+          stroke-width="12"
+          class="diagram-hit-target"
+        />
 
-        <!-- arrow -->
+        <!-- arrow: visible stroke -->
         <line
           v-else-if="el.type === 'arrow'"
+          :data-element-id="el.id"
           :x1="(el as ArrowEl).points[0][0]"
           :y1="(el as ArrowEl).points[0][1]"
           :x2="(el as ArrowEl).points[1][0]"
@@ -374,25 +499,65 @@ const textEditState = computed(() => {
           :stroke-width="(el as ArrowEl).strokeWidth"
           marker-end="url(#diagram-arrowhead)"
         />
+        <!-- arrow: wide transparent hit-target -->
+        <line
+          v-if="el.type === 'arrow'"
+          :data-element-id="el.id"
+          :x1="(el as ArrowEl).points[0][0]"
+          :y1="(el as ArrowEl).points[0][1]"
+          :x2="(el as ArrowEl).points[1][0]"
+          :y2="(el as ArrowEl).points[1][1]"
+          stroke="transparent"
+          stroke-width="12"
+          class="diagram-hit-target"
+        />
 
         <!-- text -->
         <text
           v-else-if="el.type === 'text'"
+          :data-element-id="el.id"
           :x="(el as TextEl).x"
           :y="(el as TextEl).y"
           :font-size="(el as TextEl).fontSize"
           :fill="(el as TextEl).color"
         >{{ (el as TextEl).text }}</text>
 
-        <!-- pen -->
+        <!-- pen: visible stroke -->
         <polyline
           v-else-if="el.type === 'pen'"
+          :data-element-id="el.id"
           :points="pointsToAttr((el as PenEl).points)"
           fill="none"
           :stroke="(el as PenEl).stroke"
           :stroke-width="(el as PenEl).strokeWidth"
         />
+        <!-- pen: wide transparent hit-target -->
+        <polyline
+          v-if="el.type === 'pen'"
+          :data-element-id="el.id"
+          :points="pointsToAttr((el as PenEl).points)"
+          fill="none"
+          stroke="transparent"
+          stroke-width="12"
+          class="diagram-hit-target"
+        />
       </template>
+
+      <!-- Selection outline -->
+      <rect
+        v-if="selectionBBox"
+        class="diagram-selection-outline"
+        :x="selectionBBox.x - 4"
+        :y="selectionBBox.y - 4"
+        :width="selectionBBox.width + 8"
+        :height="selectionBBox.height + 8"
+        fill="none"
+        stroke="var(--color-accent, #6366f1)"
+        stroke-width="1.5"
+        stroke-dasharray="5 3"
+        vector-effect="non-scaling-stroke"
+        pointer-events="none"
+      />
 
       <!-- Preview: rectangle or ellipse in progress -->
       <rect
@@ -534,6 +699,14 @@ const textEditState = computed(() => {
 }
 
 .diagram-preview {
+  pointer-events: none;
+}
+
+.diagram-hit-target {
+  cursor: default;
+}
+
+.diagram-selection-outline {
   pointer-events: none;
 }
 
