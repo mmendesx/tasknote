@@ -102,6 +102,8 @@ export function buildLinearElement(
   tool: 'line' | 'arrow',
   ax: number, ay: number, bx: number, by: number,
 ) {
+  const dx = bx - ax, dy = by - ay
+  if (Math.hypot(dx, dy) < MIN_DRAG_PX) return null
   return {
     id: generateId(),
     type: tool,

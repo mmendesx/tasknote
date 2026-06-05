@@ -269,7 +269,7 @@ function onCanvasPointerUp(event: PointerEvent): void {
   } else if (state.kind === 'linear') {
     const pt = getScenePt(event)
     const el = buildLinearElement(state.tool, state.ax, state.ay, pt.x, pt.y)
-    store.addElement(el as DiagramElement)
+    if (el) store.addElement(el as DiagramElement)
     cancelDraw()
   } else if (state.kind === 'pen') {
     const el = buildPenElement(state.points)

@@ -188,6 +188,38 @@ describe('DiagramTools', () => {
     expect(elements).toHaveLength(0)
   })
 
+  // Zero-size guard: line tool single click (no drag) creates no element
+  it('line tool: a click with no drag (endpoints within MIN_DRAG_PX) creates no element', async () => {
+    const { wrapper, pinia, storeState } = await mountCanvas()
+    storeState.tool = 'line'
+    await wrapper.vm.$nextTick()
+
+    const svg = wrapper.find('svg.diagram-canvas')
+    const initialLength = pinia.state.value['diagrams'].elements.length
+
+    await svg.trigger('pointerdown', { clientX: 50, clientY: 50, pointerId: 1 })
+    await svg.trigger('pointerup', { clientX: 50, clientY: 50, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    expect(pinia.state.value['diagrams'].elements).toHaveLength(initialLength)
+  })
+
+  // Zero-size guard: arrow tool single click (no drag) creates no element
+  it('arrow tool: a click with no drag creates no element', async () => {
+    const { wrapper, pinia, storeState } = await mountCanvas()
+    storeState.tool = 'arrow'
+    await wrapper.vm.$nextTick()
+
+    const svg = wrapper.find('svg.diagram-canvas')
+    const initialLength = pinia.state.value['diagrams'].elements.length
+
+    await svg.trigger('pointerdown', { clientX: 50, clientY: 50, pointerId: 1 })
+    await svg.trigger('pointerup', { clientX: 50, clientY: 50, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    expect(pinia.state.value['diagrams'].elements).toHaveLength(initialLength)
+  })
+
   // Pan regression: hand tool still works after drawing tool introduction
   it('pan still works with hand tool after drawing tools are introduced', async () => {
     const { wrapper, pinia, storeState } = await mountCanvas()
