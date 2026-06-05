@@ -98,6 +98,10 @@ export const useDiagramsStore = defineStore('diagrams', () => {
 
   async function removeDiagram(diagramId: number): Promise<void> {
     error.value = null
+    if (diagramId === id.value) {
+      cancelScheduledSave()
+      id.value = null
+    }
     try {
       await api.diagrams.deleteDiagram(diagramId)
       list.value = list.value.filter((d) => d.id !== diagramId)
@@ -110,6 +114,11 @@ export const useDiagramsStore = defineStore('diagrams', () => {
   // ── Editor actions ──────────────────────────────────────────────────────────
 
   async function loadDiagram(diagramId: number): Promise<void> {
+    try {
+      await flushSave()
+    } catch {
+      // best-effort: do not block navigation if flush fails
+    }
     loading.value = true
     error.value = null
     try {
@@ -152,6 +161,22 @@ export const useDiagramsStore = defineStore('diagrams', () => {
       error.value = err instanceof Error ? err.message : 'Failed to save diagram'
     } finally {
       saving.value = false
+    }
+  }
+
+  function cancelScheduledSave(): void {
+    if (debounceTimer !== null) {
+      clearTimeout(debounceTimer)
+      debounceTimer = null
+    }
+    dirty.value = false
+  }
+
+  async function flushSave(): Promise<void> {
+    if (debounceTimer !== null) {
+      clearTimeout(debounceTimer)
+      debounceTimer = null
+      await save()
     }
   }
 
@@ -226,6 +251,8 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     loadDiagram,
     save,
     scheduleSave,
+    cancelScheduledSave,
+    flushSave,
     addElement,
     updateElement,
     removeElement,

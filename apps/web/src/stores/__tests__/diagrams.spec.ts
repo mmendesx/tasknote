@@ -100,6 +100,96 @@ describe('useDiagramsStore — debounced autosave', () => {
   })
 })
 
+describe('useDiagramsStore — timer lifecycle (R2, R3)', () => {
+  let store: ReturnType<typeof useDiagramsStore>
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    store = useDiagramsStore()
+    vi.resetAllMocks()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('removeDiagram cancels a pending autosave for the open diagram (no PATCH to the deleted id)', async () => {
+    // Arrange: diagram 1 is open
+    const diagram1 = makeDiagram(1, 'Diagram One')
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram1)
+    vi.mocked(api.diagrams.deleteDiagram).mockResolvedValueOnce(undefined as unknown as void)
+    vi.mocked(api.diagrams.updateDiagram).mockResolvedValue(diagram1)
+
+    await store.loadDiagram(1)
+
+    // Act: add an element (schedules autosave) then delete the diagram
+    store.addElement(makeRectangle('el-1'))
+    await store.removeDiagram(1)
+
+    // Advance past the debounce window — timer must be cancelled
+    vi.advanceTimersByTime(700)
+
+    expect(api.diagrams.updateDiagram).not.toHaveBeenCalled()
+    expect(store.id).toBe(null)
+  })
+
+  it('loadDiagram flushes the previous diagram pending edit before switching', async () => {
+    // Arrange: two diagrams
+    const diagram1 = makeDiagram(1, 'Diagram One')
+    const diagram2 = makeDiagram(2, 'Diagram Two')
+
+    vi.mocked(api.diagrams.getDiagram).mockImplementation((diagramId: number) => {
+      if (diagramId === 1) return Promise.resolve(diagram1)
+      if (diagramId === 2) return Promise.resolve(diagram2)
+      return Promise.reject(new Error('Not found'))
+    })
+    vi.mocked(api.diagrams.updateDiagram).mockResolvedValue(diagram1)
+
+    // Load diagram 1 and schedule a pending save
+    await store.loadDiagram(1)
+    store.addElement(makeRectangle('el-a'))
+
+    // Switch to diagram 2 — flush must fire the PATCH for diagram 1
+    await store.loadDiagram(2)
+
+    // Exactly one PATCH, targeting diagram 1
+    expect(api.diagrams.updateDiagram).toHaveBeenCalledTimes(1)
+    expect(api.diagrams.updateDiagram).toHaveBeenCalledWith(1, expect.anything())
+
+    // State now reflects diagram 2
+    expect(store.id).toBe(2)
+    expect(store.title).toBe('Diagram Two')
+
+    // No additional PATCH fires after the debounce window
+    vi.advanceTimersByTime(700)
+    expect(api.diagrams.updateDiagram).toHaveBeenCalledTimes(1)
+  })
+
+  it('loadDiagram proceeds even if the flush save rejects', async () => {
+    const diagram1 = makeDiagram(1, 'Diagram One')
+    const diagram2 = makeDiagram(2, 'Diagram Two')
+
+    vi.mocked(api.diagrams.getDiagram).mockImplementation((diagramId: number) => {
+      if (diagramId === 1) return Promise.resolve(diagram1)
+      if (diagramId === 2) return Promise.resolve(diagram2)
+      return Promise.reject(new Error('Not found'))
+    })
+    // The flush will call updateDiagram — make it reject
+    vi.mocked(api.diagrams.updateDiagram).mockRejectedValueOnce(new Error('Network error'))
+
+    await store.loadDiagram(1)
+    store.addElement(makeRectangle('el-b'))
+
+    // Should not throw; diagram 2 should load normally
+    await expect(store.loadDiagram(2)).resolves.toBeUndefined()
+
+    expect(api.diagrams.getDiagram).toHaveBeenCalledWith(2)
+    expect(store.id).toBe(2)
+    expect(store.title).toBe('Diagram Two')
+  })
+})
+
 describe('useDiagramsStore — loadDiagram', () => {
   let store: ReturnType<typeof useDiagramsStore>
 
