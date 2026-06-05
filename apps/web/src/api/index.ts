@@ -1,3 +1,4 @@
+export * as diagrams from './diagrams'
 export * as settings from './settings'
 export * as boards from './boards'
 export * as columns from './columns'
