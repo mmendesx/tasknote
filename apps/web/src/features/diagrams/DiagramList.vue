@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useDiagramsStore } from '@/stores/diagrams'
 import type { Diagram } from '@tasknote/shared'
 
@@ -14,10 +14,40 @@ const emit = defineEmits<{
 
 const diagramsStore = useDiagramsStore()
 
+// ── Rename state ──────────────────────────────────────────────────────────────
+
+const editingId = ref<number | null>(null)
+const editingTitle = ref('')
+const renameInputRef = ref<HTMLInputElement[]>([])
+
+async function startRename(diagram: Diagram): Promise<void> {
+  editingId.value = diagram.id
+  editingTitle.value = diagram.title
+  await nextTick()
+  const input = renameInputRef.value[0]
+  input?.focus()
+  input?.select()
+}
+
+async function saveRename(): Promise<void> {
+  if (editingId.value === null) return
+  const id = editingId.value
+  editingId.value = null
+  await diagramsStore.renameDiagram(id, editingTitle.value)
+}
+
+function cancelRename(): void {
+  editingId.value = null
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+
 async function handleDelete(id: number): Promise<void> {
   await diagramsStore.removeDiagram(id)
   emit('deleted', id)
 }
+
+// ── List ──────────────────────────────────────────────────────────────────────
 
 onMounted(() => {
   diagramsStore.loadList()
@@ -38,7 +68,20 @@ const sortedDiagrams = computed<Diagram[]>(() =>
       class="diagram-item"
       :class="{ 'diagram-item--selected': diagram.id === selectedId }"
     >
+      <input
+        v-if="editingId === diagram.id"
+        ref="renameInputRef"
+        v-model="editingTitle"
+        class="diagram-item__rename-input focus-ring"
+        type="text"
+        maxlength="100"
+        aria-label="Rename diagram"
+        @keydown.enter.stop="saveRename"
+        @keydown.escape.stop="cancelRename"
+        @blur="saveRename"
+      />
       <button
+        v-else
         type="button"
         class="diagram-item__open"
         :aria-label="`Open diagram: ${diagram.title || 'Untitled'}`"
@@ -48,24 +91,43 @@ const sortedDiagrams = computed<Diagram[]>(() =>
         <span class="diagram-item__title">{{ diagram.title || 'Untitled' }}</span>
       </button>
 
-      <!-- Delete button is a sibling outside the open button — revealed on hover/focus-within -->
-      <button
-        type="button"
-        class="diagram-item__del"
-        :aria-label="`Delete diagram: ${diagram.title || 'Untitled'}`"
-        title="Delete diagram"
-        @click="handleDelete(diagram.id)"
-      >
-        <svg viewBox="0 0 12 12" width="12" height="12" fill="none" aria-hidden="true">
-          <path
-            d="M1 3h10M4 3V2h4v1M5 5.5v3M7 5.5v3M2 3l.8 7.2A.9.9 0 0 0 3.7 11h4.6a.9.9 0 0 0 .9-.8L10 3"
-            stroke="currentColor"
-            stroke-width="1.2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </svg>
-      </button>
+      <!-- Action buttons are siblings outside the open button — revealed on hover/focus-within -->
+      <div v-if="editingId !== diagram.id" class="diagram-item__actions">
+        <button
+          type="button"
+          class="diagram-item__action-btn"
+          title="Rename diagram"
+          :aria-label="`Rename diagram: ${diagram.title || 'Untitled'}`"
+          @click.stop="startRename(diagram)"
+        >
+          <svg viewBox="0 0 12 12" width="12" height="12" fill="none" aria-hidden="true">
+            <path
+              d="M8 2l2 2-6 6H2V8z"
+              stroke="currentColor"
+              stroke-width="1.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="diagram-item__del"
+          :aria-label="`Delete diagram: ${diagram.title || 'Untitled'}`"
+          title="Delete diagram"
+          @click="handleDelete(diagram.id)"
+        >
+          <svg viewBox="0 0 12 12" width="12" height="12" fill="none" aria-hidden="true">
+            <path
+              d="M1 3h10M4 3V2h4v1M5 5.5v3M7 5.5v3M2 3l.8 7.2A.9.9 0 0 0 3.7 11h4.6a.9.9 0 0 0 .9-.8L10 3"
+              stroke="currentColor"
+              stroke-width="1.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
+      </div>
     </li>
 
     <li v-if="diagramsStore.loading" class="diagram-list__empty">Loading…</li>
@@ -100,7 +162,7 @@ const sortedDiagrams = computed<Diagram[]>(() =>
   background: transparent;
   border: none;
   cursor: pointer;
-  padding: 0.625rem 2.5rem 0.625rem 0.75rem;
+  padding: 0.625rem 4.5rem 0.625rem 0.75rem;
   color: inherit;
   font: inherit;
 }
@@ -125,11 +187,53 @@ const sortedDiagrams = computed<Diagram[]>(() =>
   white-space: nowrap;
 }
 
-.diagram-item__del {
+.diagram-item__rename-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--color-surface);
+  border: 1px solid var(--color-focus-ring);
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  font: inherit;
+  font-size: 0.8125rem;
+  color: var(--color-text-primary);
+  outline: none;
+}
+
+.diagram-item__rename-input:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+
+.diagram-item__actions {
   position: absolute;
   top: 50%;
-  right: 0.5rem;
+  right: 0.25rem;
   transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--motion-duration-fast);
+}
+
+.diagram-item:hover .diagram-item__actions,
+.diagram-item:focus-within .diagram-item__actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (hover: none) {
+  .diagram-item__actions {
+    opacity: 0.6;
+    pointer-events: auto;
+  }
+}
+
+.diagram-item__action-btn,
+.diagram-item__del {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -142,23 +246,12 @@ const sortedDiagrams = computed<Diagram[]>(() =>
   cursor: pointer;
   padding: 0;
   flex-shrink: 0;
-  opacity: 0;
-  pointer-events: none;
-  transition: color var(--motion-duration-fast), opacity var(--motion-duration-fast),
-    background-color var(--motion-duration-fast);
+  transition: color var(--motion-duration-fast), background-color var(--motion-duration-fast);
 }
 
-.diagram-item:hover .diagram-item__del,
-.diagram-item:focus-within .diagram-item__del {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-@media (hover: none) {
-  .diagram-item__del {
-    opacity: 0.6;
-    pointer-events: auto;
-  }
+.diagram-item__action-btn:hover {
+  color: var(--color-text-primary);
+  background-color: color-mix(in srgb, var(--color-text-muted) 12%, transparent);
 }
 
 .diagram-item__del:hover {
@@ -166,6 +259,7 @@ const sortedDiagrams = computed<Diagram[]>(() =>
   background-color: color-mix(in srgb, var(--color-status-blocked) 12%, transparent);
 }
 
+.diagram-item__action-btn:focus-visible,
 .diagram-item__del:focus-visible {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 1px;

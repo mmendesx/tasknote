@@ -106,4 +106,103 @@ describe('DiagramList', () => {
     expect(wrapper.emitted('select')).toHaveLength(1)
     expect(wrapper.emitted('select')![0]).toEqual([7])
   })
+
+  // BDD: clicking the rename button shows an editable input
+  it('clicking the rename button shows an editable input', async () => {
+    const { diagrams: apiDiagrams } = await import('@/api')
+
+    vi.mocked(apiDiagrams.listDiagrams).mockResolvedValueOnce([
+      makeDiagram(5, 'Untitled diagram', new Date('2026-01-01')),
+    ] as never[])
+
+    const { wrapper } = await mountList()
+
+    expect(wrapper.find('.diagram-item__rename-input').exists()).toBe(false)
+
+    const renameBtn = wrapper.find('.diagram-item__action-btn')
+    await renameBtn.trigger('click')
+
+    const input = wrapper.find('.diagram-item__rename-input')
+    expect(input.exists()).toBe(true)
+    expect((input.element as HTMLInputElement).value).toBe('Untitled diagram')
+    expect(input.attributes('aria-label')).toBe('Rename diagram')
+  })
+
+  // BDD: editing the title and pressing Enter persists via renameDiagram
+  it('editing the title and pressing Enter persists via renameDiagram with the new title', async () => {
+    const { diagrams: apiDiagrams } = await import('@/api')
+
+    vi.mocked(apiDiagrams.listDiagrams).mockResolvedValueOnce([
+      makeDiagram(5, 'Untitled diagram', new Date('2026-01-01')),
+    ] as never[])
+
+    vi.mocked(apiDiagrams.updateDiagram).mockResolvedValueOnce(
+      makeDiagram(5, 'Auth flow', new Date('2026-01-02')) as never,
+    )
+
+    const { wrapper } = await mountList()
+
+    await wrapper.find('.diagram-item__action-btn').trigger('click')
+
+    const input = wrapper.find('.diagram-item__rename-input')
+    await input.setValue('Auth flow')
+    await input.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+
+    expect(apiDiagrams.updateDiagram).toHaveBeenCalledWith(5, { title: 'Auth flow' })
+    // Input is dismissed and the new title is shown
+    expect(wrapper.find('.diagram-item__rename-input').exists()).toBe(false)
+    expect(wrapper.find('.diagram-item__title').text()).toBe('Auth flow')
+  })
+
+  // BDD: pressing Escape cancels the rename without persisting
+  it('pressing Escape cancels the rename without persisting', async () => {
+    const { diagrams: apiDiagrams } = await import('@/api')
+
+    vi.mocked(apiDiagrams.listDiagrams).mockResolvedValueOnce([
+      makeDiagram(3, 'My diagram', new Date('2026-01-01')),
+    ] as never[])
+
+    const { wrapper } = await mountList()
+
+    await wrapper.find('.diagram-item__action-btn').trigger('click')
+
+    const input = wrapper.find('.diagram-item__rename-input')
+    await input.setValue('Something else')
+    await input.trigger('keydown', { key: 'Escape' })
+    await flushPromises()
+
+    expect(apiDiagrams.updateDiagram).not.toHaveBeenCalled()
+    expect(wrapper.find('.diagram-item__rename-input').exists()).toBe(false)
+    // Original title is preserved
+    expect(wrapper.find('.diagram-item__title').text()).toBe('My diagram')
+  })
+
+  // BDD: committing an empty title sends empty to the store (backend resolves to 'Untitled diagram')
+  it("committing an empty title sends empty to renameDiagram and shows the server-resolved title", async () => {
+    const { diagrams: apiDiagrams } = await import('@/api')
+
+    vi.mocked(apiDiagrams.listDiagrams).mockResolvedValueOnce([
+      makeDiagram(8, 'Some title', new Date('2026-01-01')),
+    ] as never[])
+
+    // Backend resolves empty title to 'Untitled diagram'
+    vi.mocked(apiDiagrams.updateDiagram).mockResolvedValueOnce(
+      makeDiagram(8, 'Untitled diagram', new Date('2026-01-02')) as never,
+    )
+
+    const { wrapper } = await mountList()
+
+    await wrapper.find('.diagram-item__action-btn').trigger('click')
+
+    const input = wrapper.find('.diagram-item__rename-input')
+    await input.setValue('')
+    await input.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+
+    // Store is called even for empty string
+    expect(apiDiagrams.updateDiagram).toHaveBeenCalledWith(8, { title: '' })
+    // List reflects the server-resolved title
+    expect(wrapper.find('.diagram-item__title').text()).toBe('Untitled diagram')
+  })
 })
