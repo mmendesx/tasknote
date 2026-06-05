@@ -522,8 +522,8 @@ const textEditState = computed(() => {
   font-size: 16px;
   font-family: inherit;
   border: 1px solid var(--color-accent, #6366f1);
-  background: var(--color-bg, #ffffff);
-  color: var(--color-text, #1f2937);
+  background: var(--color-surface, #ffffff);
+  color: var(--color-text-primary, #1f2937);
   padding: 2px 4px;
   outline: none;
   box-sizing: border-box;
