@@ -41,10 +41,19 @@ function snakeCaseDeep(value: unknown, seen: WeakSet<object>): unknown {
     // Objects (including TypeORM class instances) — rebuild with snake_case keys
     const obj: Record<string, unknown> = {};
     for (const key of Object.keys(value as Record<string, unknown>)) {
-      obj[toSnakeKey(key)] = snakeCaseDeep(
-        (value as Record<string, unknown>)[key],
-        seen,
-      );
+      const snakeKey = toSnakeKey(key);
+      const v = (value as Record<string, unknown>)[key];
+      if (snakeKey === 'scene_json') {
+        // scene_json's VALUE is an opaque, client-owned Excalidraw document.
+        // Its interior keys (appState, scrollX, strokeWidth, etc.) are
+        // intentionally camelCase and are NOT server property names.
+        // Recursing into this value would mangle those keys and break the
+        // canvas on the frontend. Pass the value through verbatim; only the
+        // KEY itself (already snake_case) participates in the normal mapping.
+        obj[snakeKey] = v;
+        continue;
+      }
+      obj[snakeKey] = snakeCaseDeep(v, seen);
     }
     result = obj;
   }

@@ -109,6 +109,55 @@ describe('toSnakeCaseDeep', () => {
     expect(result.a).toEqual({ foo_bar: 1 });
     expect(result.b).toEqual({ foo_bar: 1 });
   });
+
+  // ICT-diagrams: scene_json opaque-value guard
+  it('snake-cases sibling keys but preserves scene_json interior verbatim', () => {
+    const expectedScene = {
+      version: 1,
+      elements: [
+        { id: 'a', type: 'rectangle', x: 0, y: 0, width: 10, height: 10, stroke: '#000', strokeWidth: 2 },
+      ],
+      appState: { viewport: { scrollX: 5, scrollY: 6, zoom: 1.5 } },
+    };
+
+    const input = {
+      sceneJson: expectedScene,
+      createdAt: new Date('2026-01-15T00:00:00.000Z'),
+    };
+
+    const result = toSnakeCaseDeep(input) as Record<string, unknown>;
+
+    // sibling key must be snake-cased
+    expect(Object.keys(result)).not.toContain('createdAt');
+    expect(result['created_at']).toBeInstanceOf(Date);
+
+    // scene_json key must exist and the interior must be byte-for-byte identical
+    // (the camelCase interior keys — appState, scrollX, strokeWidth — must NOT
+    // be mangled to app_state / scroll_x / stroke_width)
+    expect(Object.keys(result)).toContain('scene_json');
+    expect(result['scene_json']).toEqual(expectedScene);
+
+    // Explicitly confirm the camelCase interior is untouched
+    const scene = result['scene_json'] as typeof expectedScene;
+    expect(scene.appState).toBeDefined();
+    expect(scene.appState.viewport.scrollX).toBe(5);
+    expect(scene.appState.viewport.scrollY).toBe(6);
+    expect(scene.elements[0].strokeWidth).toBe(2);
+
+    // Confirm the mangled forms do NOT appear
+    expect(scene).not.toHaveProperty('app_state');
+    const viewport = scene.appState.viewport as Record<string, unknown>;
+    expect(viewport).not.toHaveProperty('scroll_x');
+    expect(viewport).not.toHaveProperty('scroll_y');
+    expect(scene.elements[0] as unknown as Record<string, unknown>).not.toHaveProperty('stroke_width');
+  });
+
+  it('still snake-cases normal nested objects outside scene_json', () => {
+    const result = toSnakeCaseDeep({ fooBar: { bazQux: 1 } }) as Record<string, unknown>;
+    expect(result).toEqual({ foo_bar: { baz_qux: 1 } });
+    expect(result).not.toHaveProperty('fooBar');
+    expect((result['foo_bar'] as Record<string, unknown>)).not.toHaveProperty('bazQux');
+  });
 });
 
 // ---------------------------------------------------------------------------
