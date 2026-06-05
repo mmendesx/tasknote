@@ -179,6 +179,10 @@ export type UpdateFileRefDto = z.infer<typeof UpdateFileRefDtoSchema>;
 
 // ─── Diagram DTOs ────────────────────────────────────────────────────────────
 
+const DiagramBindingSchema = z.object({ elementId: z.string() });
+
+export type DiagramBinding = z.infer<typeof DiagramBindingSchema>;
+
 export const DiagramViewportSchema = z.object({
   scrollX: z.number(),
   scrollY: z.number(),
@@ -214,6 +218,8 @@ export const DiagramElementSchema = z.discriminatedUnion('type', [
     points: z.tuple([z.tuple([z.number(), z.number()]), z.tuple([z.number(), z.number()])]),
     stroke: z.string(),
     strokeWidth: z.number(),
+    startBinding: DiagramBindingSchema.nullable().optional(),
+    endBinding: DiagramBindingSchema.nullable().optional(),
   }),
   z.object({
     id: z.string(),
@@ -221,6 +227,8 @@ export const DiagramElementSchema = z.discriminatedUnion('type', [
     points: z.tuple([z.tuple([z.number(), z.number()]), z.tuple([z.number(), z.number()])]),
     stroke: z.string(),
     strokeWidth: z.number(),
+    startBinding: DiagramBindingSchema.nullable().optional(),
+    endBinding: DiagramBindingSchema.nullable().optional(),
   }),
   z.object({
     id: z.string(),
