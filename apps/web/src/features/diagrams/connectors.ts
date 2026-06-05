@@ -10,7 +10,7 @@ export function elementCenter(el: DiagramElement): { x: number; y: number } {
 
 // ── Bindable shape guard ──────────────────────────────────────────────────────
 
-function isBindableShape(el: DiagramElement): boolean {
+export function isBindableShape(el: DiagramElement): boolean {
   return el.type === 'rectangle' || el.type === 'ellipse'
 }
 

@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import * as api from '@/api'
 import type { Diagram, DiagramElement, DiagramViewport } from '@tasknote/shared'
+import { elementCenter, findElementById, isBindableShape } from '../features/diagrams/connectors'
 
 const DEBOUNCE_MS = 600
 
@@ -214,12 +215,37 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     scheduleSave()
   }
 
+  function recomputeBoundConnectors(movedElementId: string): void {
+    const movedShape = findElementById(elements.value, movedElementId)
+    if (!movedShape) return
+
+    const center = elementCenter(movedShape)
+
+    elements.value = elements.value.map((el) => {
+      if (el.type !== 'arrow' && el.type !== 'line') return el
+
+      const matchesStart = el.startBinding?.elementId === movedElementId
+      const matchesEnd = el.endBinding?.elementId === movedElementId
+      if (!matchesStart && !matchesEnd) return el
+
+      const start: [number, number] = matchesStart ? [center.x, center.y] : el.points[0]
+      const end: [number, number] = matchesEnd ? [center.x, center.y] : el.points[1]
+      return { ...el, points: [start, end] }
+    })
+  }
+
   function updateElement(elementId: string, patch: Partial<DiagramElement>): void {
     const idx = elements.value.findIndex((e) => e.id === elementId)
     if (idx === -1) return
     const copy = [...elements.value]
     copy[idx] = { ...copy[idx], ...patch } as DiagramElement
     elements.value = copy
+
+    const updatedElement = elements.value[idx]
+    if (isBindableShape(updatedElement)) {
+      recomputeBoundConnectors(elementId)
+    }
+
     scheduleSave()
   }
 

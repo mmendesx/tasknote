@@ -15,6 +15,40 @@ import { useDiagramsStore } from '@/stores/diagrams'
 import * as api from '@/api'
 import type { Diagram, DiagramElement, DiagramViewport } from '@tasknote/shared'
 
+// makeRectangle width=100, height=50 → center = (x+50, y+25)
+// For center (100,100): x=50, y=75
+// For center (180,140): x=130, y=115
+function makeRectangleAt(elId: string, x: number, y: number): DiagramElement {
+  return {
+    id: elId,
+    type: 'rectangle',
+    x,
+    y,
+    width: 100,
+    height: 50,
+    stroke: '#000000',
+    fill: null,
+    strokeWidth: 1,
+  }
+}
+
+function makeArrow(
+  elId: string,
+  points: [[number, number], [number, number]],
+  startBindingId?: string,
+  endBindingId?: string,
+): DiagramElement {
+  return {
+    id: elId,
+    type: 'arrow',
+    points,
+    stroke: '#000000',
+    strokeWidth: 1,
+    startBinding: startBindingId ? { elementId: startBindingId } : null,
+    endBinding: endBindingId ? { elementId: endBindingId } : null,
+  }
+}
+
 function makeDiagram(
   diagramId: number,
   diagramTitle: string,
@@ -325,5 +359,97 @@ describe('useDiagramsStore — loadDiagram', () => {
 
     expect(store.error).toBe('Not found')
     expect(store.elements).toHaveLength(0)
+  })
+})
+
+describe('useDiagramsStore — bound connector rerouting (ICT-4)', () => {
+  let store: ReturnType<typeof useDiagramsStore>
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    store = useDiagramsStore()
+    vi.resetAllMocks()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('moving a shape re-routes a connector bound to its start endpoint', () => {
+    // R center starts at (100,100): x=50, y=75. Arrow start bound to R.
+    const R = makeRectangleAt('R', 50, 75)
+    const arrow = makeArrow('arrow-1', [[100, 100], [300, 300]], 'R', undefined)
+    store.elements = [R, arrow]
+
+    // Move R so new center = (180,140): x=130, y=115
+    store.updateElement('R', { x: 130, y: 115 })
+
+    const updatedArrow = store.elements.find((e) => e.id === 'arrow-1')!
+    expect(updatedArrow.type).toBe('arrow')
+    if (updatedArrow.type === 'arrow') {
+      expect(updatedArrow.points[0]).toEqual([180, 140])
+      expect(updatedArrow.points[1]).toEqual([300, 300])
+    }
+  })
+
+  it('moving the other bound shape updates only the end endpoint', () => {
+    // R at center (100,100), E at center (300,300)
+    const R = makeRectangleAt('R', 50, 75)
+    const E = makeRectangleAt('E', 250, 275)
+    const arrow = makeArrow('arrow-1', [[100, 100], [300, 300]], 'R', 'E')
+    store.elements = [R, E, arrow]
+
+    // Move E so new center = (400,400): x=350, y=375
+    store.updateElement('E', { x: 350, y: 375 })
+
+    const updatedArrow = store.elements.find((e) => e.id === 'arrow-1')!
+    expect(updatedArrow.type).toBe('arrow')
+    if (updatedArrow.type === 'arrow') {
+      expect(updatedArrow.points[0]).toEqual([100, 100])
+      expect(updatedArrow.points[1]).toEqual([400, 400])
+    }
+  })
+
+  it('moving an unrelated shape leaves bound connectors unchanged', () => {
+    const R = makeRectangleAt('R', 50, 75)
+    const U = makeRectangleAt('U', 200, 200)
+    const arrow = makeArrow('arrow-1', [[100, 100], [300, 300]], 'R', undefined)
+    store.elements = [R, U, arrow]
+
+    store.updateElement('U', { x: 0, y: 0 })
+
+    const updatedArrow = store.elements.find((e) => e.id === 'arrow-1')!
+    expect(updatedArrow.type).toBe('arrow')
+    if (updatedArrow.type === 'arrow') {
+      expect(updatedArrow.points[0]).toEqual([100, 100])
+      expect(updatedArrow.points[1]).toEqual([300, 300])
+    }
+  })
+
+  it('recompute persists via the debounced autosave with exactly one PATCH', async () => {
+    store.id = 1
+    vi.mocked(api.diagrams.updateDiagram).mockResolvedValue(makeDiagram(1, 'Test'))
+
+    const R = makeRectangleAt('R', 50, 75)
+    const arrow = makeArrow('arrow-1', [[100, 100], [300, 300]], 'R', undefined)
+    store.elements = [R, arrow]
+
+    // Move R so new center = (180,140)
+    store.updateElement('R', { x: 130, y: 115 })
+
+    vi.advanceTimersByTime(700)
+    await Promise.resolve()
+
+    expect(api.diagrams.updateDiagram).toHaveBeenCalledTimes(1)
+
+    const callArg = vi.mocked(api.diagrams.updateDiagram).mock.calls[0][1]
+    const savedElements = callArg.scene_json?.elements ?? []
+    const savedArrow = savedElements.find((e: DiagramElement) => e.id === 'arrow-1')
+    expect(savedArrow).toBeDefined()
+    expect(savedArrow.type).toBe('arrow')
+    if (savedArrow.type === 'arrow') {
+      expect(savedArrow.points[0]).toEqual([180, 140])
+    }
   })
 })
