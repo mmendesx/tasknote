@@ -195,6 +195,8 @@ const routeLabel = computed(() => {
     today: 'Today',
     notes: 'Notes',
     'note-detail': 'Notes',
+    diagrams: 'Diagrams',
+    'diagram-detail': 'Diagrams',
     archive: 'Archive',
     settings: 'Settings',
   }

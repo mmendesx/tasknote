@@ -4,6 +4,7 @@ import NotesView from '@/views/NotesView.vue'
 import ArchiveView from '@/views/ArchiveView.vue'
 import SettingsView from '@/views/SettingsView.vue'
 import TodayView from '@/views/TodayView.vue'
+import DiagramsView from '@/features/diagrams/DiagramsView.vue'
 import { useNavigationState } from '@/composables/useNavigationState'
 
 const { isNavigating, routeLabel } = useNavigationState()
@@ -35,6 +36,16 @@ const router = createRouter({
       path: '/notes/:id',
       name: 'note-detail',
       component: NotesView,
+    },
+    {
+      path: '/diagrams',
+      name: 'diagrams',
+      component: DiagramsView,
+    },
+    {
+      path: '/diagrams/:id',
+      name: 'diagram-detail',
+      component: DiagramsView,
     },
     {
       path: '/archive',
