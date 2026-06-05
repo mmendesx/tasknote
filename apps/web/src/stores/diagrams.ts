@@ -2,7 +2,7 @@ import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import * as api from '@/api'
 import type { Diagram, DiagramElement, DiagramViewport } from '@tasknote/shared'
-import { elementCenter, findElementById, isBindableShape } from '../features/diagrams/connectors'
+import { detachBindingsTo, elementCenter, findElementById, isBindableShape } from '../features/diagrams/connectors'
 
 const DEBOUNCE_MS = 600
 
@@ -250,7 +250,8 @@ export const useDiagramsStore = defineStore('diagrams', () => {
   }
 
   function removeElement(elementId: string): void {
-    elements.value = elements.value.filter((e) => e.id !== elementId)
+    const remaining = elements.value.filter((e) => e.id !== elementId)
+    elements.value = detachBindingsTo(remaining, elementId)
     scheduleSave()
   }
 

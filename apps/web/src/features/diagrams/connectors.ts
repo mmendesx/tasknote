@@ -20,6 +20,29 @@ export function findElementById(elements: DiagramElement[], id: string): Diagram
   return elements.find((el) => el.id === id)
 }
 
+// ── Binding detach on shape deletion ─────────────────────────────────────────
+
+/** Clear startBinding/endBinding referencing `removedId` from every arrow/line.
+ *  Points are left exactly as-is; unaffected elements keep their reference. */
+export function detachBindingsTo(
+  elements: DiagramElement[],
+  removedId: string,
+): DiagramElement[] {
+  return elements.map((el) => {
+    if (el.type !== 'arrow' && el.type !== 'line') return el
+
+    const matchesStart = el.startBinding?.elementId === removedId
+    const matchesEnd = el.endBinding?.elementId === removedId
+    if (!matchesStart && !matchesEnd) return el
+
+    return {
+      ...el,
+      startBinding: matchesStart ? null : el.startBinding,
+      endBinding: matchesEnd ? null : el.endBinding,
+    }
+  })
+}
+
 // ── Capture-safe point resolver ───────────────────────────────────────────────
 
 export function resolveShapeIdAtPoint(

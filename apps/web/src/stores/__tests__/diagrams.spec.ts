@@ -362,6 +362,75 @@ describe('useDiagramsStore — loadDiagram', () => {
   })
 })
 
+describe('useDiagramsStore — connector detach on shape delete (ICT-5)', () => {
+  let store: ReturnType<typeof useDiagramsStore>
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    store = useDiagramsStore()
+    vi.resetAllMocks()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('deleting a bound shape detaches its connector but keeps the arrow and its points', () => {
+    const R = makeRectangleAt('R', 50, 75)
+    const A = makeArrow('arrow-1', [[100, 100], [300, 300]], 'R', undefined)
+    store.elements = [R, A]
+
+    store.removeElement('R')
+
+    const found = store.elements.find((e) => e.id === 'arrow-1')
+    expect(found).toBeDefined()
+    expect(store.elements.find((e) => e.id === 'R')).toBeUndefined()
+    if (found?.type === 'arrow') {
+      expect(found.points).toEqual([[100, 100], [300, 300]])
+      expect(found.startBinding).toBeNull()
+    }
+  })
+
+  it('deleting a shape bound by two arrows leaves both arrows (now free) and removes only the shape', () => {
+    const R = makeRectangleAt('R', 50, 75)
+    const A1 = makeArrow('arrow-1', [[100, 100], [300, 300]], 'R', undefined)
+    const A2 = makeArrow('arrow-2', [[0, 0], [100, 100]], undefined, 'R')
+    store.elements = [R, A1, A2]
+
+    store.removeElement('R')
+
+    expect(store.elements.find((e) => e.id === 'R')).toBeUndefined()
+
+    const found1 = store.elements.find((e) => e.id === 'arrow-1')
+    const found2 = store.elements.find((e) => e.id === 'arrow-2')
+    expect(found1).toBeDefined()
+    expect(found2).toBeDefined()
+    if (found1?.type === 'arrow') {
+      expect(found1.startBinding).toBeNull()
+    }
+    if (found2?.type === 'arrow') {
+      expect(found2.endBinding).toBeNull()
+    }
+  })
+
+  it('deleting a shape does not touch arrows bound to a different shape', () => {
+    const R = makeRectangleAt('R', 50, 75)
+    const S = makeRectangleAt('S', 200, 200)
+    const A = makeArrow('arrow-1', [[250, 225], [400, 400]], undefined, 'S')
+    store.elements = [R, S, A]
+
+    store.removeElement('R')
+
+    const found = store.elements.find((e) => e.id === 'arrow-1')
+    expect(found).toBeDefined()
+    if (found?.type === 'arrow') {
+      expect(found.endBinding).toEqual({ elementId: 'S' })
+      expect(found.startBinding).toBeNull()
+    }
+  })
+})
+
 describe('useDiagramsStore — bound connector rerouting (ICT-4)', () => {
   let store: ReturnType<typeof useDiagramsStore>
 
