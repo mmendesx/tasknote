@@ -25,9 +25,11 @@ import { TaskEntity } from './modules/tasks/entities/task.entity';
 import { NoteEntity } from './modules/notes/entities/note.entity';
 import { TagEntity } from './modules/tags/entities/tag.entity';
 import { FileRefEntity } from './modules/file-refs/entities/file-ref.entity';
+import { DiagramEntity } from './modules/diagrams/entities/diagram.entity';
 
 import { Initial1700000000000 } from './database/migrations/1700000000000-Initial';
 import { AddCommittedOn1700000000001 } from './database/migrations/1700000000001-AddCommittedOn';
+import { AddDiagrams1700000000002 } from './database/migrations/1700000000002-AddDiagrams';
 
 import type { BetterSqlite3ConnectionOptions } from 'typeorm/driver/better-sqlite3/BetterSqlite3ConnectionOptions';
 
@@ -53,8 +55,9 @@ import type { BetterSqlite3ConnectionOptions } from 'typeorm/driver/better-sqlit
             NoteEntity,
             TagEntity,
             FileRefEntity,
+            DiagramEntity,
           ],
-          migrations: [Initial1700000000000, AddCommittedOn1700000000001],
+          migrations: [Initial1700000000000, AddCommittedOn1700000000001, AddDiagrams1700000000002],
           migrationsRun: true,
           synchronize: false,
           
