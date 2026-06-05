@@ -17,6 +17,7 @@ import { FileRefsModule } from './modules/file-refs/file-refs.module';
 import { SearchModule } from './modules/search/search.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { MaintenanceModule } from './modules/maintenance/maintenance.module';
+import { DiagramsModule } from './modules/diagrams/diagrams.module';
 
 import { SettingsEntity } from './modules/settings/entities/settings.entity';
 import { BoardEntity } from './modules/boards/entities/board.entity';
@@ -79,6 +80,7 @@ import type { BetterSqlite3ConnectionOptions } from 'typeorm/driver/better-sqlit
     SearchModule,
     AdminModule,
     MaintenanceModule,
+    DiagramsModule,
   ],
   controllers: [HealthController],
   providers: [
