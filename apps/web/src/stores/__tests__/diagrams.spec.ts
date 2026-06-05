@@ -431,6 +431,120 @@ describe('useDiagramsStore — connector detach on shape delete (ICT-5)', () => 
   })
 })
 
+describe('ICT-6 persistence', () => {
+  let store: ReturnType<typeof useDiagramsStore>
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    store = useDiagramsStore()
+    vi.resetAllMocks()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('a bound arrow hydrates with its bindings intact on load', async () => {
+    const R = makeRectangleAt('R', 50, 75)
+    const E = makeRectangleAt('E', 250, 275)
+    const arrow = makeArrow('arrow-1', [[100, 100], [300, 300]], 'R', 'E')
+    const diagram = makeDiagram(1, 'Test', [R, E, arrow])
+
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
+    await store.loadDiagram(1)
+
+    const loaded = store.elements.find((e) => e.id === 'arrow-1')
+    expect(loaded).toBeDefined()
+    if (loaded?.type === 'arrow') {
+      expect(loaded.startBinding).toEqual({ elementId: 'R' })
+      expect(loaded.endBinding).toEqual({ elementId: 'E' })
+    }
+  })
+
+  it('a legacy arrow without binding keys loads and is treated as free', async () => {
+    const R = makeRectangleAt('R', 50, 75)
+    // Hand-built: no startBinding/endBinding keys at all — simulates legacy data
+    const legacyArrow: DiagramElement = {
+      id: 'arrow-legacy',
+      type: 'arrow',
+      points: [[100, 100], [300, 300]],
+      stroke: '#000000',
+      strokeWidth: 1,
+    } as DiagramElement
+    const diagram = makeDiagram(1, 'Legacy', [R, legacyArrow])
+
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
+    await store.loadDiagram(1)
+
+    // Arrow loaded without throwing
+    const loaded = store.elements.find((e) => e.id === 'arrow-legacy')
+    expect(loaded).toBeDefined()
+
+    // Moving R triggers recomputeBoundConnectors, which visits the legacy arrow.
+    // Optional chaining (?.) must not throw when binding keys are undefined.
+    expect(() => store.updateElement('R', { x: 130, y: 115 })).not.toThrow()
+    // Arrow still present after the move
+    expect(store.elements.find((e) => e.id === 'arrow-legacy')).toBeDefined()
+  })
+
+  it('after load, moving a bound shape re-routes and the recomputed points are in the next save payload', async () => {
+    // R center at (100,100): x=50, y=75
+    const R = makeRectangleAt('R', 50, 75)
+    const arrow = makeArrow('arrow-1', [[100, 100], [300, 300]], 'R', undefined)
+    const diagram = makeDiagram(1, 'Test', [R, arrow])
+
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
+    vi.mocked(api.diagrams.updateDiagram).mockResolvedValue(makeDiagram(1, 'Test'))
+
+    await store.loadDiagram(1)
+
+    // Move R so new center = (180,140): x=130, y=115
+    store.updateElement('R', { x: 130, y: 115 })
+
+    vi.advanceTimersByTime(700)
+    await Promise.resolve()
+
+    expect(api.diagrams.updateDiagram).toHaveBeenCalledTimes(1)
+
+    const callArg = vi.mocked(api.diagrams.updateDiagram).mock.calls[0][1]
+    const savedElements = callArg.scene_json?.elements ?? []
+    const savedArrow = savedElements.find((e: DiagramElement) => e.id === 'arrow-1')
+    expect(savedArrow).toBeDefined()
+    if (savedArrow?.type === 'arrow') {
+      expect(savedArrow.points[0]).toEqual([180, 140])
+      expect(savedArrow.points[1]).toEqual([300, 300])
+    }
+  })
+
+  it('save payload preserves bindings after a mutation post-load', async () => {
+    const R = makeRectangleAt('R', 50, 75)
+    const arrow = makeArrow('arrow-1', [[100, 100], [300, 300]], 'R', 'E')
+    const diagram = makeDiagram(1, 'Test', [R, arrow])
+
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
+    vi.mocked(api.diagrams.updateDiagram).mockResolvedValue(makeDiagram(1, 'Test'))
+
+    await store.loadDiagram(1)
+
+    // Trigger a mutation so a save is scheduled
+    store.addElement(makeRectangleAt('extra', 400, 400))
+    vi.advanceTimersByTime(700)
+    await Promise.resolve()
+
+    expect(api.diagrams.updateDiagram).toHaveBeenCalledTimes(1)
+
+    const callArg = vi.mocked(api.diagrams.updateDiagram).mock.calls[0][1]
+    const savedElements: DiagramElement[] = callArg.scene_json?.elements ?? []
+    const savedArrow = savedElements.find((e) => e.id === 'arrow-1')
+    expect(savedArrow).toBeDefined()
+    if (savedArrow?.type === 'arrow') {
+      expect(savedArrow.startBinding).toEqual({ elementId: 'R' })
+      expect(savedArrow.endBinding).toEqual({ elementId: 'E' })
+    }
+  })
+})
+
 describe('useDiagramsStore — bound connector rerouting (ICT-4)', () => {
   let store: ReturnType<typeof useDiagramsStore>
 
