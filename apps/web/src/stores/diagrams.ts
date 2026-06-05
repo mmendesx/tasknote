@@ -49,6 +49,13 @@ export const useDiagramsStore = defineStore('diagrams', () => {
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
+  // Generation token: bumped whenever the open diagram changes (load) or is
+  // deleted. An in-flight save() captures the epoch before its network await
+  // and bails out of the list-patch / dirty-clear if the epoch moved during
+  // the await — so a save launched against a now-stale diagram can never write
+  // back. Guarantees "no stale write" without relying on incidental ordering.
+  let epoch = 0
+
   // ── List actions ────────────────────────────────────────────────────────────
 
   async function loadList(): Promise<void> {
@@ -101,6 +108,7 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     if (diagramId === id.value) {
       cancelScheduledSave()
       id.value = null
+      epoch += 1
     }
     try {
       await api.diagrams.deleteDiagram(diagramId)
@@ -123,6 +131,7 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     error.value = null
     try {
       const diagram = await api.diagrams.getDiagram(diagramId)
+      epoch += 1
       id.value = diagram.id
       title.value = diagram.title
       elements.value = diagram.scene_json.elements
@@ -139,6 +148,7 @@ export const useDiagramsStore = defineStore('diagrams', () => {
   async function save(): Promise<void> {
     if (id.value === null) return
 
+    const myEpoch = epoch
     saving.value = true
     try {
       const updated = await api.diagrams.updateDiagram(id.value, {
@@ -149,6 +159,9 @@ export const useDiagramsStore = defineStore('diagrams', () => {
           appState: { viewport: viewport.value },
         },
       })
+      // The open diagram changed (switched/deleted) while this save was in
+      // flight — discard its result so it cannot write back stale state.
+      if (myEpoch !== epoch) return
       dirty.value = false
       // Patch list if the diagram is visible there
       const idx = list.value.findIndex((d) => d.id === updated.id)

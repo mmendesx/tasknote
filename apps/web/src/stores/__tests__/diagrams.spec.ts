@@ -190,6 +190,98 @@ describe('useDiagramsStore — timer lifecycle (R2, R3)', () => {
   })
 })
 
+describe('useDiagramsStore — in-flight save epoch guard', () => {
+  let store: ReturnType<typeof useDiagramsStore>
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    store = useDiagramsStore()
+    vi.resetAllMocks()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('an in-flight save whose diagram is deleted mid-await does not clear dirty for the new context', async () => {
+    // Arrange: diagram 1 open and present in the list
+    const diagram1 = makeDiagram(1, 'Diagram One')
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram1)
+    vi.mocked(api.diagrams.deleteDiagram).mockResolvedValueOnce(undefined as unknown as void)
+    await store.loadDiagram(1)
+    store.list = [diagram1]
+
+    // updateDiagram resolves only when we say so — simulating an in-flight PATCH
+    let resolveSave: (d: Diagram) => void = () => {}
+    vi.mocked(api.diagrams.updateDiagram).mockImplementationOnce(
+      () => new Promise<Diagram>((res) => { resolveSave = res }),
+    )
+
+    // Act: mutate (schedules), let the timer FIRE so save() is launched and now
+    // awaiting the network; then delete the open diagram while it is in flight.
+    store.addElement(makeRectangle('el-1'))
+    vi.advanceTimersByTime(700) // fires the timer → save() launched, awaiting
+    await store.removeDiagram(1) // bumps epoch, nulls id, sets dirty=false
+
+    // Re-establish a NEW editing context that is dirty (e.g. quickly opened a
+    // fresh diagram and edited). If the stale save's `dirty=false` leaks through,
+    // this dirty flag would be wrongly cleared.
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(makeDiagram(2, 'Diagram Two'))
+    await store.loadDiagram(2)
+    store.addElement(makeRectangle('el-new'))
+    expect(store.dirty).toBe(true)
+
+    // The stale diagram-1 PATCH finally resolves, after the epoch moved twice.
+    resolveSave(makeDiagram(1, 'Stale Title'))
+    await Promise.resolve()
+    await Promise.resolve()
+
+    // Guard holds: the stale save bailed before `dirty = false`, so the new
+    // context's pending edit is still marked dirty. Without the epoch guard the
+    // stale save would clear it.
+    expect(store.dirty).toBe(true)
+    // And it never re-inserted the deleted diagram.
+    expect(store.list.find((d) => d.id === 1)).toBeUndefined()
+  })
+
+  it('an in-flight save whose diagram is switched mid-await does not overwrite the prior diagram list entry with stale data', async () => {
+    const diagram1 = makeDiagram(1, 'Diagram One')
+    const diagram2 = makeDiagram(2, 'Diagram Two')
+    vi.mocked(api.diagrams.getDiagram).mockImplementation((diagramId: number) => {
+      if (diagramId === 1) return Promise.resolve(diagram1)
+      if (diagramId === 2) return Promise.resolve(diagram2)
+      return Promise.reject(new Error('Not found'))
+    })
+    await store.loadDiagram(1)
+    store.list = [diagram1, diagram2]
+
+    // First updateDiagram (diagram 1's autosave) hangs; later saves resolve.
+    let resolveStale: (d: Diagram) => void = () => {}
+    vi.mocked(api.diagrams.updateDiagram)
+      .mockImplementationOnce(() => new Promise<Diagram>((res) => { resolveStale = res }))
+      .mockResolvedValue(diagram2)
+
+    store.addElement(makeRectangle('el-1'))
+    vi.advanceTimersByTime(700) // save() for diagram 1 launched, awaiting
+
+    // Switch to diagram 2 (flushSave is a no-op: the timer already fired; load
+    // bumps epoch and sets id=2).
+    await store.loadDiagram(2)
+
+    // The stale diagram-1 save resolves with a DIFFERENT title for id 1, after
+    // the epoch moved. Without the guard, save() would patch list[id=1] with it.
+    resolveStale(makeDiagram(1, 'STALE One'))
+    await Promise.resolve()
+    await Promise.resolve()
+
+    // Guard holds: diagram 1's list entry keeps its original title (the stale
+    // PATCH result was discarded).
+    expect(store.id).toBe(2)
+    expect(store.list.find((d) => d.id === 1)?.title).toBe('Diagram One')
+  })
+})
+
 describe('useDiagramsStore — loadDiagram', () => {
   let store: ReturnType<typeof useDiagramsStore>
 

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import DiagramCanvas from '../DiagramCanvas.vue'
+import { useDiagramsStore } from '@/stores/diagrams'
 
 // ── API mock: never touches the network ──────────────────────────────────────
 
@@ -175,5 +176,34 @@ describe('DiagramCanvas', () => {
 
     const canvas = wrapper.find('svg.diagram-canvas')
     expect(canvas.exists()).toBe(false)
+  })
+
+  it('unmounting flushes a pending autosave immediately', async () => {
+    const { diagrams: apiDiagrams } = await import('@/api')
+    vi.mocked(apiDiagrams.updateDiagram).mockClear()
+
+    const { wrapper, pinia } = await mountCanvas()
+    const store = useDiagramsStore(pinia)
+
+    // Schedule an autosave (debounce not yet elapsed)
+    store.addElement({
+      id: 'el-unmount',
+      type: 'rectangle',
+      x: 0,
+      y: 0,
+      width: 20,
+      height: 20,
+      stroke: '#000000',
+      fill: null,
+      strokeWidth: 1,
+    })
+    expect(apiDiagrams.updateDiagram).not.toHaveBeenCalled()
+
+    // Tearing the canvas down flushes the pending save right away
+    wrapper.unmount()
+    await flushPromises()
+
+    expect(apiDiagrams.updateDiagram).toHaveBeenCalledTimes(1)
+    expect(apiDiagrams.updateDiagram).toHaveBeenCalledWith(1, expect.anything())
   })
 })

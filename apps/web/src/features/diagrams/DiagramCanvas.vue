@@ -119,7 +119,12 @@ function onKeyDown(event: KeyboardEvent): void {
 }
 
 onMounted(() => window.addEventListener('keydown', onKeyDown))
-onUnmounted(() => window.removeEventListener('keydown', onKeyDown))
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKeyDown)
+  // Persist any pending edit immediately instead of waiting out the debounce
+  // when the canvas is torn down (e.g. navigating back to the list).
+  void store.flushSave()
+})
 
 // ── Pointer helpers ───────────────────────────────────────────────────────────
 
