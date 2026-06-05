@@ -10,6 +10,11 @@ const EMPTY_SCENE: DiagramScene = {
   appState: { viewport: { scrollX: 0, scrollY: 0, zoom: 1 } },
 };
 
+function resolveTitle(title?: string): string {
+  const trimmed = (title ?? '').trim();
+  return trimmed === '' ? 'Untitled diagram' : trimmed;
+}
+
 @Injectable()
 export class DiagramsService {
   private readonly logger = new Logger(DiagramsService.name);
@@ -41,10 +46,11 @@ export class DiagramsService {
   }
 
   async createDiagram(dto: CreateDiagramDto): Promise<DiagramEntity> {
-    this.logger.log(`createDiagram: creating diagram title="${dto.title ?? ''}"`);
+    const title = resolveTitle(dto.title);
+    this.logger.log(`createDiagram: creating diagram title="${title}"`);
 
     const diagram = this.diagramsRepo.create({
-      title: dto.title ?? '',
+      title,
       sceneJson: dto.scene_json ?? EMPTY_SCENE,
     });
 
@@ -59,7 +65,7 @@ export class DiagramsService {
     const diagram = await this.getDiagram(id);
 
     if (dto.title !== undefined) {
-      diagram.title = dto.title.trim() === '' ? 'Untitled diagram' : dto.title;
+      diagram.title = resolveTitle(dto.title);
     }
 
     if (dto.scene_json !== undefined) {

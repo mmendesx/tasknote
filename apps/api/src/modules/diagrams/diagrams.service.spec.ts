@@ -130,9 +130,19 @@ describe('DiagramsService', () => {
       expect(diagram.title).toBe('Architecture Overview');
     });
 
-    it('stores empty string title when title is not provided', async () => {
+    it('stores "Untitled diagram" when title is not provided', async () => {
       const diagram = await service.createDiagram({});
-      expect(diagram.title).toBe('');
+      expect(diagram.title).toBe('Untitled diagram');
+    });
+
+    it('stores "Untitled diagram" when title is whitespace-only', async () => {
+      const diagram = await service.createDiagram({ title: '   ' });
+      expect(diagram.title).toBe('Untitled diagram');
+    });
+
+    it('stores the title trimmed when a non-empty title is provided', async () => {
+      const diagram = await service.createDiagram({ title: '  Auth flow  ' });
+      expect(diagram.title).toBe('Auth flow');
     });
 
     it('persists an explicit scene_json when provided', async () => {
