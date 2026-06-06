@@ -237,4 +237,37 @@ describe('DiagramTools', () => {
     expect(scrollX).toBeCloseTo(100)
     expect(scrollY).toBeCloseTo(60)
   })
+
+  // Regression: the text tool must NOT capture the pointer to the SVG on
+  // pointerdown — capture steals focus from the foreignObject <input> so
+  // keystrokes never reach it. Click-to-place tools skip capture; drag tools keep it.
+  it('text tool does NOT capture the pointer on pointerdown', async () => {
+    const { wrapper, storeState } = await mountCanvas()
+    storeState.tool = 'text'
+    await wrapper.vm.$nextTick()
+
+    const svg = wrapper.find('svg.diagram-canvas')
+    const capture = vi.fn()
+    ;(svg.element as unknown as { setPointerCapture: typeof capture }).setPointerCapture = capture
+
+    await svg.trigger('pointerdown', { clientX: 40, clientY: 40, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    expect(capture).not.toHaveBeenCalled()
+  })
+
+  it('rectangle tool DOES capture the pointer on pointerdown', async () => {
+    const { wrapper, storeState } = await mountCanvas()
+    storeState.tool = 'rectangle'
+    await wrapper.vm.$nextTick()
+
+    const svg = wrapper.find('svg.diagram-canvas')
+    const capture = vi.fn()
+    ;(svg.element as unknown as { setPointerCapture: typeof capture }).setPointerCapture = capture
+
+    await svg.trigger('pointerdown', { clientX: 40, clientY: 40, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    expect(capture).toHaveBeenCalledTimes(1)
+  })
 })

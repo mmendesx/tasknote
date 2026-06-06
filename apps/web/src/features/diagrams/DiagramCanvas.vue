@@ -199,7 +199,10 @@ function handleDrawPointerDown(event: PointerEvent): void {
     previewPen.value = [[pt.x, pt.y]]
   }
 
-  capturePointer(event)
+  // Text is click-to-place (no drag): capturing the pointer to the SVG steals
+  // focus from the foreignObject <input>, so keystrokes never reach it. Only the
+  // drag tools need pointer capture.
+  if (tool !== 'text') capturePointer(event)
 }
 
 // ── Pointer handlers ──────────────────────────────────────────────────────────
