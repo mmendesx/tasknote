@@ -155,8 +155,10 @@ function onListDragEnd(evt: DragEvent) {
 .kanban-column {
   display: flex;
   flex-direction: column;
-  width: 280px;
-  flex-shrink: 0;
+  /* Grow to share the canvas width equally; min-width keeps cards readable and
+     lets the row scroll horizontally once columns would get too narrow. */
+  flex: 1 1 0;
+  min-width: 280px;
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
