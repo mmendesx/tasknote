@@ -352,12 +352,12 @@ describe('useDiagramsStore — loadDiagram', () => {
     expect(store.dirty).toBe(false)
   })
 
-  it('load failure sets error flag and leaves elements empty', async () => {
+  it('load failure sets loadError flag and leaves elements empty', async () => {
     vi.mocked(api.diagrams.getDiagram).mockRejectedValueOnce(new Error('Not found'))
 
     await store.loadDiagram(999)
 
-    expect(store.error).toBe('Not found')
+    expect(store.loadError).toBe('Not found')
     expect(store.elements).toHaveLength(0)
   })
 })
@@ -542,6 +542,173 @@ describe('ICT-6 persistence', () => {
       expect(savedArrow.startBinding).toEqual({ elementId: 'R' })
       expect(savedArrow.endBinding).toEqual({ elementId: 'E' })
     }
+  })
+})
+
+describe('useDiagramsStore — error channel separation (ICT-2)', () => {
+  let store: ReturnType<typeof useDiagramsStore>
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    store = useDiagramsStore()
+    vi.resetAllMocks()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('failed autosave sets saveError and leaves loadError null', async () => {
+    const diagram = makeDiagram(1, 'Test')
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
+    vi.mocked(api.diagrams.updateDiagram).mockRejectedValue(new Error('Network error'))
+
+    await store.loadDiagram(1)
+    store.addElement(makeRectangle('el-1'))
+    vi.advanceTimersByTime(700)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(store.saveError).toBe('Network error')
+    expect(store.loadError).toBeNull()
+    expect(store.elements).toHaveLength(1)
+  })
+
+  it('failed autosave keeps canvas editable: elements remain and dirty stays true', async () => {
+    const diagram = makeDiagram(1, 'Test')
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
+    vi.mocked(api.diagrams.updateDiagram).mockRejectedValue(new Error('Network error'))
+
+    await store.loadDiagram(1)
+    store.addElement(makeRectangle('el-1'))
+    vi.advanceTimersByTime(700)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(store.saveError).not.toBeNull()
+    expect(store.loadError).toBeNull()
+    // Canvas elements are intact — canvas remains usable
+    expect(store.elements).toHaveLength(1)
+    // id is still set — canvas is not torn down
+    expect(store.id).toBe(1)
+  })
+
+  it('save recovers: retry success clears saveError', async () => {
+    const diagram = makeDiagram(1, 'Test')
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
+
+    // First save attempt fails, second succeeds
+    vi.mocked(api.diagrams.updateDiagram)
+      .mockRejectedValueOnce(new Error('Timeout'))
+      .mockResolvedValue(makeDiagram(1, 'Test'))
+
+    await store.loadDiagram(1)
+    store.addElement(makeRectangle('el-retry'))
+    vi.advanceTimersByTime(700)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(store.saveError).toBe('Timeout')
+
+    // Advance past the first retry delay (2000ms)
+    vi.advanceTimersByTime(2001)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(store.saveError).toBeNull()
+    expect(store.dirty).toBe(false)
+  })
+
+  it('load failure shows loadError without touching saveError', async () => {
+    vi.mocked(api.diagrams.getDiagram).mockRejectedValueOnce(new Error('404 Not Found'))
+
+    await store.loadDiagram(999)
+
+    expect(store.loadError).toBe('404 Not Found')
+    expect(store.saveError).toBeNull()
+    expect(store.elements).toHaveLength(0)
+  })
+
+  it('listError set, then diagram loads successfully: loadError and saveError remain null', async () => {
+    // First set a list error
+    vi.mocked(api.diagrams.listDiagrams).mockRejectedValueOnce(new Error('List failed'))
+    await store.loadList()
+    expect(store.listError).toBe('List failed')
+
+    // Then open a diagram successfully
+    const diagram = makeDiagram(5, 'My diagram', [makeRectangle('el-a')])
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
+    await store.loadDiagram(5)
+
+    expect(store.loadError).toBeNull()
+    expect(store.saveError).toBeNull()
+    expect(store.elements).toHaveLength(1)
+  })
+
+  it('retry is cancelled when epoch moves (diagram closed mid-retry)', async () => {
+    const diagram = makeDiagram(1, 'Test')
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
+    vi.mocked(api.diagrams.updateDiagram).mockRejectedValue(new Error('Network error'))
+
+    await store.loadDiagram(1)
+    store.addElement(makeRectangle('el-1'))
+    vi.advanceTimersByTime(700)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(store.saveError).not.toBeNull()
+
+    // Close the diagram (bumps epoch, cancels retry)
+    vi.mocked(api.diagrams.deleteDiagram).mockResolvedValueOnce(undefined as unknown as void)
+    await store.removeDiagram(1)
+
+    // Reset mock so if retry fires it would count
+    vi.mocked(api.diagrams.updateDiagram).mockClear()
+
+    // Advance past all retry delays — no further save calls should happen
+    vi.advanceTimersByTime(20000)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(api.diagrams.updateDiagram).not.toHaveBeenCalled()
+  })
+
+  it('retry uses backoff: first retry at 2s, second at 5s', async () => {
+    const diagram = makeDiagram(1, 'Test')
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
+    vi.mocked(api.diagrams.updateDiagram).mockRejectedValue(new Error('Network error'))
+
+    await store.loadDiagram(1)
+    store.addElement(makeRectangle('el-backoff'))
+    vi.advanceTimersByTime(700)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    // Initial failure — 1 call total
+    expect(api.diagrams.updateDiagram).toHaveBeenCalledTimes(1)
+
+    // Advance 1999ms — first retry (2s) has NOT fired yet
+    vi.advanceTimersByTime(1999)
+    await Promise.resolve()
+    expect(api.diagrams.updateDiagram).toHaveBeenCalledTimes(1)
+
+    // Advance 2ms more — first retry fires
+    vi.advanceTimersByTime(2)
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(api.diagrams.updateDiagram).toHaveBeenCalledTimes(2)
+
+    // Advance 4999ms — second retry (5s from first retry) has NOT fired yet
+    vi.advanceTimersByTime(4999)
+    await Promise.resolve()
+    expect(api.diagrams.updateDiagram).toHaveBeenCalledTimes(2)
+
+    // Advance 2ms more — second retry fires
+    vi.advanceTimersByTime(2)
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(api.diagrams.updateDiagram).toHaveBeenCalledTimes(3)
   })
 })
 

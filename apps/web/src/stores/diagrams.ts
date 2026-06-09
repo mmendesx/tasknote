@@ -6,6 +6,10 @@ import { detachBindingsTo, elementCenter, findElementById, isBindableShape } fro
 
 const DEBOUNCE_MS = 600
 
+// Retry backoff schedule in milliseconds: 2s → 5s → 15s, then every 15s.
+const RETRY_DELAYS_MS = [2000, 5000, 15000]
+const RETRY_STEADY_MS = 15000
+
 // ─── Coordinate transforms ────────────────────────────────────────────────────
 
 /** Convert a screen-space point to scene-space using the current viewport. */
@@ -36,7 +40,7 @@ export const useDiagramsStore = defineStore('diagrams', () => {
   // ── List state ──────────────────────────────────────────────────────────────
   const list = ref<Diagram[]>([])
   const loading = ref(false)
-  const error = ref<string | null>(null)
+  const listError = ref<string | null>(null)
 
   // ── Editor state ────────────────────────────────────────────────────────────
   const id = ref<number | null>(null)
@@ -47,8 +51,12 @@ export const useDiagramsStore = defineStore('diagrams', () => {
   const selectedId = ref<string | null>(null)
   const dirty = ref(false)
   const saving = ref(false)
+  const loadError = ref<string | null>(null)
+  const saveError = ref<string | null>(null)
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
+  let retryTimer: ReturnType<typeof setTimeout> | null = null
+  let retryAttempt = 0
 
   // Generation token: bumped whenever the open diagram changes (load) or is
   // deleted. An in-flight save() captures the epoch before its network await
@@ -61,18 +69,18 @@ export const useDiagramsStore = defineStore('diagrams', () => {
 
   async function loadList(): Promise<void> {
     loading.value = true
-    error.value = null
+    listError.value = null
     try {
       list.value = await api.diagrams.listDiagrams()
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to load diagrams'
+      listError.value = err instanceof Error ? err.message : 'Failed to load diagrams'
     } finally {
       loading.value = false
     }
   }
 
   async function createDiagram(newTitle?: string): Promise<Diagram> {
-    error.value = null
+    listError.value = null
     try {
       const diagram = await api.diagrams.createDiagram(
         newTitle !== undefined ? { title: newTitle } : {},
@@ -80,13 +88,13 @@ export const useDiagramsStore = defineStore('diagrams', () => {
       list.value = [diagram, ...list.value]
       return diagram
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to create diagram'
+      listError.value = err instanceof Error ? err.message : 'Failed to create diagram'
       throw err
     }
   }
 
   async function renameDiagram(diagramId: number, newTitle: string): Promise<void> {
-    error.value = null
+    listError.value = null
     try {
       const updated = await api.diagrams.updateDiagram(diagramId, { title: newTitle })
       const idx = list.value.findIndex((d) => d.id === diagramId)
@@ -99,15 +107,16 @@ export const useDiagramsStore = defineStore('diagrams', () => {
         title.value = updated.title
       }
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to rename diagram'
+      listError.value = err instanceof Error ? err.message : 'Failed to rename diagram'
       throw err
     }
   }
 
   async function removeDiagram(diagramId: number): Promise<void> {
-    error.value = null
+    listError.value = null
     if (diagramId === id.value) {
       cancelScheduledSave()
+      cancelRetry()
       id.value = null
       epoch += 1
     }
@@ -115,7 +124,7 @@ export const useDiagramsStore = defineStore('diagrams', () => {
       await api.diagrams.deleteDiagram(diagramId)
       list.value = list.value.filter((d) => d.id !== diagramId)
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to delete diagram'
+      listError.value = err instanceof Error ? err.message : 'Failed to delete diagram'
       throw err
     }
   }
@@ -128,8 +137,9 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     } catch {
       // best-effort: do not block navigation if flush fails
     }
+    cancelRetry()
     loading.value = true
-    error.value = null
+    loadError.value = null
     try {
       const diagram = await api.diagrams.getDiagram(diagramId)
       epoch += 1
@@ -138,8 +148,9 @@ export const useDiagramsStore = defineStore('diagrams', () => {
       elements.value = diagram.scene_json.elements
       viewport.value = diagram.scene_json.appState.viewport
       dirty.value = false
+      saveError.value = null
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to load diagram'
+      loadError.value = err instanceof Error ? err.message : 'Failed to load diagram'
       elements.value = []
     } finally {
       loading.value = false
@@ -164,6 +175,8 @@ export const useDiagramsStore = defineStore('diagrams', () => {
       // flight — discard its result so it cannot write back stale state.
       if (myEpoch !== epoch) return
       dirty.value = false
+      saveError.value = null
+      retryAttempt = 0
       // Patch list if the diagram is visible there
       const idx = list.value.findIndex((d) => d.id === updated.id)
       if (idx !== -1) {
@@ -172,10 +185,35 @@ export const useDiagramsStore = defineStore('diagrams', () => {
         list.value = copy
       }
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to save diagram'
+      if (myEpoch !== epoch) return
+      saveError.value = err instanceof Error ? err.message : 'Failed to save diagram'
+      scheduleRetry(myEpoch)
     } finally {
       saving.value = false
     }
+  }
+
+  function cancelRetry(): void {
+    if (retryTimer !== null) {
+      clearTimeout(retryTimer)
+      retryTimer = null
+    }
+    retryAttempt = 0
+  }
+
+  function scheduleRetry(forEpoch: number): void {
+    if (retryTimer !== null) {
+      clearTimeout(retryTimer)
+      retryTimer = null
+    }
+    const delay = RETRY_DELAYS_MS[retryAttempt] ?? RETRY_STEADY_MS
+    retryAttempt += 1
+    retryTimer = setTimeout(() => {
+      retryTimer = null
+      // Epoch moved while we were waiting — abort this retry chain
+      if (epoch !== forEpoch) return
+      void save()
+    }, delay)
   }
 
   function cancelScheduledSave(): void {
@@ -183,6 +221,7 @@ export const useDiagramsStore = defineStore('diagrams', () => {
       clearTimeout(debounceTimer)
       debounceTimer = null
     }
+    cancelRetry()
     dirty.value = false
   }
 
@@ -274,7 +313,7 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     // List
     list,
     loading,
-    error,
+    listError,
     loadList,
     createDiagram,
     renameDiagram,
@@ -288,6 +327,8 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     selectedId,
     dirty,
     saving,
+    loadError,
+    saveError,
     loadDiagram,
     save,
     scheduleSave,

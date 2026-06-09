@@ -62,7 +62,7 @@ describe('DiagramCanvas', () => {
     const storeState = pinia.state.value['diagrams']
     storeState.tool = 'hand'
     storeState.loading = false
-    storeState.error = null
+    storeState.loadError = null
     await wrapper.vm.$nextTick()
 
     const svg = wrapper.find('svg.diagram-canvas')
@@ -91,7 +91,7 @@ describe('DiagramCanvas', () => {
 
     const storeState = pinia.state.value['diagrams']
     storeState.loading = false
-    storeState.error = null
+    storeState.loadError = null
     storeState.viewport = { scrollX: 0, scrollY: 0, zoom: 4.99 }
     await wrapper.vm.$nextTick()
 
@@ -176,6 +176,75 @@ describe('DiagramCanvas', () => {
 
     const canvas = wrapper.find('svg.diagram-canvas')
     expect(canvas.exists()).toBe(false)
+  })
+
+  // ICT-2: failed autosave keeps canvas editable (no error shell, svg stays)
+  it('failed autosave keeps canvas mounted and shows no load-error shell', async () => {
+    const { diagrams: apiDiagrams } = await import('@/api')
+    vi.mocked(apiDiagrams.getDiagram).mockResolvedValueOnce({
+      id: 1,
+      title: 'Save test',
+      scene_json: {
+        version: 1,
+        elements: [
+          {
+            id: 'el-save',
+            type: 'rectangle' as const,
+            x: 0, y: 0, width: 50, height: 50,
+            stroke: '#000', fill: null, strokeWidth: 1,
+          },
+        ],
+        appState: { viewport: { scrollX: 0, scrollY: 0, zoom: 1 } },
+      },
+    } as never)
+    vi.mocked(apiDiagrams.updateDiagram).mockRejectedValue(new Error('Network error'))
+
+    const { wrapper, pinia } = await mountCanvas()
+    const store = useDiagramsStore(pinia)
+
+    // Trigger a save and let it fail
+    store.addElement({
+      id: 'el-new', type: 'rectangle', x: 10, y: 10,
+      width: 20, height: 20, stroke: '#000', fill: null, strokeWidth: 1,
+    })
+
+    // Flush debounce
+    const storeState = pinia.state.value['diagrams']
+    // Force the debounce to fire by advancing timers is not available here;
+    // directly invoke store.save to simulate the failure
+    await store.save()
+    await flushPromises()
+
+    // Canvas SVG must still be mounted (not replaced by error shell)
+    const canvas = wrapper.find('svg.diagram-canvas')
+    expect(canvas.exists()).toBe(true)
+
+    // Load-error shell must not be present
+    const alert = wrapper.find('[role="alert"]')
+    expect(alert.exists()).toBe(false)
+
+    // Store state reflects the split
+    expect(storeState.saveError).not.toBeNull()
+    expect(storeState.loadError).toBeNull()
+  })
+
+  // ICT-2: load error still shows the error shell (regression guard)
+  it('load error shows role=alert and no svg canvas — loadError isolated', async () => {
+    const { diagrams: apiDiagrams } = await import('@/api')
+    vi.mocked(apiDiagrams.getDiagram).mockRejectedValueOnce(new Error('Server error'))
+
+    const { wrapper, pinia } = await mountCanvas()
+    const storeState = pinia.state.value['diagrams']
+
+    const alert = wrapper.find('[role="alert"]')
+    expect(alert.exists()).toBe(true)
+    expect(alert.text()).toContain('Failed to load diagram')
+
+    const canvas = wrapper.find('svg.diagram-canvas')
+    expect(canvas.exists()).toBe(false)
+
+    expect(storeState.loadError).not.toBeNull()
+    expect(storeState.saveError).toBeNull()
   })
 
   it('unmounting flushes a pending autosave immediately', async () => {

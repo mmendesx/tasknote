@@ -1,6 +1,6 @@
 <script setup lang="ts">
 
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Button, useToast } from '@tasknote/ui'
 import { useDiagramsStore } from '@/stores/diagrams'
@@ -70,6 +70,23 @@ function requestDelete(): void {
 function cancelDelete(): void {
   isPendingDelete.value = false
 }
+
+// ── Save-error toast (one per failure episode) ────────────────────────────────
+
+let saveErrorEpisodeActive = false
+
+watch(
+  () => diagramsStore.saveError,
+  (current, previous) => {
+    if (current !== null && previous === null && !saveErrorEpisodeActive) {
+      saveErrorEpisodeActive = true
+      toast.error('Autosave failed', 'Retrying in the background…')
+    }
+    if (current === null) {
+      saveErrorEpisodeActive = false
+    }
+  },
+)
 </script>
 
 <template>
@@ -149,12 +166,12 @@ function cancelDelete(): void {
 
         <!-- Error state -->
         <div
-          v-else-if="diagramsStore.error"
+          v-else-if="diagramsStore.listError"
           class="diagrams-view__state"
           role="alert"
         >
           <p class="diagrams-view__state-text diagrams-view__state-text--error">
-            {{ diagramsStore.error }}
+            {{ diagramsStore.listError }}
           </p>
           <button
             class="diagrams-view__btn focus-ring"

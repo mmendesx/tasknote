@@ -31,6 +31,7 @@ const zoomPercent = computed(() => `${Math.round(store.viewport.zoom * 100)}%`)
 // ── Save indicator computed ──────────────────────────────────────────────────
 
 const saveLabel = computed(() => {
+  if (store.saveError) return 'Save failed — retrying'
   if (store.saving) return 'Saving…'
   if (!store.dirty) return 'Saved'
   return 'Unsaved'

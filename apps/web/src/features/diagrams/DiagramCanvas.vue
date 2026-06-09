@@ -409,13 +409,13 @@ const textEditState = computed(() => {
     <p>Loading diagram…</p>
   </div>
 
-  <!-- Error state -->
+  <!-- Error state (load failure only — save errors stay in the toolbar) -->
   <div
-    v-else-if="store.error"
+    v-else-if="store.loadError"
     class="diagram-canvas-shell diagram-canvas-shell--error"
     role="alert"
   >
-    <p class="diagram-error__message">Failed to load diagram: {{ store.error }}</p>
+    <p class="diagram-error__message">Failed to load diagram: {{ store.loadError }}</p>
   </div>
 
   <!-- Canvas -->
