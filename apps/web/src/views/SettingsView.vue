@@ -16,7 +16,7 @@ const displayName = ref(settingsStore.settings?.display_name ?? '')
 watch(
   () => settingsStore.settings?.display_name,
   (name) => {
-    if (name !== undefined) displayName.value = name
+    if (name != null) displayName.value = name
   },
 )
 

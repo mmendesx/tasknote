@@ -5,6 +5,7 @@ import { defineComponent, h, ref, watch, onMounted, onUnmounted, Teleport } from
 import { Milkdown as MilkdownComp, MilkdownProvider, useEditor, useInstance } from '@milkdown/vue'
 import { Editor, rootCtx, defaultValueCtx, editorViewOptionsCtx, commandsCtx, editorViewCtx } from '@milkdown/core'
 import { replaceAll } from '@milkdown/utils'
+import type { $Command } from '@milkdown/utils'
 import { commonmark, toggleStrongCommand, toggleEmphasisCommand, toggleInlineCodeCommand } from '@milkdown/preset-commonmark'
 import { gfm, toggleStrikethroughCommand } from '@milkdown/preset-gfm'
 import { listener, listenerCtx } from '@milkdown/plugin-listener'
@@ -88,7 +89,7 @@ const EditorInner = defineComponent({
     const toolbarY      = ref(0)
     const activeMarks   = ref({ bold: false, italic: false, strike: false, code: false })
 
-    function runCommand(cmd: { key: string }) {
+    function runCommand(cmd: $Command<unknown>) {
       const editor = getInstance()
       if (!editor) return
       editor.action((ctx) => {

@@ -56,7 +56,7 @@ const { option: sortableOption } = useSortable(taskListRef, localTasks, {
   draggable: '.task-card',
   ghostClass: 'task-ghost',
   dragClass: 'task-dragging',
-  onEnd: (evt) => {
+  onEnd: (evt: { item: Element; to: Element; from: Element; newIndex?: number }) => {
     const taskId = Number((evt.item as HTMLElement).dataset.taskId)
     const toColumnId = Number((evt.to as HTMLElement).dataset.columnId)
     const toPosition = evt.newIndex ?? 0

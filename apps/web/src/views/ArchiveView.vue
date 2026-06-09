@@ -21,7 +21,7 @@ onMounted(async () => {
     await boardsStore.load()
   }
   if (boardsStore.list.length > 0 && selectedBoardId.value === null) {
-    selectedBoardId.value = boardsStore.defaultBoardId.value
+    selectedBoardId.value = boardsStore.defaultBoardId
   }
   boardsReady.value = true
 })

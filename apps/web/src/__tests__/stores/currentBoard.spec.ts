@@ -37,8 +37,8 @@ function makeBoard(): BoardWithColumns {
     id: 1,
     name: 'Test Board',
     position: 0,
-    created_at: new Date(),
-    updated_at: new Date(),
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
     columns: [
       {
         id: 10,
@@ -59,8 +59,8 @@ function makeBoard(): BoardWithColumns {
             position: 0,
             archived_at: null,
             completed_at: null,
-            created_at: new Date(),
-            updated_at: new Date(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
           },
         ],
       },
@@ -243,8 +243,8 @@ describe('SCN-8: quick-add from board does NOT auto-commit', () => {
       position: 0,
       archived_at: null,
       completed_at: null,
-      created_at: new Date(),
-      updated_at: new Date(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     } as never);
 
     await store.createTask(10, { title: 'New task', column_id: 10, priority: 'low' });
@@ -265,8 +265,8 @@ describe('SCN-8: quick-add from board does NOT auto-commit', () => {
       position: 0,
       archived_at: null,
       completed_at: null,
-      created_at: new Date(),
-      updated_at: new Date(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     } as never);
 
     await store.createTask(10, {

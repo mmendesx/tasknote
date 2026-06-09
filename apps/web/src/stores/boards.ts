@@ -12,7 +12,7 @@ export const useBoardsStore = defineStore('boards', () => {
   const defaultBoardId = computed<number | null>(() => {
     if (!list.value?.length) return null
     const sorted = [...list.value].sort((a, b) => a.position - b.position)
-    return sorted[0].id
+    return sorted[0]?.id ?? null
   })
 
   async function load(): Promise<void> {

@@ -39,6 +39,7 @@ function trapFocus(event: KeyboardEvent) {
   if (focusable.length === 0) return
   const first = focusable[0]
   const last = focusable[focusable.length - 1]
+  if (!first || !last) return
   if (event.key === 'Tab') {
     if (event.shiftKey) {
       if (document.activeElement === first) {
@@ -106,7 +107,7 @@ async function deleteBoard(boardId: number): Promise<void> {
   const currentRoute = route.name as string
   const currentBoardRouteId = String(route.params.id ?? '')
   
-  const wasDefault = boardId === boardsStore.defaultBoardId.value
+  const wasDefault = boardId === boardsStore.defaultBoardId
   const nextId = boardsStore.list.find((b) => b.id !== boardId)?.id ?? null
   try {
     await boardsStore.remove(boardId)

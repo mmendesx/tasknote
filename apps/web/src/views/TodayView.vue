@@ -18,7 +18,7 @@ const defaultBoard = ref<BoardWithColumns | null>(null)
 const defaultColumnId = computed<number | null>(() => {
   const cols = defaultBoard.value?.columns ?? []
   if (cols.length === 0) return null
-  return [...cols].sort((a, b) => a.position - b.position)[0].id
+  return [...cols].sort((a, b) => a.position - b.position)[0]?.id ?? null
 })
 
 onMounted(async () => {

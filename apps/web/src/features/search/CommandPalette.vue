@@ -89,8 +89,9 @@ function handleKeydown(event: KeyboardEvent): void {
       break
     case 'Enter':
       event.preventDefault()
-      if (flatResults.value[selectedIndex.value]) {
-        openResult(flatResults.value[selectedIndex.value])
+      {
+        const selected = flatResults.value[selectedIndex.value]
+        if (selected) openResult(selected)
       }
       break
     case 'Escape':
@@ -205,7 +206,7 @@ function priorityLabel(task: Task): string {
             aria-expanded="true"
             :aria-activedescendant="
               flatResults[selectedIndex]
-                ? `cp-result-${flatResults[selectedIndex].kind}-${flatResults[selectedIndex].item.id}`
+                ? `cp-result-${flatResults[selectedIndex]!.kind}-${flatResults[selectedIndex]!.item.id}`
                 : undefined
             "
             @input="handleInput"

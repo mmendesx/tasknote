@@ -48,7 +48,7 @@ function deriveTitle(note: Note): string {
   if (note.title) return note.title
   const body = note.body_md ?? ''
   const firstHeading = body.match(/^#{1,6}\s+(.+)$/m)
-  if (firstHeading) return firstHeading[1].trim()
+  if (firstHeading?.[1]) return firstHeading[1].trim()
   const firstLine = body.split('\n').find((l) => l.trim())
   return firstLine ? stripMarkdown(firstLine).slice(0, 60) || 'Untitled' : 'Untitled'
 }

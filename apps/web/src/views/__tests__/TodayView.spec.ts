@@ -54,8 +54,8 @@ function makeTodayTask(id: number, carried_days: number, title = `Task ${id}`): 
     position: 0,
     archived_at: null,
     completed_at: null,
-    created_at: new Date(),
-    updated_at: new Date(),
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
     carried_days,
   } as TodayTask
 }

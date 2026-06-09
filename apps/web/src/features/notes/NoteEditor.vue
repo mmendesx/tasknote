@@ -26,7 +26,7 @@ const deleteConfirm = ref(false)
 
 function deriveTitleClient(md: string): string {
   const heading = md.match(/^#{1,6}\s+(.+)$/m)
-  if (heading) return heading[1].trim()
+  if (heading?.[1]) return heading[1].trim()
   const line = md.split('\n').find((l) => l.trim())
   return line
     ? line.replace(/^[#*>\-]+\s*/, '').trim().slice(0, 60) || 'Untitled'

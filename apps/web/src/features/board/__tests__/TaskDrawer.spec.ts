@@ -134,7 +134,7 @@ function mountDrawer(props: Record<string, unknown>) {
         TaskFilesTab: { template: '<div class="files-stub" />', props: ['taskId', 'fileRefs'] },
       },
     },
-    props,
+    props: props as never,
   })
 
   return { wrapper, boardStore, pinia }

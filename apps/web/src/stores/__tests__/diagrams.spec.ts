@@ -63,8 +63,8 @@ function makeDiagram(
       elements: els,
       appState: { viewport: vp },
     },
-    created_at: new Date(),
-    updated_at: new Date(),
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   }
 }
 
@@ -507,7 +507,7 @@ describe('ICT-6 persistence', () => {
 
     expect(api.diagrams.updateDiagram).toHaveBeenCalledTimes(1)
 
-    const callArg = vi.mocked(api.diagrams.updateDiagram).mock.calls[0][1]
+    const callArg = vi.mocked(api.diagrams.updateDiagram).mock.calls[0]![1]!
     const savedElements = callArg.scene_json?.elements ?? []
     const savedArrow = savedElements.find((e: DiagramElement) => e.id === 'arrow-1')
     expect(savedArrow).toBeDefined()
@@ -534,7 +534,7 @@ describe('ICT-6 persistence', () => {
 
     expect(api.diagrams.updateDiagram).toHaveBeenCalledTimes(1)
 
-    const callArg = vi.mocked(api.diagrams.updateDiagram).mock.calls[0][1]
+    const callArg = vi.mocked(api.diagrams.updateDiagram).mock.calls[0]![1]!
     const savedElements: DiagramElement[] = callArg.scene_json?.elements ?? []
     const savedArrow = savedElements.find((e) => e.id === 'arrow-1')
     expect(savedArrow).toBeDefined()
@@ -626,13 +626,13 @@ describe('useDiagramsStore — bound connector rerouting (ICT-4)', () => {
 
     expect(api.diagrams.updateDiagram).toHaveBeenCalledTimes(1)
 
-    const callArg = vi.mocked(api.diagrams.updateDiagram).mock.calls[0][1]
+    const callArg = vi.mocked(api.diagrams.updateDiagram).mock.calls[0]![1]!
     const savedElements = callArg.scene_json?.elements ?? []
     const savedArrow = savedElements.find((e: DiagramElement) => e.id === 'arrow-1')
     expect(savedArrow).toBeDefined()
-    expect(savedArrow.type).toBe('arrow')
-    if (savedArrow.type === 'arrow') {
-      expect(savedArrow.points[0]).toEqual([180, 140])
+    expect(savedArrow!.type).toBe('arrow')
+    if (savedArrow!.type === 'arrow') {
+      expect(savedArrow!.points[0]).toEqual([180, 140])
     }
   })
 })

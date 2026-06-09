@@ -23,6 +23,7 @@ import {
   DatePickerCellTrigger,
 } from 'reka-ui'
 import { CalendarDate, parseDate, today, getLocalTimeZone } from '@internationalized/date'
+import type { DateValue } from '@internationalized/date'
 
 const props = withDefaults(defineProps<{
   modelValue?: string   // YYYY-MM-DD or ''
@@ -45,7 +46,7 @@ const calendarValue = computed<CalendarDate | undefined>(() => {
   try { return parseDate(props.modelValue) } catch { return undefined }
 })
 
-function onUpdate(val: CalendarDate | undefined) {
+function onUpdate(val: DateValue | undefined) {
   emit('update:modelValue', val ? val.toString() : '')
 }
 

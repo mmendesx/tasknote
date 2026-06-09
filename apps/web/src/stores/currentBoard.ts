@@ -165,8 +165,8 @@ export const useCurrentBoardStore = defineStore('currentBoard', () => {
       position: 0,
       archived_at: null,
       completed_at: null,
-      created_at: new Date(),
-      updated_at: new Date(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     }
 
     const col = board.value.columns.find((c) => c.id === columnId)

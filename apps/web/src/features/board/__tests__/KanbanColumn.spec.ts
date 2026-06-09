@@ -80,8 +80,8 @@ function makeTask(id: number, title: string, columnId: number) {
     position: 0,
     archived_at: null,
     completed_at: null,
-    created_at: new Date(),
-    updated_at: new Date(),
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   }
 }
 
@@ -90,8 +90,8 @@ function makeBoard() {
     id: 1,
     name: 'Test Board',
     position: 0,
-    created_at: new Date(),
-    updated_at: new Date(),
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
     columns: [
       {
         id: 10,
@@ -203,7 +203,7 @@ describe('ICT-77 SCN-1 — createTask renders the new card without remount', () 
   it('optimistic temp card appears immediately (before API resolves)', async () => {
     let resolveApi!: (v: unknown) => void
     vi.mocked(api.tasks.createTask).mockReturnValueOnce(
-      new Promise((res) => { resolveApi = res }) as Promise<never>
+      new Promise((res) => { resolveApi = res as unknown as (v: unknown) => void }) as Promise<never>
     )
 
     const wrapper = mountSingleColumn(store, 10)

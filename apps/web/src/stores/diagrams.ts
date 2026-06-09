@@ -242,7 +242,7 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     elements.value = copy
 
     const updatedElement = elements.value[idx]
-    if (isBindableShape(updatedElement)) {
+    if (updatedElement && isBindableShape(updatedElement)) {
       recomputeBoundConnectors(elementId)
     }
 

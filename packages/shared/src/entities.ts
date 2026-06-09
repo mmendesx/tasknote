@@ -22,8 +22,8 @@ export interface Board {
   id: number;
   name: string;
   position: number;
-  created_at: Date;
-  updated_at: Date;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Column {
@@ -42,13 +42,13 @@ export interface Task {
   title: string;
   description_md: string | null;
   priority: Priority;
-  due_date: Date | null;
+  due_date: string | null;
   committed_on?: string | null;
   position: number;
-  archived_at: Date | null;
-  completed_at: Date | null;
-  created_at: Date;
-  updated_at: Date;
+  archived_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
   tag_ids?: number[];
 }
 
@@ -58,9 +58,9 @@ export interface Note {
   title: string;
   body_md: string;
   pinned: boolean;
-  archived_at: Date | null;
-  created_at: Date;
-  updated_at: Date;
+  archived_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Tag {
@@ -81,15 +81,15 @@ export interface FileRef {
   path: string;
   label: string;
   note: string | null;
-  created_at: Date;
+  created_at: string;
 }
 
 export interface Diagram {
   id: number;
   title: string;
   scene_json: DiagramScene;
-  created_at: Date;
-  updated_at: Date;
+  created_at: string;
+  updated_at: string;
 }
 
 // ─── Nested / aggregate types ────────────────────────────────────────────────

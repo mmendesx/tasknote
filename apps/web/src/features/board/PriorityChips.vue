@@ -30,8 +30,10 @@ function select(priority: Priority, index: number) {
 
 async function moveFocus(newIndex: number) {
   if (props.disabled) return
+  const priority = PRIORITY_ORDER[newIndex]
+  if (!priority) return
   focusedIndex.value = newIndex
-  emit('update:modelValue', PRIORITY_ORDER[newIndex])
+  emit('update:modelValue', priority)
   await nextTick()
   chipRefs.value?.[newIndex]?.focus()
 }
@@ -47,7 +49,8 @@ function onKeydown(event: KeyboardEvent, index: number) {
     moveFocus((index - 1 + PRIORITY_ORDER.length) % PRIORITY_ORDER.length)
   } else if (event.key === 'Enter' || event.key === ' ') {
     event.preventDefault()
-    select(PRIORITY_ORDER[index], index)
+    const priority = PRIORITY_ORDER[index]
+    if (priority) select(priority, index)
   }
 }
 

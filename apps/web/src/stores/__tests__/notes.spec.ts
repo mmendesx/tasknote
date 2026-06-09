@@ -21,10 +21,11 @@ function makeNote(id: number, taskId: number, title: string): Note {
     id,
     task_id: taskId,
     title,
-    content_md: '',
+    body_md: '',
+    pinned: false,
     archived_at: null,
-    created_at: new Date(),
-    updated_at: new Date(),
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   } as Note
 }
 

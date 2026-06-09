@@ -129,8 +129,8 @@ function makeTask(id: number, title: string, columnId: number) {
     archived_at: null,
     completed_at: null,
     tag_ids: [] as number[],
-    created_at: new Date(),
-    updated_at: new Date(),
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   }
 }
 
@@ -139,8 +139,8 @@ function makeThreeColumnBoard() {
     id: 1,
     name: 'Test Board',
     position: 0,
-    created_at: new Date(),
-    updated_at: new Date(),
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
     columns: [
       {
         id: 10,
