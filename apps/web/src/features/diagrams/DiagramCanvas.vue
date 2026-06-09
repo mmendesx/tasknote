@@ -272,6 +272,8 @@ function onCanvasPointerMove(event: PointerEvent): void {
     previewLinear.value = { type: state.tool, ax: state.ax, ay: state.ay, bx: pt.x, by: pt.y }
   } else if (state.kind === 'pen') {
     const pt = getScenePt(event)
+    const lastPt = state.points[state.points.length - 1]
+    if (Math.hypot(pt.x - lastPt[0], pt.y - lastPt[1]) < 2) return
     state.points.push([pt.x, pt.y])
     previewPen.value = [...state.points]
   }
@@ -353,6 +355,12 @@ function onCanvasPointerLeave(event: PointerEvent): void {
   if (isPanning.value) {
     isPanning.value = false
   }
+}
+
+function onCanvasPointerCancel(): void {
+  cancelDraw()
+  clearMove()
+  isPanning.value = false
 }
 
 // ── Text commit ───────────────────────────────────────────────────────────────
@@ -460,6 +468,7 @@ const textEditState = computed(() => {
     @pointermove="onCanvasPointerMove"
     @pointerup="onCanvasPointerUp"
     @pointerleave="onCanvasPointerLeave"
+    @pointercancel="onCanvasPointerCancel"
     @wheel.prevent="onCanvasWheel"
   >
     <defs>

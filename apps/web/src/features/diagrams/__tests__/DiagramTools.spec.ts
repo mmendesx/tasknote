@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import DiagramCanvas from '../DiagramCanvas.vue'
+import { rdp } from '../useDrawTools'
 
 // ── API mock ──────────────────────────────────────────────────────────────────
 
@@ -117,15 +118,16 @@ describe('DiagramTools', () => {
     expect(el.y).toBe(20)
   })
 
-  // BDD: pen tool: a stroke capturing N points stores exactly those N raw points (no smoothing)
-  it('pen tool: a stroke capturing N points stores exactly those N raw points (no smoothing)', async () => {
+  // BDD: pen tool: collinear stroke is simplified to 2 endpoints by RDP (epsilon=1)
+  it('pen tool: collinear stroke is simplified to 2 endpoints after RDP', async () => {
     const { wrapper, pinia, storeState } = await mountCanvas()
     storeState.tool = 'pen'
     await wrapper.vm.$nextTick()
 
     const svg = wrapper.find('svg.diagram-canvas')
 
-    // 1 pointerdown (captures point[0]) + 4 pointermoves = 5 points total
+    // 1 pointerdown (captures point[0]) + 4 pointermoves spaced 10px apart
+    // All 5 points lie on the line y = x/2, so RDP simplifies to 2 endpoints
     await svg.trigger('pointerdown', { clientX: 0, clientY: 0, pointerId: 1 })
     await svg.trigger('pointermove', { clientX: 10, clientY: 5, pointerId: 1 })
     await svg.trigger('pointermove', { clientX: 20, clientY: 10, pointerId: 1 })
@@ -138,14 +140,8 @@ describe('DiagramTools', () => {
     expect(elements).toHaveLength(1)
     const el = elements[0]
     expect(el.type).toBe('pen')
-    // down point + 4 move points = 5 raw points, no smoothing or dedup
-    expect(el.points).toEqual([
-      [0, 0],
-      [10, 5],
-      [20, 10],
-      [30, 15],
-      [40, 20],
-    ])
+    // Collinear points collapse to just the two endpoints
+    expect(el.points).toEqual([[0, 0], [40, 20]])
   })
 
   // BDD: escape during a rectangle drag adds no element
@@ -269,5 +265,49 @@ describe('DiagramTools', () => {
     await wrapper.vm.$nextTick()
 
     expect(capture).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ── RDP unit tests ────────────────────────────────────────────────────────────
+
+describe('rdp', () => {
+  it('straight line with 5 collinear points simplifies to 2 endpoints', () => {
+    const points: [number, number][] = [
+      [0, 0], [25, 0], [50, 0], [75, 0], [100, 0],
+    ]
+    const result = rdp(points, 1)
+    expect(result).toEqual([[0, 0], [100, 0]])
+  })
+
+  it('triangle (3-point bend) with epsilon=0 returns all 3 points', () => {
+    // The middle point is 50 units away from the line between first and last
+    const points: [number, number][] = [[0, 0], [50, 50], [100, 0]]
+    const result = rdp(points, 0)
+    expect(result).toEqual([[0, 0], [50, 50], [100, 0]])
+  })
+
+  it('single point input returns as-is', () => {
+    const points: [number, number][] = [[5, 10]]
+    const result = rdp(points, 1)
+    expect(result).toEqual([[5, 10]])
+  })
+
+  it('200-point zigzag with epsilon=1 returns fewer than 200 points', () => {
+    // Build a path of 200 points where every 4th point is a zigzag peak/valley
+    // and the points in between are collinear (so RDP can drop them).
+    // Pattern per 4 points: valley at y=0, mid-slope (collinear), peak at y=20, mid-slope (collinear)
+    // The collinear mid-slope points are within epsilon of the chord, so they get dropped.
+    const points: [number, number][] = []
+    for (let i = 0; i < 200; i++) {
+      const cycle = i % 4
+      const group = Math.floor(i / 4)
+      const baseX = group * 40
+      if (cycle === 0) points.push([baseX, 0])
+      else if (cycle === 1) points.push([baseX + 10, 10])   // collinear between (0,0) and (20,20)
+      else if (cycle === 2) points.push([baseX + 20, 20])   // peak
+      else points.push([baseX + 30, 10])                    // collinear between (20,20) and (40,0)
+    }
+    const result = rdp(points, 1)
+    expect(result.length).toBeLessThan(200)
   })
 })

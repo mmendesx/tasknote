@@ -333,6 +333,63 @@ describe('DiagramCanvas', () => {
     expect(storeState.saveError).toBeNull()
   })
 
+  // ICT-9: pointercancel mid-rect-draw cancels the draw without committing an element
+  it('pointercancel mid-rect-draw: preview disappears, state returns to idle, no element committed', async () => {
+    const { wrapper, pinia } = await mountCanvas()
+
+    const storeState = pinia.state.value['diagrams']
+    storeState.tool = 'rectangle'
+    storeState.loading = false
+    storeState.loadError = null
+    await wrapper.vm.$nextTick()
+
+    const svg = wrapper.find('svg.diagram-canvas')
+    const initialLength = storeState.elements.length
+
+    // Start a rect draw
+    await svg.trigger('pointerdown', { clientX: 10, clientY: 10, pointerId: 1 })
+    await svg.trigger('pointermove', { clientX: 60, clientY: 50, pointerId: 1 })
+
+    // Dispatch pointercancel to abort the gesture
+    await svg.trigger('pointercancel', { pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    // No element should be committed
+    expect(storeState.elements).toHaveLength(initialLength)
+    // Preview shape should be gone (rect preview renders as .diagram-preview)
+    const previewAfter = wrapper.find('.diagram-preview')
+    expect(previewAfter.exists()).toBe(false)
+  })
+
+  // ICT-9: pointercancel mid-pan resets isPanning to false
+  it('pointercancel mid-pan: isPanning goes false and further moves do not pan', async () => {
+    const { wrapper, pinia } = await mountCanvas()
+
+    const storeState = pinia.state.value['diagrams']
+    storeState.tool = 'hand'
+    storeState.loading = false
+    storeState.loadError = null
+    storeState.viewport = { scrollX: 0, scrollY: 0, zoom: 1 }
+    await wrapper.vm.$nextTick()
+
+    const svg = wrapper.find('svg.diagram-canvas')
+
+    // Start panning
+    await svg.trigger('pointerdown', { clientX: 50, clientY: 30, pointerId: 1 })
+
+    // Cancel the gesture
+    await svg.trigger('pointercancel', { pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    // A pointermove after cancel should not move the viewport
+    await svg.trigger('pointermove', { clientX: 150, clientY: 90, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    const { scrollX, scrollY } = storeState.viewport
+    expect(scrollX).toBe(0)
+    expect(scrollY).toBe(0)
+  })
+
   it('unmounting flushes a pending autosave immediately', async () => {
     const { diagrams: apiDiagrams } = await import('@/api')
     vi.mocked(apiDiagrams.updateDiagram).mockClear()

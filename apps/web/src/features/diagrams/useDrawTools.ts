@@ -82,6 +82,42 @@ export function useDrawState() {
   }
 }
 
+// ── Ramer–Douglas–Peucker simplification ──────────────────────────────────────
+
+export function rdp(points: [number, number][], epsilon: number): [number, number][] {
+  if (points.length <= 2) return points
+
+  const [fx, fy] = points[0]
+  const [lx, ly] = points[points.length - 1]
+  const dx = lx - fx
+  const dy = ly - fy
+  const lineLen = Math.hypot(dx, dy)
+
+  let maxDist = 0
+  let maxIdx = 0
+
+  for (let i = 1; i < points.length - 1; i++) {
+    const [px, py] = points[i]
+    // Perpendicular distance from point to line between first and last
+    const dist = lineLen === 0
+      ? Math.hypot(px - fx, py - fy)
+      : Math.abs(dy * px - dx * py + lx * fy - ly * fx) / lineLen
+
+    if (dist > maxDist) {
+      maxDist = dist
+      maxIdx = i
+    }
+  }
+
+  if (maxDist > epsilon) {
+    const left = rdp(points.slice(0, maxIdx + 1), epsilon)
+    const right = rdp(points.slice(maxIdx), epsilon)
+    return [...left.slice(0, -1), ...right]
+  }
+
+  return [points[0], points[points.length - 1]]
+}
+
 // ── Per-tool commit builders ───────────────────────────────────────────────────
 
 export function buildRectangleElement(ax: number, ay: number, bx: number, by: number) {
@@ -128,7 +164,8 @@ export function buildTextElement(x: number, y: number, text: string) {
 }
 
 export function buildPenElement(points: [number, number][]) {
-  if (points.length < 2) return null
-  return { id: generateId(), type: 'pen' as const, points, stroke: STROKE_COLOR, strokeWidth: STROKE_WIDTH }
+  const simplified = rdp(points, 1)
+  if (simplified.length < 2) return null
+  return { id: generateId(), type: 'pen' as const, points: simplified, stroke: STROKE_COLOR, strokeWidth: STROKE_WIDTH }
 }
 
