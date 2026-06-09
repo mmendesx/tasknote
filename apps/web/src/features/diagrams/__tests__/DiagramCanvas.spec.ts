@@ -85,7 +85,7 @@ describe('DiagramCanvas', () => {
     expect(scrollY).toBeCloseTo(60)
   })
 
-  // SCN-2: zoom is clamped at max
+  // SCN-2: zoom is clamped at max (ctrl+wheel triggers zoom)
   it('zoom is clamped at MAX_ZOOM=5', async () => {
     const { wrapper, pinia } = await mountCanvas()
 
@@ -100,6 +100,7 @@ describe('DiagramCanvas', () => {
     // properties (clientX, deltaY, etc.) in jsdom. Use a real WheelEvent instead.
     const wheelEvent = new WheelEvent('wheel', {
       deltaY: -100,
+      ctrlKey: true,
       bubbles: true,
       cancelable: true,
     })
@@ -109,6 +110,91 @@ describe('DiagramCanvas', () => {
     // 4.99 * 1.1 = 5.489, clamped to exactly 5
     const { zoom } = pinia.state.value['diagrams'].viewport
     expect(zoom).toBe(5)
+  })
+
+  // ICT-4: plain wheel (no modifier) pans vertically, zoom unchanged
+  it('plain wheel deltaY pans viewport vertically without changing zoom', async () => {
+    const { wrapper, pinia } = await mountCanvas()
+
+    const storeState = pinia.state.value['diagrams']
+    storeState.loading = false
+    storeState.loadError = null
+    storeState.viewport = { scrollX: 0, scrollY: 0, zoom: 1 }
+    await wrapper.vm.$nextTick()
+
+    const svg = wrapper.find('svg.diagram-canvas')
+    const wheelEvent = new WheelEvent('wheel', {
+      deltaX: 0,
+      deltaY: 100,
+      ctrlKey: false,
+      metaKey: false,
+      bubbles: true,
+      cancelable: true,
+    })
+    svg.element.dispatchEvent(wheelEvent)
+    await wrapper.vm.$nextTick()
+
+    const { zoom, scrollX, scrollY } = pinia.state.value['diagrams'].viewport
+    // zoom must be unchanged
+    expect(zoom).toBe(1)
+    // natural direction: scrollY decreases by deltaY/zoom = 100/1 = 100
+    expect(scrollY).toBeCloseTo(-100)
+    // no horizontal delta → scrollX unchanged
+    expect(scrollX).toBe(0)
+  })
+
+  // ICT-4: plain wheel deltaX pans viewport horizontally
+  it('plain wheel deltaX pans viewport horizontally without changing zoom', async () => {
+    const { wrapper, pinia } = await mountCanvas()
+
+    const storeState = pinia.state.value['diagrams']
+    storeState.loading = false
+    storeState.loadError = null
+    storeState.viewport = { scrollX: 0, scrollY: 0, zoom: 2 }
+    await wrapper.vm.$nextTick()
+
+    const svg = wrapper.find('svg.diagram-canvas')
+    const wheelEvent = new WheelEvent('wheel', {
+      deltaX: 60,
+      deltaY: 0,
+      ctrlKey: false,
+      metaKey: false,
+      bubbles: true,
+      cancelable: true,
+    })
+    svg.element.dispatchEvent(wheelEvent)
+    await wrapper.vm.$nextTick()
+
+    const { zoom, scrollX, scrollY } = pinia.state.value['diagrams'].viewport
+    expect(zoom).toBe(2)
+    // scrollX decreases by deltaX/zoom = 60/2 = 30
+    expect(scrollX).toBeCloseTo(-30)
+    expect(scrollY).toBe(0)
+  })
+
+  // ICT-4: ctrl+wheel zooms in (zoom increases) toward cursor
+  it('ctrl+wheel with deltaY<0 increases zoom', async () => {
+    const { wrapper, pinia } = await mountCanvas()
+
+    const storeState = pinia.state.value['diagrams']
+    storeState.loading = false
+    storeState.loadError = null
+    storeState.viewport = { scrollX: 0, scrollY: 0, zoom: 1 }
+    await wrapper.vm.$nextTick()
+
+    const svg = wrapper.find('svg.diagram-canvas')
+    const wheelEvent = new WheelEvent('wheel', {
+      deltaY: -100,
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    })
+    svg.element.dispatchEvent(wheelEvent)
+    await wrapper.vm.$nextTick()
+
+    const { zoom } = pinia.state.value['diagrams'].viewport
+    // factor 1.1 applied → zoom = 1.1
+    expect(zoom).toBeCloseTo(1.1)
   })
 
   // SCN-3: viewport restored on reopen (g transform reflects saved viewport)

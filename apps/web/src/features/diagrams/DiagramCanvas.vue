@@ -356,28 +356,40 @@ function onTextKeyDown(event: KeyboardEvent): void {
   }
 }
 
-// ── Zoom ──────────────────────────────────────────────────────────────────────
+// ── Zoom / Pan via wheel ──────────────────────────────────────────────────────
 
 function onCanvasWheel(event: WheelEvent): void {
   event.preventDefault()
   const { zoom, scrollX, scrollY } = store.viewport
-  const factor = event.deltaY < 0 ? 1.1 : 1 / 1.1
-  const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * factor))
-  if (newZoom === zoom) return
 
-  // Zoom toward cursor: keep the scene point under cursor fixed.
-  // Use clientX/clientY; offsetX is read-only in some environments (jsdom).
-  const target = event.currentTarget as SVGElement
-  const rect = target?.getBoundingClientRect?.()
-  const cursorX = rect ? event.clientX - rect.left : 0
-  const cursorY = rect ? event.clientY - rect.top : 0
-  const scene = screenToScene({ x: cursorX, y: cursorY }, { scrollX, scrollY, zoom })
+  if (event.ctrlKey || event.metaKey) {
+    // Pinch-to-zoom (trackpad) arrives as ctrl+wheel. Also handles cmd+wheel.
+    // Keep the scene point under the cursor fixed while zooming.
+    const factor = event.deltaY < 0 ? 1.1 : 1 / 1.1
+    const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * factor))
+    if (newZoom === zoom) return
 
-  store.setViewport({
-    scrollX: cursorX / newZoom - scene.x,
-    scrollY: cursorY / newZoom - scene.y,
-    zoom: newZoom,
-  })
+    // Use clientX/clientY; offsetX is read-only in some environments (jsdom).
+    const target = event.currentTarget as SVGElement
+    const rect = target?.getBoundingClientRect?.()
+    const cursorX = rect ? event.clientX - rect.left : 0
+    const cursorY = rect ? event.clientY - rect.top : 0
+    const scene = screenToScene({ x: cursorX, y: cursorY }, { scrollX, scrollY, zoom })
+
+    store.setViewport({
+      scrollX: cursorX / newZoom - scene.x,
+      scrollY: cursorY / newZoom - scene.y,
+      zoom: newZoom,
+    })
+  } else {
+    // Plain scroll → pan. Natural direction: content follows the scroll gesture.
+    // Scene delta = screen delta / zoom so panning stays proportional at any zoom.
+    store.setViewport({
+      scrollX: scrollX - event.deltaX / zoom,
+      scrollY: scrollY - event.deltaY / zoom,
+      zoom,
+    })
+  }
 }
 
 // ── Cursor ────────────────────────────────────────────────────────────────────
