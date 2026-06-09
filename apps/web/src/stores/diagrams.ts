@@ -50,7 +50,9 @@ export const useDiagramsStore = defineStore('diagrams', () => {
   const viewport = ref<DiagramViewport>({ scrollX: 0, scrollY: 0, zoom: 1 })
   const canvasSize = ref<{ width: number; height: number }>({ width: 0, height: 0 })
   const tool = ref<string>('select')
-  const selectedId = ref<string | null>(null)
+  const selectedIds = ref<string[]>([])
+  // Backward-compat helper: first selected id, or null when nothing is selected.
+  const selectedId = computed<string | null>(() => selectedIds.value[0] ?? null)
   const dirty = ref(false)
   const saving = ref(false)
   const loadError = ref<string | null>(null)
@@ -331,11 +333,19 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     scheduleSave()
   }
 
-  function removeElement(elementId: string): void {
+  function removeElements(ids: string[]): void {
+    if (ids.length === 0) return
     history.push(elements.value)
-    const remaining = elements.value.filter((e) => e.id !== elementId)
-    elements.value = detachBindingsTo(remaining, elementId)
+    let remaining = elements.value.filter((e) => !ids.includes(e.id))
+    for (const id of ids) {
+      remaining = detachBindingsTo(remaining, id)
+    }
+    elements.value = remaining
     scheduleSave()
+  }
+
+  function removeElement(elementId: string): void {
+    removeElements([elementId])
   }
 
   // ── History actions ──────────────────────────────────────────────────────────
@@ -358,8 +368,21 @@ export const useDiagramsStore = defineStore('diagrams', () => {
 
   // ── Ephemeral UI mutations (do NOT save) ─────────────────────────────────────
 
-  function selectElement(elementId: string | null): void {
-    selectedId.value = elementId
+  function selectElement(elementId: string | null, additive = false): void {
+    if (elementId === null) {
+      selectedIds.value = []
+      return
+    }
+    if (additive) {
+      const idx = selectedIds.value.indexOf(elementId)
+      if (idx === -1) {
+        selectedIds.value = [...selectedIds.value, elementId]
+      } else {
+        selectedIds.value = selectedIds.value.filter((id) => id !== elementId)
+      }
+    } else {
+      selectedIds.value = [elementId]
+    }
   }
 
   function setTool(t: string): void {
@@ -392,6 +415,7 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     canvasSize,
     tool,
     selectedId,
+    selectedIds,
     dirty,
     saving,
     loadError,
@@ -404,6 +428,7 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     addElement,
     updateElement,
     removeElement,
+    removeElements,
     pushHistory,
     undoAction,
     redoAction,

@@ -11,10 +11,10 @@ export interface SelectionBBox {
 }
 
 interface MoveState {
-  id: string
+  ids: string[]
   startScreenX: number
   startScreenY: number
-  originalElement: DiagramElement
+  originalElements: Map<string, DiagramElement>
 }
 
 // ── Bbox computation ──────────────────────────────────────────────────────────
@@ -45,6 +45,22 @@ export function computeElementBbox(el: DiagramElement): SelectionBBox {
   // text
   const approxWidth = (el.text?.length ?? 4) * TEXT_APPROX_CHAR_WIDTH
   return { x: el.x, y: el.y - el.fontSize, width: approxWidth, height: TEXT_APPROX_HEIGHT }
+}
+
+/** Union an array of bounding boxes into the smallest box that contains them all. */
+export function unionBboxes(bboxes: SelectionBBox[]): SelectionBBox | null {
+  if (bboxes.length === 0) return null
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const b of bboxes) {
+    if (b.x < minX) minX = b.x
+    if (b.y < minY) minY = b.y
+    if (b.x + b.width > maxX) maxX = b.x + b.width
+    if (b.y + b.height > maxY) maxY = b.y + b.height
+  }
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
 }
 
 // ── Move geometry helpers ─────────────────────────────────────────────────────
@@ -83,12 +99,16 @@ export function useSelection() {
   const moveState = ref<MoveState | null>(null)
 
   function beginMove(
-    id: string,
+    ids: string[],
     screenX: number,
     screenY: number,
-    original: DiagramElement,
+    originals: DiagramElement[],
   ): void {
-    moveState.value = { id, startScreenX: screenX, startScreenY: screenY, originalElement: original }
+    const map = new Map<string, DiagramElement>()
+    for (const el of originals) {
+      map.set(el.id, el)
+    }
+    moveState.value = { ids, startScreenX: screenX, startScreenY: screenY, originalElements: map }
   }
 
   function clearMove(): void {

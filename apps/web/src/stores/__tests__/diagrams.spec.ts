@@ -1024,3 +1024,100 @@ describe('useDiagramsStore — undo/redo (ICT-10)', () => {
     expect(store.canUndo).toBe(false)
   })
 })
+
+// ─── ICT-11: Multi-select ─────────────────────────────────────────────────────
+
+describe('useDiagramsStore — multi-select (ICT-11)', () => {
+  let store: ReturnType<typeof useDiagramsStore>
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    store = useDiagramsStore()
+    vi.resetAllMocks()
+    vi.mocked(api.diagrams.updateDiagram).mockResolvedValue(makeDiagram(1, 'Test'))
+    store.id = 1
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('shift-click toggles an element into the selection', () => {
+    store.selectElement('el-1')
+    store.selectElement('el-2', true)
+
+    expect(store.selectedIds).toContain('el-1')
+    expect(store.selectedIds).toContain('el-2')
+  })
+
+  it('shift-click on an already-selected element removes it from the selection', () => {
+    store.selectElement('el-1')
+    store.selectElement('el-2', true)
+
+    // Toggle el-1 out
+    store.selectElement('el-1', true)
+
+    expect(store.selectedIds).not.toContain('el-1')
+    expect(store.selectedIds).toContain('el-2')
+  })
+
+  it('plain selectElement replaces the whole selection set', () => {
+    store.selectElement('el-1')
+    store.selectElement('el-2', true)
+    expect(store.selectedIds).toHaveLength(2)
+
+    store.selectElement('el-3')
+
+    expect(store.selectedIds).toEqual(['el-3'])
+  })
+
+  it('selectElement(null) clears all selected ids', () => {
+    store.selectElement('el-1')
+    store.selectElement('el-2', true)
+
+    store.selectElement(null)
+
+    expect(store.selectedIds).toHaveLength(0)
+  })
+
+  it('backward-compat: selectedId returns the first id in selectedIds', () => {
+    store.selectElement('el-a')
+    store.selectElement('el-b', true)
+
+    expect(store.selectedId).toBe('el-a')
+  })
+
+  it('backward-compat: selectedId is null when nothing is selected', () => {
+    expect(store.selectedId).toBeNull()
+  })
+
+  it('group delete removes both elements and detaches bindings for all', () => {
+    const R = makeRectangleAt('R', 50, 75)
+    const S = makeRectangleAt('S', 250, 275)
+    const arrow = makeArrow('arrow-1', [[100, 100], [300, 300]], 'R', 'S')
+    store.elements = [R, S, arrow]
+
+    store.removeElements(['R', 'S'])
+
+    expect(store.elements.find((e) => e.id === 'R')).toBeUndefined()
+    expect(store.elements.find((e) => e.id === 'S')).toBeUndefined()
+
+    const remainingArrow = store.elements.find((e) => e.id === 'arrow-1')
+    expect(remainingArrow).toBeDefined()
+    if (remainingArrow?.type === 'arrow') {
+      expect(remainingArrow.startBinding).toBeNull()
+      expect(remainingArrow.endBinding).toBeNull()
+    }
+  })
+
+  it('removeElements with an empty array is a no-op and does not push history', () => {
+    store.elements = [makeRectangle('el-1')]
+    const canUndoBefore = store.canUndo
+
+    store.removeElements([])
+
+    expect(store.elements).toHaveLength(1)
+    expect(store.canUndo).toBe(canUndoBefore)
+  })
+})

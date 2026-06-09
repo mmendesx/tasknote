@@ -16,7 +16,9 @@ import {
   useSelection,
   computeElementBbox,
   buildMovePatch,
+  unionBboxes,
 } from './useSelection'
+import { useMarquee } from './useMarquee'
 import { resolveShapeIdAtPoint, elementCenter, findElementById } from './connectors'
 import DiagramElementView from './DiagramElementView.vue'
 import DiagramPreview from './DiagramPreview.vue'
@@ -87,16 +89,19 @@ const {
 // ── Selection state ───────────────────────────────────────────────────────────
 
 const { moveState, beginMove, clearMove } = useSelection()
+const { marqueeRect, active: marqueeActive, startMarquee, updateMarquee, finishMarquee, cancelMarquee } = useMarquee()
 
-const selectedElement = computed<DiagramElement | null>(() => {
-  if (!store.selectedId) return null
-  return store.elements.find((e) => e.id === store.selectedId) ?? null
-})
+const selectedElements = computed<DiagramElement[]>(() =>
+  store.elements.filter((e) => store.selectedIds.includes(e.id)),
+)
 
 const selectionBBox = computed(() => {
-  if (!selectedElement.value) return null
-  return computeElementBbox(selectedElement.value)
+  if (selectedElements.value.length === 0) return null
+  return unionBboxes(selectedElements.value.map(computeElementBbox))
 })
+
+/** Only show resize handles for single-element selections (multi-select shows outline only). */
+const showResizeHandles = computed(() => selectedElements.value.length === 1)
 
 // ── Escape + Delete handler ───────────────────────────────────────────────────
 
@@ -114,9 +119,8 @@ function onKeyDown(event: KeyboardEvent): void {
   }
   if (event.key === 'Delete' || event.key === 'Backspace') {
     if (isTextInputFocused()) return
-    const idToRemove = store.selectedId
-    if (!idToRemove) return
-    store.removeElement(idToRemove)
+    if (store.selectedIds.length === 0) return
+    store.removeElements(store.selectedIds)
     store.selectElement(null)
     return
   }
@@ -200,17 +204,37 @@ function handlePanPointerDown(event: PointerEvent): void {
 function handleSelectPointerDown(event: PointerEvent): void {
   const elementId = hitElementId(event)
   if (elementId) {
-    store.selectElement(elementId)
-    const original = store.elements.find((e) => e.id === elementId)
-    if (original) {
-      // Push the pre-gesture snapshot so the entire drag is one undo entry.
-      store.pushHistory()
-      beginMove(elementId, event.clientX, event.clientY, { ...original } as DiagramElement)
+    if (event.shiftKey) {
+      // Shift+click toggles membership without starting a move.
+      store.selectElement(elementId, true)
+    } else {
+      // If clicking an already-selected element, start a group move without
+      // changing the selection. Otherwise replace the selection.
+      if (!store.selectedIds.includes(elementId)) {
+        store.selectElement(elementId)
+      }
+      const originalsInSelection = store.elements.filter((e) =>
+        store.selectedIds.includes(e.id),
+      )
+      if (originalsInSelection.length > 0) {
+        // Push the pre-gesture snapshot so the entire drag is one undo entry.
+        store.pushHistory()
+        beginMove(
+          originalsInSelection.map((e) => e.id),
+          event.clientX,
+          event.clientY,
+          originalsInSelection.map((e) => ({ ...e }) as DiagramElement),
+        )
+      }
+      capturePointer(event)
     }
-    capturePointer(event)
   } else {
     store.selectElement(null)
     clearMove()
+    // Begin marquee on empty canvas click.
+    const pt = getScenePt(event)
+    startMarquee(pt.x, pt.y)
+    capturePointer(event)
   }
 }
 
@@ -271,8 +295,19 @@ function onCanvasPointerMove(event: PointerEvent): void {
     const dyScreen = event.clientY - mv.startScreenY
     const dxScene = dxScreen / zoom
     const dyScene = dyScreen / zoom
-    const patch = buildMovePatch(mv.originalElement, dxScene, dyScene)
-    store.updateElement(mv.id, patch)
+    for (const id of mv.ids) {
+      const original = mv.originalElements.get(id)
+      if (original) {
+        const patch = buildMovePatch(original, dxScene, dyScene)
+        store.updateElement(id, patch)
+      }
+    }
+    return
+  }
+
+  if (marqueeActive.value) {
+    const pt = getScenePt(event)
+    updateMarquee(pt.x, pt.y)
     return
   }
 
@@ -347,6 +382,20 @@ function onCanvasPointerUp(event: PointerEvent): void {
     return
   }
 
+  if (marqueeActive.value) {
+    const ids = finishMarquee(store.elements)
+    if (ids.length > 0) {
+      // Replace selection with all intersecting elements.
+      store.selectElement(ids[0]!)
+      for (let i = 1; i < ids.length; i++) {
+        store.selectElement(ids[i]!, true)
+      }
+    } else {
+      store.selectElement(null)
+    }
+    return
+  }
+
   const state = drawState.value
 
   if (state.kind === 'shape') {
@@ -379,6 +428,7 @@ function onCanvasPointerLeave(event: PointerEvent): void {
 function onCanvasPointerCancel(): void {
   cancelDraw()
   clearMove()
+  cancelMarquee()
   isPanning.value = false
 }
 
@@ -528,6 +578,23 @@ const textEditState = computed(() => {
         pointer-events="none"
       />
 
+      <!-- Marquee selection rectangle (dashed outline while dragging) -->
+      <rect
+        v-if="marqueeRect"
+        class="diagram-marquee"
+        :x="marqueeRect.x"
+        :y="marqueeRect.y"
+        :width="marqueeRect.width"
+        :height="marqueeRect.height"
+        fill="none"
+        stroke="var(--color-accent, #6366f1)"
+        stroke-width="1"
+        stroke-dasharray="4 3"
+        vector-effect="non-scaling-stroke"
+        pointer-events="none"
+        opacity="0.7"
+      />
+
       <!-- In-progress draft preview -->
       <DiagramPreview
         :shape="previewShape"
@@ -616,6 +683,10 @@ const textEditState = computed(() => {
 }
 
 .diagram-selection-outline {
+  pointer-events: none;
+}
+
+.diagram-marquee {
   pointer-events: none;
 }
 

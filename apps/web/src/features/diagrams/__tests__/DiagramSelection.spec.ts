@@ -101,7 +101,7 @@ describe('DiagramSelection', () => {
     await elementNode.trigger('pointerdown', { clientX: 100, clientY: 80, pointerId: 1 })
     await wrapper.vm.$nextTick()
 
-    expect(pinia.state.value['diagrams'].selectedId).toBe('ell-1')
+    expect(pinia.state.value['diagrams'].selectedIds).toContain('ell-1')
 
     const outline = wrapper.find('.diagram-selection-outline')
     expect(outline.exists()).toBe(true)
@@ -141,14 +141,14 @@ describe('DiagramSelection', () => {
     await elementNode.trigger('pointerdown', { clientX: 100, clientY: 80, pointerId: 1 })
     await wrapper.vm.$nextTick()
 
-    expect(pinia.state.value['diagrams'].selectedId).toBe('del-me')
+    expect(pinia.state.value['diagrams'].selectedIds).toContain('del-me')
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }))
     await wrapper.vm.$nextTick()
 
     const elements = pinia.state.value['diagrams'].elements as DiagramElement[]
     expect(elements.find((e) => e.id === 'del-me')).toBeUndefined()
-    expect(pinia.state.value['diagrams'].selectedId).toBeNull()
+    expect(pinia.state.value['diagrams'].selectedIds).toHaveLength(0)
   })
 
   it('single selection: clicking a second element replaces selection', async () => {
@@ -160,13 +160,14 @@ describe('DiagramSelection', () => {
     const nodeA = wrapper.find('[data-element-id="el-A"]')
     await nodeA.trigger('pointerdown', { clientX: 60, clientY: 60, pointerId: 1 })
     await wrapper.vm.$nextTick()
-    expect(pinia.state.value['diagrams'].selectedId).toBe('el-A')
+    expect(pinia.state.value['diagrams'].selectedIds).toContain('el-A')
 
     // Now select B — this triggers pointerdown on el-B's node
     const nodeB = wrapper.find('[data-element-id="el-B"]')
     await nodeB.trigger('pointerdown', { clientX: 250, clientY: 250, pointerId: 1 })
     await wrapper.vm.$nextTick()
-    expect(pinia.state.value['diagrams'].selectedId).toBe('el-B')
+    expect(pinia.state.value['diagrams'].selectedIds).toContain('el-B')
+    expect(pinia.state.value['diagrams'].selectedIds).not.toContain('el-A')
   })
 
   it('line element renders a transparent hit-target sibling', async () => {
@@ -196,13 +197,177 @@ describe('DiagramSelection', () => {
     const elementNode = wrapper.find('[data-element-id="clear-me"]')
     await elementNode.trigger('pointerdown', { clientX: 100, clientY: 80, pointerId: 1 })
     await wrapper.vm.$nextTick()
-    expect(pinia.state.value['diagrams'].selectedId).toBe('clear-me')
+    expect(pinia.state.value['diagrams'].selectedIds).toContain('clear-me')
 
     // Click on SVG directly (no data-element-id on the svg itself)
     const svg = wrapper.find('svg.diagram-canvas')
     await svg.trigger('pointerdown', { clientX: 5, clientY: 5, pointerId: 1 })
     await wrapper.vm.$nextTick()
 
-    expect(pinia.state.value['diagrams'].selectedId).toBeNull()
+    expect(pinia.state.value['diagrams'].selectedIds).toHaveLength(0)
+  })
+})
+
+// ── ICT-11 multi-select behavior tests ────────────────────────────────────────
+
+describe('DiagramSelection — multi-select (ICT-11)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('shift-click on a second element adds it to the selection', async () => {
+    const elA = makeRect('el-A', 10, 10)
+    const elB = makeRect('el-B', 200, 200)
+    const { wrapper, pinia } = await mountCanvasWithElements([elA, elB])
+
+    const nodeA = wrapper.find('[data-element-id="el-A"]')
+    await nodeA.trigger('pointerdown', { clientX: 60, clientY: 60, pointerId: 1, shiftKey: false })
+    await wrapper.vm.$nextTick()
+
+    const nodeB = wrapper.find('[data-element-id="el-B"]')
+    await nodeB.trigger('pointerdown', { clientX: 250, clientY: 250, pointerId: 1, shiftKey: true })
+    await wrapper.vm.$nextTick()
+
+    const ids = pinia.state.value['diagrams'].selectedIds as string[]
+    expect(ids).toContain('el-A')
+    expect(ids).toContain('el-B')
+  })
+
+  it('shift-click on an already-selected element deselects it', async () => {
+    const elA = makeRect('el-A', 10, 10)
+    const { wrapper, pinia } = await mountCanvasWithElements([elA])
+
+    const nodeA = wrapper.find('[data-element-id="el-A"]')
+    // First select it
+    await nodeA.trigger('pointerdown', { clientX: 60, clientY: 60, pointerId: 1, shiftKey: false })
+    await wrapper.vm.$nextTick()
+    expect(pinia.state.value['diagrams'].selectedIds).toContain('el-A')
+
+    // Shift-click again to deselect
+    await nodeA.trigger('pointerdown', { clientX: 60, clientY: 60, pointerId: 1, shiftKey: true })
+    await wrapper.vm.$nextTick()
+
+    expect(pinia.state.value['diagrams'].selectedIds).not.toContain('el-A')
+  })
+
+  it('plain click on a new element replaces the multi-selection', async () => {
+    const elA = makeRect('el-A', 10, 10)
+    const elB = makeRect('el-B', 200, 200)
+    const elC = makeRect('el-C', 400, 400)
+    const { wrapper, pinia } = await mountCanvasWithElements([elA, elB, elC])
+
+    // Build a 2-element selection
+    const nodeA = wrapper.find('[data-element-id="el-A"]')
+    await nodeA.trigger('pointerdown', { clientX: 60, clientY: 60, pointerId: 1, shiftKey: false })
+    await wrapper.vm.$nextTick()
+    const nodeB = wrapper.find('[data-element-id="el-B"]')
+    await nodeB.trigger('pointerdown', { clientX: 250, clientY: 250, pointerId: 1, shiftKey: true })
+    await wrapper.vm.$nextTick()
+    expect((pinia.state.value['diagrams'].selectedIds as string[]).length).toBe(2)
+
+    // Plain click on el-C replaces selection
+    const nodeC = wrapper.find('[data-element-id="el-C"]')
+    await nodeC.trigger('pointerdown', { clientX: 450, clientY: 450, pointerId: 1, shiftKey: false })
+    await wrapper.vm.$nextTick()
+
+    const ids = pinia.state.value['diagrams'].selectedIds as string[]
+    expect(ids).toEqual(['el-C'])
+  })
+
+  it('group move: dragging one of two selected elements applies the same delta to both', async () => {
+    const elA = makeRect('el-A', 10, 10)
+    const elB = makeRect('el-B', 200, 200)
+    const { wrapper, pinia } = await mountCanvasWithElements([elA, elB])
+
+    const svg = wrapper.find('svg.diagram-canvas')
+
+    // Select el-A then shift-select el-B
+    const nodeA = wrapper.find('[data-element-id="el-A"]')
+    await nodeA.trigger('pointerdown', { clientX: 60, clientY: 50, pointerId: 1, shiftKey: false })
+    await wrapper.vm.$nextTick()
+    const nodeB = wrapper.find('[data-element-id="el-B"]')
+    await nodeB.trigger('pointerdown', { clientX: 250, clientY: 240, pointerId: 1, shiftKey: true })
+    await wrapper.vm.$nextTick()
+
+    // Now begin a plain-click drag on el-A (both are selected)
+    await nodeA.trigger('pointerdown', { clientX: 60, clientY: 50, pointerId: 1, shiftKey: false })
+    await wrapper.vm.$nextTick()
+
+    // Drag 30px right, 20px down
+    await svg.trigger('pointermove', { clientX: 90, clientY: 70, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    await svg.trigger('pointerup', { clientX: 90, clientY: 70, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    const elements = pinia.state.value['diagrams'].elements as DiagramElement[]
+    const movedA = elements.find((e) => e.id === 'el-A') as any
+    const movedB = elements.find((e) => e.id === 'el-B') as any
+
+    expect(movedA.x).toBe(10 + 30)
+    expect(movedA.y).toBe(10 + 20)
+    expect(movedB.x).toBe(200 + 30)
+    expect(movedB.y).toBe(200 + 20)
+  })
+
+  it('selection outline is rendered for multi-selection (union bbox covers all selected elements)', async () => {
+    const elA = makeRect('el-A', 10, 10)
+    const elB = makeRect('el-B', 200, 200)
+    const { wrapper, pinia } = await mountCanvasWithElements([elA, elB])
+
+    const nodeA = wrapper.find('[data-element-id="el-A"]')
+    await nodeA.trigger('pointerdown', { clientX: 60, clientY: 60, pointerId: 1, shiftKey: false })
+    await wrapper.vm.$nextTick()
+    const nodeB = wrapper.find('[data-element-id="el-B"]')
+    await nodeB.trigger('pointerdown', { clientX: 250, clientY: 250, pointerId: 1, shiftKey: true })
+    await wrapper.vm.$nextTick()
+
+    expect((pinia.state.value['diagrams'].selectedIds as string[]).length).toBe(2)
+    const outline = wrapper.find('.diagram-selection-outline')
+    expect(outline.exists()).toBe(true)
+  })
+
+  it('marquee selects all elements whose bboxes intersect the drag rectangle', async () => {
+    // elA at (10,10) w100 h80 — inside a (0,0)→(200,200) marquee
+    // elB at (300,300) w100 h80 — outside
+    const elA = makeRect('el-A', 10, 10)
+    const elB = makeRect('el-B', 300, 300)
+    const { wrapper, pinia } = await mountCanvasWithElements([elA, elB])
+
+    const svg = wrapper.find('svg.diagram-canvas')
+
+    // Drag on empty canvas from (0,0) to (200,200) in screen coords (zoom=1)
+    await svg.trigger('pointerdown', { clientX: 0, clientY: 0, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+    await svg.trigger('pointermove', { clientX: 200, clientY: 200, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+    await svg.trigger('pointerup', { clientX: 200, clientY: 200, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    const ids = pinia.state.value['diagrams'].selectedIds as string[]
+    expect(ids).toContain('el-A')
+    expect(ids).not.toContain('el-B')
+  })
+
+  it('Delete key removes all selected elements and clears selectedIds', async () => {
+    const elA = makeRect('el-A', 10, 10)
+    const elB = makeRect('el-B', 200, 200)
+    const { wrapper, pinia } = await mountCanvasWithElements([elA, elB])
+
+    const nodeA = wrapper.find('[data-element-id="el-A"]')
+    await nodeA.trigger('pointerdown', { clientX: 60, clientY: 60, pointerId: 1, shiftKey: false })
+    await wrapper.vm.$nextTick()
+    const nodeB = wrapper.find('[data-element-id="el-B"]')
+    await nodeB.trigger('pointerdown', { clientX: 250, clientY: 250, pointerId: 1, shiftKey: true })
+    await wrapper.vm.$nextTick()
+    expect((pinia.state.value['diagrams'].selectedIds as string[]).length).toBe(2)
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }))
+    await wrapper.vm.$nextTick()
+
+    const elements = pinia.state.value['diagrams'].elements as DiagramElement[]
+    expect(elements.find((e) => e.id === 'el-A')).toBeUndefined()
+    expect(elements.find((e) => e.id === 'el-B')).toBeUndefined()
+    expect(pinia.state.value['diagrams'].selectedIds).toHaveLength(0)
   })
 })
