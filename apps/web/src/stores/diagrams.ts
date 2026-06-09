@@ -276,8 +276,30 @@ export const useDiagramsStore = defineStore('diagrams', () => {
   function updateElement(elementId: string, patch: Partial<DiagramElement>): void {
     const idx = elements.value.findIndex((e) => e.id === elementId)
     if (idx === -1) return
+
+    const current = elements.value[idx]!
+
+    // When a user manually moves a connector (arrow/line), the drag produces a
+    // `points` patch. That intent — "I placed this connector here" — must
+    // override the binding: if bindings survived, recomputeBoundConnectors would
+    // snap the arrow back to its bound shapes on the next shape move, undoing the
+    // explicit repositioning. We therefore null both bindings in the same
+    // mutation whenever a points-patch lands on a linear element that is still
+    // bound. Style patches (stroke, strokeWidth, …) do NOT include `points` and
+    // leave bindings intact, which is the correct narrow rule.
+    const isLinear = current.type === 'arrow' || current.type === 'line'
+    const hasPointsPatch = 'points' in patch
+    const isBound =
+      (current.type === 'arrow' || current.type === 'line') &&
+      (current.startBinding != null || current.endBinding != null)
+
+    const detachPatch: Partial<DiagramElement> =
+      isLinear && hasPointsPatch && isBound
+        ? { startBinding: null, endBinding: null }
+        : {}
+
     const copy = [...elements.value]
-    copy[idx] = { ...copy[idx], ...patch } as DiagramElement
+    copy[idx] = { ...current, ...patch, ...detachPatch } as DiagramElement
     elements.value = copy
 
     const updatedElement = elements.value[idx]

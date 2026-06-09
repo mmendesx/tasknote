@@ -712,6 +712,112 @@ describe('useDiagramsStore — error channel separation (ICT-2)', () => {
   })
 })
 
+describe('useDiagramsStore — connector detach on manual drag (ICT-3)', () => {
+  let store: ReturnType<typeof useDiagramsStore>
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    store = useDiagramsStore()
+    vi.resetAllMocks()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('dragging a bound arrow clears both bindings and keeps the translated points', () => {
+    const R = makeRectangleAt('R', 50, 75)
+    const S = makeRectangleAt('S', 250, 275)
+    const arrow = makeArrow('arrow-1', [[100, 100], [300, 300]], 'R', 'S')
+    store.elements = [R, S, arrow]
+
+    // Simulate drag: buildMovePatch produces a points patch with translated coords
+    store.updateElement('arrow-1', { points: [[110, 110], [310, 310]] })
+
+    const updated = store.elements.find((e) => e.id === 'arrow-1')
+    expect(updated).toBeDefined()
+    if (updated?.type === 'arrow') {
+      expect(updated.points).toEqual([[110, 110], [310, 310]])
+      expect(updated.startBinding).toBeNull()
+      expect(updated.endBinding).toBeNull()
+    }
+  })
+
+  it('after dragging a bound arrow, moving r1 leaves the arrow points unchanged', () => {
+    const R = makeRectangleAt('R', 50, 75)
+    const S = makeRectangleAt('S', 250, 275)
+    const arrow = makeArrow('arrow-1', [[100, 100], [300, 300]], 'R', 'S')
+    store.elements = [R, S, arrow]
+
+    // Drag the arrow — detaches bindings
+    store.updateElement('arrow-1', { points: [[110, 110], [310, 310]] })
+
+    // Now move R — recomputeBoundConnectors runs but finds no binding to R
+    store.updateElement('R', { x: 130, y: 115 })
+
+    const updated = store.elements.find((e) => e.id === 'arrow-1')
+    expect(updated).toBeDefined()
+    if (updated?.type === 'arrow') {
+      // Points must remain at the dragged position, not snapped back to R's new center
+      expect(updated.points).toEqual([[110, 110], [310, 310]])
+    }
+  })
+
+  it('patching a bound arrow with a style-only patch (no points) does not detach bindings', () => {
+    const R = makeRectangleAt('R', 50, 75)
+    const S = makeRectangleAt('S', 250, 275)
+    const arrow = makeArrow('arrow-1', [[100, 100], [300, 300]], 'R', 'S')
+    store.elements = [R, S, arrow]
+
+    // A style-only patch — no `points` key
+    store.updateElement('arrow-1', { stroke: '#ff0000' } as Partial<DiagramElement>)
+
+    const updated = store.elements.find((e) => e.id === 'arrow-1')
+    expect(updated).toBeDefined()
+    if (updated?.type === 'arrow') {
+      expect(updated.startBinding).toEqual({ elementId: 'R' })
+      expect(updated.endBinding).toEqual({ elementId: 'S' })
+    }
+  })
+
+  it('dragging a free arrow (no bindings) keeps it free — no null-write side-effects', () => {
+    const arrow = makeArrow('arrow-free', [[0, 0], [100, 100]])
+    store.elements = [arrow]
+
+    store.updateElement('arrow-free', { points: [[10, 10], [110, 110]] })
+
+    const updated = store.elements.find((e) => e.id === 'arrow-free')
+    expect(updated).toBeDefined()
+    if (updated?.type === 'arrow') {
+      expect(updated.points).toEqual([[10, 10], [110, 110]])
+      expect(updated.startBinding).toBeNull()
+      expect(updated.endBinding).toBeNull()
+    }
+  })
+
+  it('moving a bound shape (rectangle) still re-routes its connector — shape move path is unaffected', () => {
+    // Regression: verify that shape.move → recomputeBoundConnectors still works
+    // after the detach guard was added. The shape patch does NOT contain `points`,
+    // so the guard never fires for a shape update.
+    const R = makeRectangleAt('R', 50, 75)
+    const arrow = makeArrow('arrow-1', [[100, 100], [300, 300]], 'R', undefined)
+    store.elements = [R, arrow]
+
+    // Move R so new center = (180,140)
+    store.updateElement('R', { x: 130, y: 115 })
+
+    const updatedArrow = store.elements.find((e) => e.id === 'arrow-1')
+    expect(updatedArrow?.type).toBe('arrow')
+    if (updatedArrow?.type === 'arrow') {
+      expect(updatedArrow.points[0]).toEqual([180, 140])
+      expect(updatedArrow.points[1]).toEqual([300, 300])
+      // Binding on R must still be intact after shape move
+      expect(updatedArrow.startBinding).toEqual({ elementId: 'R' })
+    }
+  })
+})
+
 describe('useDiagramsStore — bound connector rerouting (ICT-4)', () => {
   let store: ReturnType<typeof useDiagramsStore>
 
