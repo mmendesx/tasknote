@@ -2,7 +2,7 @@ import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import * as api from '@/api'
 import type { Diagram, DiagramElement, DiagramViewport } from '@tasknote/shared'
-import { detachBindingsTo, elementCenter, findElementById, isBindableShape } from '../features/diagrams/connectors'
+import { detachBindingsTo, elementCenter, findElementById, isBindableShape, boundEndpoint } from '../features/diagrams/connectors'
 import { useHistory } from '../features/diagrams/useHistory'
 
 const DEBOUNCE_MS = 600
@@ -281,8 +281,6 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     const movedShape = findElementById(elements.value, movedElementId)
     if (!movedShape) return
 
-    const center = elementCenter(movedShape)
-
     elements.value = elements.value.map((el) => {
       if (el.type !== 'arrow' && el.type !== 'line') return el
 
@@ -290,8 +288,38 @@ export const useDiagramsStore = defineStore('diagrams', () => {
       const matchesEnd = el.endBinding?.elementId === movedElementId
       if (!matchesStart && !matchesEnd) return el
 
-      const start: [number, number] = matchesStart ? [center.x, center.y] : el.points[0]
-      const end: [number, number] = matchesEnd ? [center.x, center.y] : el.points[1]
+      // For the bound end, compute the edge-anchor point.
+      // The `from` direction for the bound end is the OTHER end's coordinate:
+      //   - If the other end is also bound, use that shape's center.
+      //   - If the other end is free, use its stored point coordinate.
+      let start: [number, number]
+      let end: [number, number]
+
+      if (matchesStart && matchesEnd) {
+        // Both ends bound to the moved shape — both anchor to its boundary from
+        // the other's center. Since both point at the same shape, fall back to
+        // storing the center for both (self-loop).
+        const center = elementCenter(movedShape)
+        start = [center.x, center.y]
+        end = [center.x, center.y]
+      } else if (matchesStart) {
+        // Start is bound to movedShape; end is either free or bound to another.
+        const otherEndId = el.endBinding?.elementId
+        const otherEl = otherEndId ? findElementById(elements.value, otherEndId) : undefined
+        const from = otherEl ? elementCenter(otherEl) : { x: el.points[1][0], y: el.points[1][1] }
+        const pt = boundEndpoint(movedShape, from)
+        start = [pt.x, pt.y]
+        end = el.points[1]
+      } else {
+        // End is bound to movedShape; start is either free or bound to another.
+        const otherStartId = el.startBinding?.elementId
+        const otherEl = otherStartId ? findElementById(elements.value, otherStartId) : undefined
+        const from = otherEl ? elementCenter(otherEl) : { x: el.points[0][0], y: el.points[0][1] }
+        const pt = boundEndpoint(movedShape, from)
+        start = el.points[0]
+        end = [pt.x, pt.y]
+      }
+
       return { ...el, points: [start, end] }
     })
   }

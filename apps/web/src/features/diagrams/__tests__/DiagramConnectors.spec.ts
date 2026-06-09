@@ -103,8 +103,8 @@ describe('DiagramConnectors — arrow binding on draw (captured-pointer path)', 
     setActivePinia(createPinia())
   })
 
-  // BDD: arrow start-over-R end-over-E → binds both, points = centers
-  it('arrow drawn start-over-R end-over-E binds both ends and anchors to centers', async () => {
+  // BDD: arrow start-over-R end-over-E → binds both, points = boundary edge points (ICT-12)
+  it('arrow drawn start-over-R end-over-E binds both ends and anchors to shape boundaries', async () => {
     // Start client coords land on R; end client coords land on E.
     // The stub discriminates by x so the start/end resolution is unambiguous.
     stubElementFromPoint((x) => x < 100 ? rNode : eNode)
@@ -124,10 +124,13 @@ describe('DiagramConnectors — arrow binding on draw (captured-pointer path)', 
     expect(arrow).toBeDefined()
     expect(arrow.startBinding).toEqual({ elementId: 'R' })
     expect(arrow.endBinding).toEqual({ elementId: 'E' })
-    // Points must be anchored to the shape centers in scene coords.
-    // RECT_R center = (50, 30), ELLIPSE_E center = (240, 120).
-    expect(arrow.points[0]).toEqual([50, 30])
-    expect(arrow.points[1]).toEqual([240, 120])
+    // ICT-12: Points are edge-anchored on shape boundaries, not at centers.
+    // startPt = rectEdgePoint(RECT_R, from=center_E=(240,120)) ≈ (103.615, 55.397)
+    // endPt = ellipseEdgePoint(ELLIPSE_E, from=center_R=(50,30)) ≈ (207.347, 104.533)
+    expect(arrow.points[0][0]).toBeCloseTo(103.61495135557416, 5)
+    expect(arrow.points[0][1]).toBeCloseTo(55.39655590527197, 5)
+    expect(arrow.points[1][0]).toBeCloseTo(207.34694128819277, 5)
+    expect(arrow.points[1][1]).toBeCloseTo(104.53276166282815, 5)
   })
 
   // BDD: arrow start-over-R, end on empty canvas → startBinding R, endBinding null
@@ -147,8 +150,10 @@ describe('DiagramConnectors — arrow binding on draw (captured-pointer path)', 
     expect(arrow).toBeDefined()
     expect(arrow.startBinding).toEqual({ elementId: 'R' })
     expect(arrow.endBinding).toBeNull()
-    // Start is center of R; end is raw scene point of released pointer.
-    expect(arrow.points[0]).toEqual([50, 30])
+    // ICT-12: Start is edge-anchored on R's boundary facing rawEnd=(400,400).
+    // rectEdgePoint(RECT_R, from=(400,400)) ≈ (81.127, 62.906)
+    expect(arrow.points[0][0]).toBeCloseTo(81.12717779388271, 5)
+    expect(arrow.points[0][1]).toBeCloseTo(62.90587366781887, 5)
     // End is NOT the center of any shape; it is the raw getScenePt result.
     // With zoom=1 and scrollX/Y=0 the scene point equals the client point.
     expect(arrow.points[1]).toEqual([400, 400])

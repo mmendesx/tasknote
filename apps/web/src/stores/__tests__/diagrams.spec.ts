@@ -512,7 +512,9 @@ describe('ICT-6 persistence', () => {
     const savedArrow = savedElements.find((e: DiagramElement) => e.id === 'arrow-1')
     expect(savedArrow).toBeDefined()
     if (savedArrow?.type === 'arrow') {
-      expect(savedArrow.points[0]).toEqual([180, 140])
+      // ICT-12: edge-anchored — start is on the R boundary facing (300,300), not the center.
+      expect(savedArrow.points[0][0]).toBeCloseTo(201.15, 1)
+      expect(savedArrow.points[0][1]).toBeCloseTo(168.2, 1)
       expect(savedArrow.points[1]).toEqual([300, 300])
     }
   })
@@ -810,7 +812,9 @@ describe('useDiagramsStore — connector detach on manual drag (ICT-3)', () => {
     const updatedArrow = store.elements.find((e) => e.id === 'arrow-1')
     expect(updatedArrow?.type).toBe('arrow')
     if (updatedArrow?.type === 'arrow') {
-      expect(updatedArrow.points[0]).toEqual([180, 140])
+      // ICT-12: edge-anchored — start is on R's boundary facing the free end (300,300).
+      expect(updatedArrow.points[0][0]).toBeCloseTo(201.15, 1)
+      expect(updatedArrow.points[0][1]).toBeCloseTo(168.2, 1)
       expect(updatedArrow.points[1]).toEqual([300, 300])
       // Binding on R must still be intact after shape move
       expect(updatedArrow.startBinding).toEqual({ elementId: 'R' })
@@ -844,7 +848,9 @@ describe('useDiagramsStore — bound connector rerouting (ICT-4)', () => {
     const updatedArrow = store.elements.find((e) => e.id === 'arrow-1')!
     expect(updatedArrow.type).toBe('arrow')
     if (updatedArrow.type === 'arrow') {
-      expect(updatedArrow.points[0]).toEqual([180, 140])
+      // ICT-12: edge-anchored — start is on R's boundary facing the free end (300,300).
+      expect(updatedArrow.points[0][0]).toBeCloseTo(201.15, 1)
+      expect(updatedArrow.points[0][1]).toBeCloseTo(168.2, 1)
       expect(updatedArrow.points[1]).toEqual([300, 300])
     }
   })
@@ -862,8 +868,11 @@ describe('useDiagramsStore — bound connector rerouting (ICT-4)', () => {
     const updatedArrow = store.elements.find((e) => e.id === 'arrow-1')!
     expect(updatedArrow.type).toBe('arrow')
     if (updatedArrow.type === 'arrow') {
+      // ICT-12: start is a stored point (not recomputed here — R didn't move).
       expect(updatedArrow.points[0]).toEqual([100, 100])
-      expect(updatedArrow.points[1]).toEqual([400, 400])
+      // ICT-12: end is edge-anchored on E's boundary facing R's center (100,100).
+      expect(updatedArrow.points[1][0]).toBeCloseTo(372.1715728752538, 5)
+      expect(updatedArrow.points[1][1]).toBeCloseTo(372.1715728752538, 5)
     }
   })
 
@@ -905,7 +914,9 @@ describe('useDiagramsStore — bound connector rerouting (ICT-4)', () => {
     expect(savedArrow).toBeDefined()
     expect(savedArrow!.type).toBe('arrow')
     if (savedArrow!.type === 'arrow') {
-      expect(savedArrow!.points[0]).toEqual([180, 140])
+      // ICT-12: edge-anchored — start is on R's boundary facing the free end (300,300).
+      expect(savedArrow!.points[0][0]).toBeCloseTo(201.15, 1)
+      expect(savedArrow!.points[0][1]).toBeCloseTo(168.2, 1)
     }
   })
 })

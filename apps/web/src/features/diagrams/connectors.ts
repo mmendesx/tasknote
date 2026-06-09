@@ -1,11 +1,32 @@
 import type { DiagramElement } from '@tasknote/shared'
 import { computeElementBbox } from './useSelection'
+import { rectEdgePoint, ellipseEdgePoint } from './connectorGeometry'
 
 // ── Center helper ─────────────────────────────────────────────────────────────
 
 export function elementCenter(el: DiagramElement): { x: number; y: number } {
   const bbox = computeElementBbox(el)
   return { x: bbox.x + bbox.width / 2, y: bbox.y + bbox.height / 2 }
+}
+
+// ── Edge-anchored endpoint ────────────────────────────────────────────────────
+
+/**
+ * Returns the point on the boundary of `shape` where a connector arriving from
+ * `from` should anchor. Dispatches to the appropriate geometry function based
+ * on shape type. Only rectangles and ellipses are bindable (isBindableShape
+ * guards call sites), so no default branch is needed beyond those two.
+ */
+export function boundEndpoint(
+  shape: DiagramElement,
+  from: { x: number; y: number },
+): { x: number; y: number } {
+  const bbox = computeElementBbox(shape)
+  if (shape.type === 'rectangle') {
+    return rectEdgePoint(bbox, from)
+  }
+  // ellipse
+  return ellipseEdgePoint(bbox, from)
 }
 
 // ── Bindable shape guard ──────────────────────────────────────────────────────

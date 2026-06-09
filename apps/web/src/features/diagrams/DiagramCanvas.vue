@@ -19,7 +19,7 @@ import {
   unionBboxes,
 } from './useSelection'
 import { useMarquee } from './useMarquee'
-import { resolveShapeIdAtPoint, elementCenter, findElementById } from './connectors'
+import { resolveShapeIdAtPoint, elementCenter, findElementById, boundEndpoint } from './connectors'
 import DiagramElementView from './DiagramElementView.vue'
 import DiagramPreview from './DiagramPreview.vue'
 
@@ -357,14 +357,35 @@ function resolveLinearEndpoints(
   const startEl = startId ? findElementById(store.elements, startId) : undefined
   const endEl = endId ? findElementById(store.elements, endId) : undefined
 
-  const startCenter = startEl ? elementCenter(startEl) : null
-  const endCenter = endEl ? elementCenter(endEl) : null
+  // Compute edge-anchored endpoints.
+  // Each bound end needs the OTHER end's position as `from` so the anchor
+  // lands on the boundary facing the incoming ray.
+  let ax = state.ax
+  let ay = state.ay
+  let bx = rawEnd.x
+  let by = rawEnd.y
+
+  if (startEl && endEl) {
+    // Both bound: anchor each end toward the other shape's center.
+    const endCenter = elementCenter(endEl)
+    const startCenter = elementCenter(startEl)
+    const startPt = boundEndpoint(startEl, endCenter)
+    const endPt = boundEndpoint(endEl, startCenter)
+    ax = startPt.x; ay = startPt.y
+    bx = endPt.x;   by = endPt.y
+  } else if (startEl) {
+    // Only start is bound; `from` for the start anchor is the raw end point.
+    const startPt = boundEndpoint(startEl, rawEnd)
+    ax = startPt.x; ay = startPt.y
+  } else if (endEl) {
+    // Only end is bound; `from` for the end anchor is the raw start point.
+    const rawStart = { x: state.ax, y: state.ay }
+    const endPt = boundEndpoint(endEl, rawStart)
+    bx = endPt.x; by = endPt.y
+  }
 
   return {
-    ax: startCenter ? startCenter.x : state.ax,
-    ay: startCenter ? startCenter.y : state.ay,
-    bx: endCenter ? endCenter.x : rawEnd.x,
-    by: endCenter ? endCenter.y : rawEnd.y,
+    ax, ay, bx, by,
     startBinding: startId ? { elementId: startId } : null,
     endBinding: endId ? { elementId: endId } : null,
   }
