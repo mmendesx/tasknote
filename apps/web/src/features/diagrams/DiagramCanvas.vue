@@ -121,9 +121,27 @@ function onKeyDown(event: KeyboardEvent): void {
   }
 }
 
-onMounted(() => window.addEventListener('keydown', onKeyDown))
+// ── Canvas size tracking (for toolbar zoom-around-center) ─────────────────────
+
+let canvasResizeObserver: ResizeObserver | null = null
+
+onMounted(() => {
+  window.addEventListener('keydown', onKeyDown)
+
+  if (svgEl.value && typeof ResizeObserver !== 'undefined') {
+    canvasResizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (!entry) return
+      store.setCanvasSize(entry.contentRect.width, entry.contentRect.height)
+    })
+    canvasResizeObserver.observe(svgEl.value)
+  }
+})
+
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeyDown)
+  canvasResizeObserver?.disconnect()
+  canvasResizeObserver = null
   // Persist any pending edit immediately instead of waiting out the debounce
   // when the canvas is torn down (e.g. navigating back to the list).
   void store.flushSave()

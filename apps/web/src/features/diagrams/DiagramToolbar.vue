@@ -43,18 +43,38 @@ function selectTool(value: ToolValue): void {
   store.setTool(value)
 }
 
+function zoomAroundCenter(newZoom: number): void {
+  const { zoom, scrollX, scrollY } = store.viewport
+  const { width, height } = store.canvasSize
+
+  // Guard: canvas not yet measured — fall back to fixed-scroll behavior.
+  if (width === 0 || height === 0) {
+    store.setViewport({ scrollX, scrollY, zoom: newZoom })
+    return
+  }
+
+  const cx = width / 2
+  const cy = height / 2
+  const scene = { x: cx / zoom - scrollX, y: cy / zoom - scrollY }
+  store.setViewport({
+    scrollX: cx / newZoom - scene.x,
+    scrollY: cy / newZoom - scene.y,
+    zoom: newZoom,
+  })
+}
+
 function zoomIn(): void {
   const newZoom = Math.min(MAX_ZOOM, store.viewport.zoom * 1.1)
-  store.setViewport({ ...store.viewport, zoom: newZoom })
+  zoomAroundCenter(newZoom)
 }
 
 function zoomOut(): void {
   const newZoom = Math.max(MIN_ZOOM, store.viewport.zoom / 1.1)
-  store.setViewport({ ...store.viewport, zoom: newZoom })
+  zoomAroundCenter(newZoom)
 }
 
 function resetZoom(): void {
-  store.setViewport({ ...store.viewport, zoom: 1 })
+  zoomAroundCenter(1)
 }
 </script>
 

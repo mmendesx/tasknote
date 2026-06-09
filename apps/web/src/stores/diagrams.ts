@@ -47,6 +47,7 @@ export const useDiagramsStore = defineStore('diagrams', () => {
   const title = ref('')
   const elements = ref<DiagramElement[]>([])
   const viewport = ref<DiagramViewport>({ scrollX: 0, scrollY: 0, zoom: 1 })
+  const canvasSize = ref<{ width: number; height: number }>({ width: 0, height: 0 })
   const tool = ref<string>('select')
   const selectedId = ref<string | null>(null)
   const dirty = ref(false)
@@ -331,6 +332,10 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     scheduleSave()
   }
 
+  function setCanvasSize(width: number, height: number): void {
+    canvasSize.value = { width, height }
+  }
+
   return {
     // List
     list,
@@ -345,6 +350,7 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     title,
     elements,
     viewport,
+    canvasSize,
     tool,
     selectedId,
     dirty,
@@ -362,6 +368,7 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     selectElement,
     setTool,
     setViewport,
+    setCanvasSize,
     // Transform helpers
     screenToScene,
     sceneToScreen,
