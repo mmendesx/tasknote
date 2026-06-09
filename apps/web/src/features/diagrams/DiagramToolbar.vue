@@ -232,6 +232,37 @@ function resetZoom(): void {
 
     <div class="diagram-toolbar__divider" aria-hidden="true" />
 
+    <!-- Undo / Redo -->
+    <div class="diagram-toolbar__group" role="group" aria-label="History">
+
+      <button
+        class="diagram-toolbar__btn focus-ring"
+        aria-label="Undo"
+        :disabled="!store.canUndo"
+        @click="store.undoAction()"
+      >
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" aria-hidden="true">
+          <path d="M3 7a5 5 0 1 1 0 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <path d="M3 3v4h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+
+      <button
+        class="diagram-toolbar__btn focus-ring"
+        aria-label="Redo"
+        :disabled="!store.canRedo"
+        @click="store.redoAction()"
+      >
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" aria-hidden="true">
+          <path d="M13 7a5 5 0 1 0 0 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <path d="M13 3v4H9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+
+    </div>
+
+    <div class="diagram-toolbar__divider" aria-hidden="true" />
+
     <!-- Save indicator (aria-live, always mounted) -->
     <span
       class="diagram-toolbar__save-indicator"
@@ -300,6 +331,11 @@ function resetZoom(): void {
 .diagram-toolbar__btn--active:hover {
   background-color: color-mix(in srgb, var(--color-accent) 22%, transparent);
   color: var(--color-accent);
+}
+
+.diagram-toolbar__btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .diagram-toolbar__zoom-label {

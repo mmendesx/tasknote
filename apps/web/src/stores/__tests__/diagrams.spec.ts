@@ -909,3 +909,118 @@ describe('useDiagramsStore — bound connector rerouting (ICT-4)', () => {
     }
   })
 })
+
+// ─── ICT-10: Undo / Redo history ─────────────────────────────────────────────
+
+function makeEllipse(elId: string): DiagramElement {
+  return {
+    id: elId,
+    type: 'ellipse',
+    x: 200,
+    y: 200,
+    width: 80,
+    height: 60,
+    stroke: '#000000',
+    fill: null,
+    strokeWidth: 1,
+  }
+}
+
+describe('useDiagramsStore — undo/redo (ICT-10)', () => {
+  let store: ReturnType<typeof useDiagramsStore>
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    store = useDiagramsStore()
+    vi.resetAllMocks()
+    vi.mocked(api.diagrams.updateDiagram).mockResolvedValue(makeDiagram(1, 'Test'))
+    store.id = 1
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('undo removes the last added element', () => {
+    store.addElement(makeRectangle('rect-1'))
+    store.addElement(makeEllipse('ellipse-1'))
+
+    expect(store.elements).toHaveLength(2)
+    expect(store.canUndo).toBe(true)
+
+    store.undoAction()
+
+    expect(store.elements).toHaveLength(1)
+    expect(store.elements[0]!.id).toBe('rect-1')
+  })
+
+  it('redo restores the undone element', () => {
+    store.addElement(makeRectangle('rect-1'))
+    store.addElement(makeEllipse('ellipse-1'))
+
+    store.undoAction()
+    expect(store.elements).toHaveLength(1)
+    expect(store.canRedo).toBe(true)
+
+    store.redoAction()
+
+    expect(store.elements).toHaveLength(2)
+    const ids = store.elements.map((e) => e.id)
+    expect(ids).toContain('ellipse-1')
+  })
+
+  it('new mutation clears the redo stack', () => {
+    store.addElement(makeRectangle('rect-1'))
+    store.addElement(makeEllipse('ellipse-1'))
+
+    store.undoAction()
+    expect(store.canRedo).toBe(true)
+
+    // Add a new element — redo stack must be cleared
+    store.addElement(makeRectangle('rect-2'))
+    expect(store.canRedo).toBe(false)
+
+    // redoAction is a no-op now; elements only has rect-1 and rect-2
+    store.redoAction()
+    const ids = store.elements.map((e) => e.id)
+    expect(ids).not.toContain('ellipse-1')
+    expect(ids).toContain('rect-1')
+    expect(ids).toContain('rect-2')
+  })
+
+  it('undo restores bindings: add bound arrow + rect, removeElement(rect) detaches, undoAction restores both', () => {
+    const R = makeRectangleAt('R', 50, 75)
+    const arrow = makeArrow('arrow-1', [[100, 100], [300, 300]], 'R', undefined)
+
+    // Seed via direct assignment (no history push) then add through the action
+    store.elements = [R, arrow]
+
+    // removeElement pushes a snapshot before removal
+    store.removeElement('R')
+
+    // Arrow is detached and R is gone
+    expect(store.elements.find((e) => e.id === 'R')).toBeUndefined()
+    const detachedArrow = store.elements.find((e) => e.id === 'arrow-1')
+    expect(detachedArrow?.type === 'arrow' && detachedArrow.startBinding).toBeNull()
+
+    // Undo should restore the snapshot that had both R and the bound arrow
+    store.undoAction()
+
+    expect(store.elements.find((e) => e.id === 'R')).toBeDefined()
+    const restoredArrow = store.elements.find((e) => e.id === 'arrow-1')
+    expect(restoredArrow).toBeDefined()
+    if (restoredArrow?.type === 'arrow') {
+      expect(restoredArrow.startBinding).toEqual({ elementId: 'R' })
+    }
+  })
+
+  it('viewport changes are not history entries: canUndo stays false after setViewport alone', () => {
+    expect(store.canUndo).toBe(false)
+
+    store.setViewport({ scrollX: 100, scrollY: 50, zoom: 1.5 })
+
+    // setViewport must not push to history
+    expect(store.canUndo).toBe(false)
+  })
+})

@@ -1,8 +1,9 @@
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import * as api from '@/api'
 import type { Diagram, DiagramElement, DiagramViewport } from '@tasknote/shared'
 import { detachBindingsTo, elementCenter, findElementById, isBindableShape } from '../features/diagrams/connectors'
+import { useHistory } from '../features/diagrams/useHistory'
 
 const DEBOUNCE_MS = 600
 
@@ -54,6 +55,13 @@ export const useDiagramsStore = defineStore('diagrams', () => {
   const saving = ref(false)
   const loadError = ref<string | null>(null)
   const saveError = ref<string | null>(null)
+
+  // ── History (undo/redo) ──────────────────────────────────────────────────────
+
+  const history = useHistory(() => elements.value)
+
+  const canUndo = computed(() => history.canUndo.value)
+  const canRedo = computed(() => history.canRedo.value)
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
   let retryTimer: ReturnType<typeof setTimeout> | null = null
@@ -150,6 +158,7 @@ export const useDiagramsStore = defineStore('diagrams', () => {
       viewport.value = diagram.scene_json.appState.viewport
       dirty.value = false
       saveError.value = null
+      history.clear()
     } catch (err) {
       loadError.value = err instanceof Error ? err.message : 'Failed to load diagram'
       elements.value = []
@@ -250,7 +259,18 @@ export const useDiagramsStore = defineStore('diagrams', () => {
 
   // ── Element mutations ────────────────────────────────────────────────────────
 
+  /**
+   * Explicitly push a history snapshot of the current elements.
+   * DiagramCanvas calls this at pointerdown (gesture start) so that the
+   * continuous pointermove updates during drag/resize are captured as a
+   * single undo entry rather than one per move event.
+   */
+  function pushHistory(): void {
+    history.push(elements.value)
+  }
+
   function addElement(el: DiagramElement): void {
+    history.push(elements.value)
     elements.value = [...elements.value, el]
     scheduleSave()
   }
@@ -312,9 +332,28 @@ export const useDiagramsStore = defineStore('diagrams', () => {
   }
 
   function removeElement(elementId: string): void {
+    history.push(elements.value)
     const remaining = elements.value.filter((e) => e.id !== elementId)
     elements.value = detachBindingsTo(remaining, elementId)
     scheduleSave()
+  }
+
+  // ── History actions ──────────────────────────────────────────────────────────
+
+  function undoAction(): void {
+    const restored = history.undo()
+    if (restored !== null) {
+      elements.value = restored
+      scheduleSave()
+    }
+  }
+
+  function redoAction(): void {
+    const restored = history.redo()
+    if (restored !== null) {
+      elements.value = restored
+      scheduleSave()
+    }
   }
 
   // ── Ephemeral UI mutations (do NOT save) ─────────────────────────────────────
@@ -365,6 +404,11 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     addElement,
     updateElement,
     removeElement,
+    pushHistory,
+    undoAction,
+    redoAction,
+    canUndo,
+    canRedo,
     selectElement,
     setTool,
     setViewport,

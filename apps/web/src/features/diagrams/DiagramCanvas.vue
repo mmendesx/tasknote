@@ -118,6 +118,23 @@ function onKeyDown(event: KeyboardEvent): void {
     if (!idToRemove) return
     store.removeElement(idToRemove)
     store.selectElement(null)
+    return
+  }
+  const isMod = event.ctrlKey || event.metaKey
+  if (isMod && event.key === 'z') {
+    if (isTextInputFocused()) return
+    event.preventDefault()
+    if (event.shiftKey) {
+      store.redoAction()
+    } else {
+      store.undoAction()
+    }
+  }
+  if (isMod && event.key === 'Z') {
+    // Shift+Cmd+Z on some platforms produces uppercase Z without shiftKey flag
+    if (isTextInputFocused()) return
+    event.preventDefault()
+    store.redoAction()
   }
 }
 
@@ -186,6 +203,8 @@ function handleSelectPointerDown(event: PointerEvent): void {
     store.selectElement(elementId)
     const original = store.elements.find((e) => e.id === elementId)
     if (original) {
+      // Push the pre-gesture snapshot so the entire drag is one undo entry.
+      store.pushHistory()
       beginMove(elementId, event.clientX, event.clientY, { ...original } as DiagramElement)
     }
     capturePointer(event)
