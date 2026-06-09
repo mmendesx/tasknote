@@ -235,14 +235,16 @@ export const DiagramElementSchema = z.discriminatedUnion('type', [
     type: z.literal('text'),
     x: z.number(),
     y: z.number(),
-    text: z.string(),
+    text: z.string().max(1000, 'Text element content must not exceed 1,000 characters'),
     fontSize: z.number(),
     color: z.string(),
   }),
   z.object({
     id: z.string(),
     type: z.literal('pen'),
-    points: z.array(z.tuple([z.number(), z.number()])),
+    points: z
+      .array(z.tuple([z.number(), z.number()]))
+      .max(2000, 'Pen element must not exceed 2,000 points'),
     stroke: z.string(),
     strokeWidth: z.number(),
   }),
@@ -250,7 +252,9 @@ export const DiagramElementSchema = z.discriminatedUnion('type', [
 
 export const DiagramSceneSchema = z.object({
   version: z.number(),
-  elements: z.array(DiagramElementSchema),
+  elements: z
+    .array(DiagramElementSchema)
+    .max(1000, 'A diagram scene must not exceed 1,000 elements'),
   appState: z.object({
     viewport: DiagramViewportSchema,
   }),

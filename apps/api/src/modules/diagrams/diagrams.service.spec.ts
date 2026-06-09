@@ -5,6 +5,7 @@ import { DataSource, Repository } from 'typeorm';
 import { DiagramEntity } from './entities/diagram.entity';
 import { DiagramsService } from './diagrams.service';
 import type { DiagramScene } from '@tasknote/shared';
+import { UpdateDiagramDtoSchema } from '@tasknote/shared';
 
 const EMPTY_SCENE: DiagramScene = {
   version: 1,
@@ -199,6 +200,108 @@ describe('DiagramsService', () => {
       await expect(
         service.updateDiagram(9999, { title: 'Does not matter' }),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('DiagramSceneSchema — rejects scenes that exceed size caps', () => {
+    const BASE_VIEWPORT = { scrollX: 0, scrollY: 0, zoom: 1 };
+
+    function buildRectElement(id: string) {
+      return {
+        id,
+        type: 'rectangle' as const,
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+        stroke: '#000',
+        strokeWidth: 1,
+      };
+    }
+
+    it('rejects scene_json with 1,001 elements (exceeds 1,000-element cap)', () => {
+      const elements = Array.from({ length: 1001 }, (_, i) => buildRectElement(`r-${i}`));
+      const result = UpdateDiagramDtoSchema.safeParse({
+        scene_json: { version: 1, elements, appState: { viewport: BASE_VIEWPORT } },
+      });
+      expect(result.success).toBe(false);
+      expect(JSON.stringify(result.error?.issues)).toContain('1,000 elements');
+    });
+
+    it('accepts scene_json with exactly 1,000 elements (boundary)', () => {
+      const elements = Array.from({ length: 1000 }, (_, i) => buildRectElement(`r-${i}`));
+      const result = UpdateDiagramDtoSchema.safeParse({
+        scene_json: { version: 1, elements, appState: { viewport: BASE_VIEWPORT } },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects a pen element with 2,001 points (exceeds 2,000-point cap)', () => {
+      const points = Array.from({ length: 2001 }, (_, i) => [i, i] as [number, number]);
+      const result = UpdateDiagramDtoSchema.safeParse({
+        scene_json: {
+          version: 1,
+          elements: [{ id: 'p-1', type: 'pen', points, stroke: '#000', strokeWidth: 1 }],
+          appState: { viewport: BASE_VIEWPORT },
+        },
+      });
+      expect(result.success).toBe(false);
+      expect(JSON.stringify(result.error?.issues)).toContain('2,000 points');
+    });
+
+    it('accepts a pen element with exactly 2,000 points (boundary)', () => {
+      const points = Array.from({ length: 2000 }, (_, i) => [i, i] as [number, number]);
+      const result = UpdateDiagramDtoSchema.safeParse({
+        scene_json: {
+          version: 1,
+          elements: [{ id: 'p-1', type: 'pen', points, stroke: '#000', strokeWidth: 1 }],
+          appState: { viewport: BASE_VIEWPORT },
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects a text element with 1,001 characters (exceeds 1,000-char cap)', () => {
+      const result = UpdateDiagramDtoSchema.safeParse({
+        scene_json: {
+          version: 1,
+          elements: [
+            {
+              id: 't-1',
+              type: 'text',
+              x: 0,
+              y: 0,
+              text: 'a'.repeat(1001),
+              fontSize: 14,
+              color: '#000',
+            },
+          ],
+          appState: { viewport: BASE_VIEWPORT },
+        },
+      });
+      expect(result.success).toBe(false);
+      expect(JSON.stringify(result.error?.issues)).toContain('1,000 characters');
+    });
+
+    it('accepts a text element with exactly 1,000 characters (boundary)', () => {
+      const result = UpdateDiagramDtoSchema.safeParse({
+        scene_json: {
+          version: 1,
+          elements: [
+            {
+              id: 't-1',
+              type: 'text',
+              x: 0,
+              y: 0,
+              text: 'a'.repeat(1000),
+              fontSize: 14,
+              color: '#000',
+            },
+          ],
+          appState: { viewport: BASE_VIEWPORT },
+        },
+      });
+      expect(result.success).toBe(true);
     });
   });
 
