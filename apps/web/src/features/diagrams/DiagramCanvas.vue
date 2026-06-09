@@ -463,6 +463,7 @@ const textEditState = computed(() => {
         v-for="el in elements"
         :key="el.id"
         :element="el"
+        :zoom="store.viewport.zoom"
       />
 
       <!-- Selection outline -->
