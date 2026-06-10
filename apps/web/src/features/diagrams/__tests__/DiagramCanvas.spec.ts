@@ -564,6 +564,133 @@ describe('DiagramCanvas', () => {
     expect((afterCancel as any).y).toBe(50)
   })
 
+  // ICT-12: handles visibility matrix
+  it('single selected rect renders 8 bbox handle groups; two selected renders zero; selected arrow renders 2 endpoint handles; selected pen renders zero handles', async () => {
+    const { diagrams: apiDiagrams } = await import('@/api')
+
+    const rectA: import('@tasknote/shared').DiagramElement = {
+      id: 'rect-a',
+      type: 'rectangle',
+      x: 10, y: 10, width: 80, height: 60,
+      stroke: '#000', fill: null, strokeWidth: 2,
+    }
+    const rectB: import('@tasknote/shared').DiagramElement = {
+      id: 'rect-b',
+      type: 'rectangle',
+      x: 200, y: 10, width: 80, height: 60,
+      stroke: '#000', fill: null, strokeWidth: 2,
+    }
+    const arrowEl: import('@tasknote/shared').DiagramElement = {
+      id: 'arrow-1',
+      type: 'arrow',
+      points: [[10, 10], [100, 100]] as [[number, number], [number, number]],
+      stroke: '#000', strokeWidth: 2,
+    }
+    const penEl: import('@tasknote/shared').DiagramElement = {
+      id: 'pen-1',
+      type: 'pen',
+      points: [[0, 0], [50, 50], [100, 0]],
+      stroke: '#000', strokeWidth: 2,
+    }
+
+    vi.mocked(apiDiagrams.getDiagram).mockResolvedValueOnce({
+      id: 1,
+      title: 'Handles test',
+      scene_json: {
+        version: 1,
+        elements: [rectA, rectB, arrowEl, penEl],
+        appState: { viewport: { scrollX: 0, scrollY: 0, zoom: 1 } },
+      },
+    } as never)
+
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(DiagramCanvas, {
+      global: { plugins: [pinia] },
+      props: { diagramId: 1 },
+      attachTo: document.body,
+    })
+    await flushPromises()
+
+    const state = pinia.state.value['diagrams']
+    state.tool = 'select'
+    state.loading = false
+    state.loadError = null
+    await wrapper.vm.$nextTick()
+
+    // Case 1: single rect selected → 8 bbox handle groups
+    state.selectedIds = ['rect-a']
+    await wrapper.vm.$nextTick()
+    const handleGroups1 = wrapper.findAll('g[data-resize-handle]')
+    expect(handleGroups1).toHaveLength(8)
+
+    // Case 2: two rects selected → zero handle groups (multi-select hides handles)
+    state.selectedIds = ['rect-a', 'rect-b']
+    await wrapper.vm.$nextTick()
+    const handleGroups2 = wrapper.findAll('g[data-resize-handle]')
+    expect(handleGroups2).toHaveLength(0)
+
+    // Case 3: single arrow selected → 2 endpoint handles
+    state.selectedIds = ['arrow-1']
+    await wrapper.vm.$nextTick()
+    const handleGroups3 = wrapper.findAll('g[data-resize-handle]')
+    expect(handleGroups3).toHaveLength(2)
+
+    // Case 4: single pen selected → zero handles (pen is skipped entirely)
+    state.selectedIds = ['pen-1']
+    await wrapper.vm.$nextTick()
+    const handleGroups4 = wrapper.findAll('g[data-resize-handle]')
+    expect(handleGroups4).toHaveLength(0)
+  })
+
+  // ICT-12: ctrl+wheel keeps the cursor's scene point fixed
+  it('ctrl+wheel keeps the cursor scene point fixed after zoom', async () => {
+    const { wrapper, pinia } = await mountCanvas()
+
+    const state = pinia.state.value['diagrams']
+    state.loading = false
+    state.loadError = null
+    state.viewport = { scrollX: 0, scrollY: 0, zoom: 1 }
+    await wrapper.vm.$nextTick()
+
+    const svg = wrapper.find('svg.diagram-canvas')
+
+    // Mock getBoundingClientRect so getScenePoint knows the SVG origin
+    const svgRect = { left: 0, top: 0, right: 800, bottom: 600, width: 800, height: 600, x: 0, y: 0 }
+    vi.spyOn(svg.element, 'getBoundingClientRect').mockReturnValue(svgRect as DOMRect)
+
+    // Cursor at screen (200, 150) — at zoom=1, scrollX=0, scrollY=0 → scene (200, 150)
+    const cursorClientX = 200
+    const cursorClientY = 150
+    const initialZoom = state.viewport.zoom
+    const initialScrollX = state.viewport.scrollX
+    const initialScrollY = state.viewport.scrollY
+    // scene point = clientX - rect.left) / zoom - scrollX
+    const sceneBeforeX = (cursorClientX - svgRect.left) / initialZoom - initialScrollX
+    const sceneBeforeY = (cursorClientY - svgRect.top) / initialZoom - initialScrollY
+
+    // Zoom in with ctrl+wheel at cursor position
+    const wheelEvent = new WheelEvent('wheel', {
+      deltaY: -100,
+      ctrlKey: true,
+      clientX: cursorClientX,
+      clientY: cursorClientY,
+      bubbles: true,
+      cancelable: true,
+    })
+    svg.element.dispatchEvent(wheelEvent)
+    await wrapper.vm.$nextTick()
+
+    const { zoom: newZoom, scrollX: newScrollX, scrollY: newScrollY } = pinia.state.value['diagrams'].viewport
+
+    // The cursor scene point must be the same after zoom
+    const sceneAfterX = (cursorClientX - svgRect.left) / newZoom - newScrollX
+    const sceneAfterY = (cursorClientY - svgRect.top) / newZoom - newScrollY
+
+    expect(sceneAfterX).toBeCloseTo(sceneBeforeX, 3)
+    expect(sceneAfterY).toBeCloseTo(sceneBeforeY, 3)
+  })
+
   it('unmounting flushes a pending autosave immediately', async () => {
     const { diagrams: apiDiagrams } = await import('@/api')
     vi.mocked(apiDiagrams.updateDiagram).mockClear()

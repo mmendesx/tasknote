@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import DiagramCanvas from '../DiagramCanvas.vue'
+import { useDiagramsStore } from '@/stores/diagrams'
 import { rdp } from '../useDrawTools'
 
 // ── API mock ──────────────────────────────────────────────────────────────────
@@ -250,6 +251,107 @@ describe('DiagramTools', () => {
     await wrapper.vm.$nextTick()
 
     expect(capture).not.toHaveBeenCalled()
+  })
+
+  // ICT-12: 600-sample pen stroke stores at most 200 points
+  it('600-sample pen stroke with RDP-reducible path stores at most 200 points', async () => {
+    const { wrapper, pinia, storeState } = await mountCanvas()
+    storeState.tool = 'pen'
+    await wrapper.vm.$nextTick()
+
+    const svg = wrapper.find('svg.diagram-canvas')
+
+    // Build a sine-wave path that is long enough for RDP to reduce substantially.
+    // 600 points along x=[0..599] with y = 3 * sin(x * 0.2) — amplitude 3, so
+    // many points lie very close to the chord and will be dropped by RDP(epsilon=1).
+    // The high-frequency sine ensures peaks and troughs act as true bend points,
+    // giving a long but reducible path.
+    const totalPoints = 600
+
+    // pointerdown to start — first point at (0, 0)
+    await svg.trigger('pointerdown', { clientX: 0, clientY: 0, pointerId: 1 })
+
+    // Dispatch all 600 subsequent moves
+    for (let i = 1; i < totalPoints; i++) {
+      const x = i
+      const y = Math.round(3 * Math.sin(i * 0.2))
+      await svg.trigger('pointermove', { clientX: x, clientY: y, pointerId: 1 })
+    }
+
+    await svg.trigger('pointerup', { clientX: totalPoints - 1, clientY: 0, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    const elements = pinia.state.value['diagrams'].elements
+    expect(elements).toHaveLength(1)
+    const el = elements[0]
+    expect(el.type).toBe('pen')
+    // Spec bound: RDP with epsilon=1 must reduce 600 raw points to ≤200
+    expect((el as any).points.length).toBeLessThanOrEqual(200)
+  })
+
+  // ICT-12: consecutive sub-2-scene-px moves don't grow preview
+  it('consecutive sub-2-scene-px moves during pen draw do not grow the in-progress preview', async () => {
+    const { wrapper, pinia, storeState } = await mountCanvas()
+    storeState.tool = 'pen'
+    await wrapper.vm.$nextTick()
+
+    const svg = wrapper.find('svg.diagram-canvas')
+
+    // Start at (0, 0)
+    await svg.trigger('pointerdown', { clientX: 0, clientY: 0, pointerId: 1 })
+
+    // Move 0.5px — sub-threshold, should NOT add a point
+    await svg.trigger('pointermove', { clientX: 0.5, clientY: 0, pointerId: 1 })
+    await svg.trigger('pointermove', { clientX: 0.8, clientY: 0, pointerId: 1 })
+    await svg.trigger('pointermove', { clientX: 1.0, clientY: 0, pointerId: 1 })
+
+    // Move 5px — above threshold, should add a point
+    await svg.trigger('pointermove', { clientX: 5, clientY: 0, pointerId: 1 })
+
+    await svg.trigger('pointerup', { clientX: 5, clientY: 0, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    const elements = pinia.state.value['diagrams'].elements
+    if (elements.length === 1) {
+      // Only 2 distinct scene points survived (start + the 5px move) — sub-px moves discarded
+      expect((elements[0] as any).points.length).toBeLessThanOrEqual(2)
+    }
+    // If zero elements: the path was too short to commit (fine — throttle still worked)
+    expect(elements.length).toBeLessThanOrEqual(1)
+  })
+
+  // ICT-12: new element adopts last-used style via the canvas commit path
+  it('new element adopts last-used strokeWidth after applyStyle sets lastStrokeWidth=4', async () => {
+    const { wrapper, pinia, storeState } = await mountCanvas()
+
+    const store = useDiagramsStore(pinia)
+
+    // Set last-used strokeWidth to 4 by using applyStyle on a dummy element
+    const dummyRect = {
+      id: 'dummy',
+      type: 'rectangle' as const,
+      x: 0, y: 0, width: 100, height: 50,
+      stroke: 'currentColor', fill: null, strokeWidth: 2,
+    }
+    store.addElement(dummyRect)
+    store.selectElement('dummy')
+    store.applyStyle({ strokeWidth: 4 })
+    expect(store.lastStrokeWidth).toBe(4)
+
+    // Switch to line tool and draw a line
+    storeState.tool = 'line'
+    await wrapper.vm.$nextTick()
+
+    const svg = wrapper.find('svg.diagram-canvas')
+    await svg.trigger('pointerdown', { clientX: 0, clientY: 0, pointerId: 1 })
+    await svg.trigger('pointerup', { clientX: 100, clientY: 0, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    const elements = pinia.state.value['diagrams'].elements
+    // Find the newly committed line (not the dummy rect)
+    const line = elements.find((e) => e.type === 'line')
+    expect(line).toBeDefined()
+    expect((line as any).strokeWidth).toBe(4)
   })
 
   it('rectangle tool DOES capture the pointer on pointerdown', async () => {

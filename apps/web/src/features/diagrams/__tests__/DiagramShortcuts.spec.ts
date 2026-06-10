@@ -248,6 +248,71 @@ describe('DiagramShortcuts', () => {
     expect((afterSecondUndo as { x: number }).x).toBe(100)
   })
 
+  // ICT-12: Ctrl+Z undoes through the real onKeyDown handler
+  it('Ctrl+Z keydown undoes last add; Ctrl+Shift+Z redoes; text-input focused blocks undo', async () => {
+    const { store, pinia } = await mountCanvas()
+
+    const state = pinia.state.value['diagrams']
+    state.loading = false
+    state.loadError = null
+
+    // Add two elements through the store so there is history to undo
+    store.addElement(makeRect('r1', 10, 10))
+    store.addElement(makeRect('r2', 100, 100))
+    expect(store.elements).toHaveLength(2)
+    expect(store.canUndo).toBe(true)
+
+    // Ctrl+Z — undoes the last addElement (r2 disappears)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }))
+    await Promise.resolve()
+    expect(store.elements).toHaveLength(1)
+    expect(store.elements[0]!.id).toBe('r1')
+    expect(store.canRedo).toBe(true)
+
+    // Ctrl+Shift+Z — redoes (r2 comes back)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, shiftKey: true, bubbles: true }))
+    await Promise.resolve()
+    expect(store.elements).toHaveLength(2)
+
+    // Undo once more to set up the blocking test
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }))
+    await Promise.resolve()
+    expect(store.elements).toHaveLength(1)
+
+    // While a text input is focused, Ctrl+Z must NOT fire undo
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    input.focus()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }))
+    await Promise.resolve()
+    expect(store.elements).toHaveLength(1) // unchanged
+
+    input.blur()
+    document.body.removeChild(input)
+  })
+
+  // ICT-12: uppercase Z variant (Ctrl+Shift+Z producing uppercase Z) also redoes
+  it('Ctrl+Z uppercase variant (Ctrl+Z with key="Z") triggers redo', async () => {
+    const { store, pinia } = await mountCanvas()
+
+    const state = pinia.state.value['diagrams']
+    state.loading = false
+    state.loadError = null
+
+    store.addElement(makeRect('r1', 10, 10))
+    store.addElement(makeRect('r2', 100, 100))
+
+    // Undo to create a redo entry
+    store.undoAction()
+    expect(store.elements).toHaveLength(1)
+    expect(store.canRedo).toBe(true)
+
+    // Ctrl+Z with uppercase key='Z' (some platform-specific key events produce this)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Z', ctrlKey: true, bubbles: true }))
+    await Promise.resolve()
+    expect(store.elements).toHaveLength(2)
+  })
+
   // SCN: arrow keys do not move elements when no selection
   it('arrow keys do nothing when selection is empty', async () => {
     const { store, pinia } = await mountCanvas()

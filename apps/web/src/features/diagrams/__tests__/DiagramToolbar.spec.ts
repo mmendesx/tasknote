@@ -274,6 +274,29 @@ describe('DiagramToolbar', () => {
     exportSvgSpy.mockRestore()
   })
 
+  // ── Save-error indicator (ICT-12) ────────────────────────────────────────
+
+  it('toolbar shows "Save failed — retrying" when saveError is set', async () => {
+    const { wrapper, pinia } = mountToolbar()
+
+    const state = pinia.state.value['diagrams']
+    const indicator = wrapper.find('[aria-live="polite"]')
+
+    // Baseline: no error → "Saved"
+    await wrapper.vm.$nextTick()
+    expect(indicator.text()).toBe('Saved')
+
+    // Simulate save error
+    state.saveError = 'Network error'
+    await wrapper.vm.$nextTick()
+    expect(indicator.text()).toBe('Save failed — retrying')
+
+    // Recovery: error cleared → "Saved"
+    state.saveError = null
+    await wrapper.vm.$nextTick()
+    expect(indicator.text()).toBe('Saved')
+  })
+
   // ── PNG export failure (ICT-8) ────────────────────────────────────────────
 
   it('export png failure shows an error toast', async () => {

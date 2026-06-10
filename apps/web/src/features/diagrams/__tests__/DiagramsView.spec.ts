@@ -4,6 +4,15 @@ import { createPinia, setActivePinia } from 'pinia'
 import { createRouter, createWebHistory } from 'vue-router'
 import DiagramsView from '../DiagramsView.vue'
 
+// ── Toast mock (hoisted so vi.mock factory captures it) ───────────────────────
+
+const toastErrorSpy = vi.hoisted(() => vi.fn())
+
+vi.mock('@tasknote/ui', () => ({
+  useToast: () => ({ error: toastErrorSpy, success: vi.fn() }),
+  Button: { template: '<button @click="$emit(\'click\')"><slot /></button>' },
+}))
+
 // ── API mock ──────────────────────────────────────────────────────────────────
 
 vi.mock('@/api', () => ({
@@ -181,5 +190,40 @@ describe('DiagramsView', () => {
     // Should show list view (no canvas) — list will be empty
     expect(wrapper.find('[data-testid="diagram-canvas"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('No diagrams yet')
+  })
+})
+
+// ── Toast deduplication (ICT-12) ──────────────────────────────────────────────
+
+describe('DiagramsView — save-error toast deduplication', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    toastErrorSpy.mockClear()
+    vi.clearAllMocks()
+  })
+
+  it('exactly one toast per save-failure episode: consecutive failures stay at 1; recovery then new failure gives 2nd toast', async () => {
+    const { pinia } = await mountView({ path: '/diagrams/42' })
+    const state = pinia.state.value['diagrams']
+
+    // Episode 1: first failure — should fire 1 toast
+    state.saveError = 'Network error'
+    await flushPromises()
+    expect(toastErrorSpy).toHaveBeenCalledTimes(1)
+
+    // Second failure while episode is already active — no new toast
+    state.saveError = 'Timeout'
+    await flushPromises()
+    expect(toastErrorSpy).toHaveBeenCalledTimes(1)
+
+    // Recovery: error cleared — episode resets
+    state.saveError = null
+    await flushPromises()
+    expect(toastErrorSpy).toHaveBeenCalledTimes(1)
+
+    // New independent failure — episode 2, fires a second toast
+    state.saveError = 'Disconnected'
+    await flushPromises()
+    expect(toastErrorSpy).toHaveBeenCalledTimes(2)
   })
 })

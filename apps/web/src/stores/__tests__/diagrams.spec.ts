@@ -1528,6 +1528,100 @@ describe('useDiagramsStore — applyStyle (ICT-14)', () => {
   })
 })
 
+// ─── ICT-12: styled element persists its style through the save payload ──────
+
+describe('useDiagramsStore — styled element in save payload (ICT-12)', () => {
+  let store: ReturnType<typeof useDiagramsStore>
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    store = useDiagramsStore()
+    vi.resetAllMocks()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('styled element persists its style through the save payload', async () => {
+    store.id = 1
+    vi.mocked(api.diagrams.updateDiagram).mockResolvedValue(makeDiagram(1, 'Test'))
+
+    // Add a rect, select it, apply a stroke style
+    const rect = makeRectangle('styled-rect')
+    store.addElement(rect)
+    store.selectElement('styled-rect')
+    store.applyStyle({ stroke: '#e03131' })
+
+    // Verify the style applied in memory
+    const updated = store.elements.find((e) => e.id === 'styled-rect')
+    expect(updated?.type === 'rectangle' && updated.stroke).toBe('#e03131')
+
+    // Advance past the debounce window — save should fire
+    vi.advanceTimersByTime(700)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(api.diagrams.updateDiagram).toHaveBeenCalledTimes(1)
+    const callArg = vi.mocked(api.diagrams.updateDiagram).mock.calls[0]![1]!
+    const savedElements: DiagramElement[] = callArg.scene_json?.elements ?? []
+    const savedRect = savedElements.find((e) => e.id === 'styled-rect')
+    expect(savedRect).toBeDefined()
+    expect(savedRect?.type === 'rectangle' && savedRect.stroke).toBe('#e03131')
+  })
+})
+
+// ─── ICT-12: legacy center-anchored bound scene unchanged until shape moves ───
+
+describe('useDiagramsStore — legacy center-anchored binding (ICT-12)', () => {
+  let store: ReturnType<typeof useDiagramsStore>
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    store = useDiagramsStore()
+    vi.resetAllMocks()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('legacy center-anchored scene renders unchanged after load; moving the rect re-anchors the endpoint to the boundary', async () => {
+    // Legacy scene: rect at x=50, y=75, w=100, h=50 → center (100, 100).
+    // Arrow start point sits exactly at the rect center — old behavior from before
+    // edge-anchoring was added. After load the point should stay at (100, 100);
+    // only when updateElement moves the rect should the endpoint re-anchor.
+    const R = makeRectangleAt('R', 50, 75) // center = (100, 100)
+    const arrowWithCenterAnchor = makeArrow('arrow-legacy', [[100, 100], [300, 300]], 'R', undefined)
+    const diagram = makeDiagram(1, 'Legacy scene', [R, arrowWithCenterAnchor])
+
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
+    await store.loadDiagram(1)
+
+    // After load: points are stored as-is (no eager re-anchor on load)
+    const arrowAfterLoad = store.elements.find((e) => e.id === 'arrow-legacy')
+    expect(arrowAfterLoad).toBeDefined()
+    expect(arrowAfterLoad?.type === 'arrow' && arrowAfterLoad.points[0]).toEqual([100, 100])
+
+    // Now move R so new center = (180, 140): x=130, y=115
+    vi.mocked(api.diagrams.updateDiagram).mockResolvedValue(makeDiagram(1, 'Legacy scene'))
+    store.updateElement('R', { x: 130, y: 115 })
+
+    // After updateElement the arrow endpoint must be re-anchored to the boundary
+    const arrowAfterMove = store.elements.find((e) => e.id === 'arrow-legacy')
+    expect(arrowAfterMove?.type).toBe('arrow')
+    if (arrowAfterMove?.type === 'arrow') {
+      // Edge-anchored: start is on R's new boundary facing (300, 300)
+      expect(arrowAfterMove.points[0][0]).toBeCloseTo(201.15, 1)
+      expect(arrowAfterMove.points[0][1]).toBeCloseTo(168.2, 1)
+      // Free end unchanged
+      expect(arrowAfterMove.points[1]).toEqual([300, 300])
+    }
+  })
+})
+
 // ─── ICT-11: updateElements batched O(n) operations ──────────────────────────
 
 describe('useDiagramsStore — updateElements batch (ICT-11 FR-B8)', () => {
