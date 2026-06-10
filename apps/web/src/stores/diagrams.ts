@@ -479,23 +479,55 @@ export const useDiagramsStore = defineStore('diagrams', () => {
 
   // ── Style action ─────────────────────────────────────────────────────────────
 
+  type StylePatch = { stroke?: string; fill?: string | null; strokeWidth?: number; fontSize?: number }
+  type FlatElPatch = { stroke?: string; color?: string; fill?: string | null; strokeWidth?: number; fontSize?: number }
+
   /**
-   * Apply a style patch to every currently selected element in one undo entry.
-   * - stroke → `stroke` on rect/ellipse/line/arrow/pen; `color` on text
+   * Translate a generic style patch into the concrete fields for one element.
+   * - stroke → `color` on text, `stroke` on everything else
    * - fill → `fill` on rect/ellipse only
    * - strokeWidth → all except text
    * - fontSize → text only
-   *
-   * One pushHistory() call is made before the loop so the entire batch is a
-   * single undo step. updateElement() does NOT push history itself, so we use
-   * it directly after the push.
+   * Returns null when no valid fields apply to this element type.
    */
-  function applyStyle(patch: {
-    stroke?: string
-    fill?: string | null
-    strokeWidth?: number
-    fontSize?: number
-  }): void {
+  function buildElementStylePatch(el: DiagramElement, patch: StylePatch): FlatElPatch | null {
+    const elPatch: FlatElPatch = {}
+
+    if (patch.stroke !== undefined) {
+      if (el.type === 'text') {
+        elPatch.color = patch.stroke
+      } else {
+        elPatch.stroke = patch.stroke
+      }
+    }
+
+    if (patch.fill !== undefined) {
+      if (el.type === 'rectangle' || el.type === 'ellipse') {
+        elPatch.fill = patch.fill
+      }
+    }
+
+    if (patch.strokeWidth !== undefined) {
+      if (el.type !== 'text') {
+        elPatch.strokeWidth = patch.strokeWidth
+      }
+    }
+
+    if (patch.fontSize !== undefined) {
+      if (el.type === 'text') {
+        elPatch.fontSize = patch.fontSize
+      }
+    }
+
+    return Object.keys(elPatch).length > 0 ? elPatch : null
+  }
+
+  /**
+   * Apply a style patch to every currently selected element in one undo entry.
+   * One pushHistory() call before the loop makes the entire batch a single undo
+   * step. updateElements() makes ONE array copy and ONE scheduleSave() call.
+   */
+  function applyStyle(patch: StylePatch): void {
     if (selectedIds.value.length === 0) return
 
     pushHistory()
@@ -507,46 +539,8 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     for (const elId of selectedIds.value) {
       const el = elements.value.find((e) => e.id === elId)
       if (!el) continue
-
-      // Partial<DiagramElement> distributes over the union, so per-variant keys
-      // (color, fontSize) are not assignable on it — build a flat style patch
-      // and cast at the updateElements call; the per-type guards above each key
-      // ensure only valid fields reach each element variant.
-      const elPatch: {
-        stroke?: string
-        color?: string
-        fill?: string | null
-        strokeWidth?: number
-        fontSize?: number
-      } = {}
-
-      if (patch.stroke !== undefined) {
-        if (el.type === 'text') {
-          elPatch.color = patch.stroke
-        } else {
-          elPatch.stroke = patch.stroke
-        }
-      }
-
-      if (patch.fill !== undefined) {
-        if (el.type === 'rectangle' || el.type === 'ellipse') {
-          elPatch.fill = patch.fill
-        }
-      }
-
-      if (patch.strokeWidth !== undefined) {
-        if (el.type !== 'text') {
-          elPatch.strokeWidth = patch.strokeWidth
-        }
-      }
-
-      if (patch.fontSize !== undefined) {
-        if (el.type === 'text') {
-          elPatch.fontSize = patch.fontSize
-        }
-      }
-
-      if (Object.keys(elPatch).length > 0) {
+      const elPatch = buildElementStylePatch(el, patch)
+      if (elPatch) {
         patches.push({ id: elId, patch: elPatch as Partial<DiagramElement> })
       }
     }

@@ -22,14 +22,14 @@ export function useMarquee() {
   const anchorY = ref(0)
   const currentX = ref(0)
   const currentY = ref(0)
-  const active = ref(false)
+  const isActive = ref(false)
 
   /**
    * Normalized rectangle in scene coordinates, or null when no marquee is
    * being drawn. Width and height are always positive.
    */
   const marqueeRect = computed<MarqueeRect | null>(() => {
-    if (!active.value) return null
+    if (!isActive.value) return null
     const x = Math.min(anchorX.value, currentX.value)
     const y = Math.min(anchorY.value, currentY.value)
     const width = Math.abs(currentX.value - anchorX.value)
@@ -42,11 +42,11 @@ export function useMarquee() {
     anchorY.value = sceneY
     currentX.value = sceneX
     currentY.value = sceneY
-    active.value = true
+    isActive.value = true
   }
 
   function updateMarquee(sceneX: number, sceneY: number): void {
-    if (!active.value) return
+    if (!isActive.value) return
     currentX.value = sceneX
     currentY.value = sceneY
   }
@@ -56,9 +56,9 @@ export function useMarquee() {
    * boxes intersect the marquee rectangle.
    */
   function finishMarquee(elements: DiagramElement[]): string[] {
-    if (!active.value) return []
+    if (!isActive.value) return []
     const rect = marqueeRect.value
-    active.value = false
+    isActive.value = false
     if (!rect || rect.width < 2 || rect.height < 2) return []
 
     const hits: string[] = []
@@ -75,12 +75,14 @@ export function useMarquee() {
   }
 
   function cancelMarquee(): void {
-    active.value = false
+    isActive.value = false
   }
 
   return {
     marqueeRect,
-    active,
+    isActive,
+    // compat alias — keeps any caller that still destructures `active` working
+    get active() { return isActive },
     startMarquee,
     updateMarquee,
     finishMarquee,
