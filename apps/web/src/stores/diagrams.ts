@@ -188,7 +188,7 @@ export const useDiagramsStore = defineStore('diagrams', () => {
       if (myEpoch !== epoch) return
       dirty.value = false
       saveError.value = null
-      retryAttempt = 0
+      cancelRetry()
       // Patch list if the diagram is visible there
       const idx = list.value.findIndex((d) => d.id === updated.id)
       if (idx !== -1) {
@@ -241,6 +241,8 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     if (debounceTimer !== null) {
       clearTimeout(debounceTimer)
       debounceTimer = null
+    }
+    if (dirty.value) {
       await save()
     }
   }

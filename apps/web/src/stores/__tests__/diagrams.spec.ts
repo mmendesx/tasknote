@@ -1133,6 +1133,105 @@ describe('useDiagramsStore — multi-select (ICT-11)', () => {
   })
 })
 
+// ─── ICT-4: Save lifecycle hardening ─────────────────────────────────────────
+
+describe('useDiagramsStore — save lifecycle hardening (ICT-4)', () => {
+  let store: ReturnType<typeof useDiagramsStore>
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    store = useDiagramsStore()
+    vi.resetAllMocks()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('save success cancels the pending retry', async () => {
+    const diagram = makeDiagram(1, 'Test')
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
+
+    // First save fails → retry scheduled at 2s
+    vi.mocked(api.diagrams.updateDiagram)
+      .mockRejectedValueOnce(new Error('Network error'))
+      .mockResolvedValue(makeDiagram(1, 'Test'))
+
+    await store.loadDiagram(1)
+    store.addElement(makeRectangle('el-1'))
+
+    // Fire the debounce → first save attempt fails, retry scheduled
+    vi.advanceTimersByTime(700)
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(store.saveError).toBe('Network error')
+    expect(api.diagrams.updateDiagram).toHaveBeenCalledTimes(1)
+
+    // User edits again → debounce timer running; let the debounced save fire (succeeds)
+    store.addElement(makeRectangle('el-2'))
+    vi.advanceTimersByTime(700)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    // Save succeeded: 2 total calls so far (1 fail + 1 success)
+    expect(api.diagrams.updateDiagram).toHaveBeenCalledTimes(2)
+    expect(store.saveError).toBeNull()
+    expect(store.dirty).toBe(false)
+
+    // Advance past the stale 2s retry window — must NOT fire again
+    vi.advanceTimersByTime(2100)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(api.diagrams.updateDiagram).toHaveBeenCalledTimes(2)
+  })
+
+  it('flushSave persists dirty state during a retry episode', async () => {
+    const diagram = makeDiagram(1, 'Test')
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
+
+    // First save fails → retry pending; subsequent calls succeed
+    vi.mocked(api.diagrams.updateDiagram)
+      .mockRejectedValueOnce(new Error('Network error'))
+      .mockResolvedValue(makeDiagram(1, 'Test'))
+
+    await store.loadDiagram(1)
+    store.addElement(makeRectangle('el-1'))
+
+    // Fire the debounce → first attempt fails; debounce timer is now null, dirty true, retry pending
+    vi.advanceTimersByTime(700)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(store.saveError).toBe('Network error')
+    expect(store.dirty).toBe(true)
+    // debounceTimer is null at this point (fired); retry timer is alive
+
+    // flushSave must save even though debounceTimer is null
+    await store.flushSave()
+
+    expect(api.diagrams.updateDiagram).toHaveBeenCalledTimes(2)
+    expect(store.dirty).toBe(false)
+    expect(store.saveError).toBeNull()
+  })
+
+  it('flushSave with clean state does not call the API', async () => {
+    const diagram = makeDiagram(1, 'Test')
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
+    vi.mocked(api.diagrams.updateDiagram).mockResolvedValue(makeDiagram(1, 'Test'))
+
+    await store.loadDiagram(1)
+
+    // State: not dirty, no debounce pending
+    expect(store.dirty).toBe(false)
+
+    await store.flushSave()
+
+    expect(api.diagrams.updateDiagram).not.toHaveBeenCalled()
+  })
+})
+
 // ── Helper factories ──────────────────────────────────────────────────────────
 
 function makeTextElement(elId: string): DiagramElement {
