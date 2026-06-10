@@ -3,6 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import DiagramCanvas from '../DiagramCanvas.vue'
 import { useDiagramsStore } from '@/stores/diagrams'
+import type { DiagramElement } from '@tasknote/shared'
 
 // ── API mock: never touches the network ──────────────────────────────────────
 
@@ -388,6 +389,179 @@ describe('DiagramCanvas', () => {
     const { scrollX, scrollY } = storeState.viewport
     expect(scrollX).toBe(0)
     expect(scrollY).toBe(0)
+  })
+
+  // ICT-5: pointercancel mid-move restores position
+  it('pointercancel mid-move restores position and leaves no dangling history entry', async () => {
+    const { diagrams: apiDiagrams } = await import('@/api')
+    vi.mocked(apiDiagrams.getDiagram).mockResolvedValueOnce({
+      id: 1,
+      title: 'Cancel move test',
+      scene_json: {
+        version: 1,
+        elements: [
+          {
+            id: 'rect-cancel',
+            type: 'rectangle' as const,
+            x: 10,
+            y: 10,
+            width: 80,
+            height: 60,
+            stroke: '#000',
+            fill: null,
+            strokeWidth: 1,
+          },
+        ],
+        appState: { viewport: { scrollX: 0, scrollY: 0, zoom: 1 } },
+      },
+    } as never)
+
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(DiagramCanvas, {
+      global: { plugins: [pinia] },
+      props: { diagramId: 1 },
+      attachTo: document.body,
+    })
+    await flushPromises()
+
+    const storeState = pinia.state.value['diagrams']
+    storeState.tool = 'select'
+    storeState.loading = false
+    storeState.loadError = null
+    await wrapper.vm.$nextTick()
+
+    const store = useDiagramsStore(pinia)
+    // Establish a previous committed mutation so we can verify undo targets it (not the cancelled drag)
+    store.addElement({
+      id: 'rect-extra',
+      type: 'rectangle',
+      x: 300,
+      y: 300,
+      width: 20,
+      height: 20,
+      stroke: '#000',
+      fill: null,
+      strokeWidth: 1,
+    })
+    await wrapper.vm.$nextTick()
+
+    const svg = wrapper.find('svg.diagram-canvas')
+    const elementNode = wrapper.find('[data-element-id="rect-cancel"]')
+    expect(elementNode.exists()).toBe(true)
+
+    // Pointerdown selects and begins move gesture
+    await elementNode.trigger('pointerdown', { clientX: 50, clientY: 40, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    // Two moves apply a +30,+30 delta so the element visibly moves mid-gesture
+    await svg.trigger('pointermove', { clientX: 65, clientY: 55, pointerId: 1 })
+    await svg.trigger('pointermove', { clientX: 80, clientY: 70, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    // Mid-drag the element should be displaced
+    const midDragEl = (storeState.elements as DiagramElement[]).find((e) => e.id === 'rect-cancel')
+    expect((midDragEl as any).x).toBeGreaterThan(10)
+
+    // Cancel the gesture — must restore original position
+    await svg.trigger('pointercancel', { pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    const afterCancel = (storeState.elements as DiagramElement[]).find((e) => e.id === 'rect-cancel')
+    expect(afterCancel).toBeDefined()
+    expect((afterCancel as any).x).toBe(10)
+    expect((afterCancel as any).y).toBe(10)
+
+    // Undo must target the addElement mutation, not the cancelled drag.
+    // After one undo, rect-extra disappears (that was the prior mutation).
+    store.undoAction()
+    await wrapper.vm.$nextTick()
+
+    const afterUndo = storeState.elements as DiagramElement[]
+    expect(afterUndo.find((e) => e.id === 'rect-extra')).toBeUndefined()
+    // No further undo entries — cancel pushed no history of its own
+    expect(store.canUndo).toBe(false)
+  })
+
+  // ICT-5: pointercancel mid-resize restores size
+  it('pointercancel mid-resize restores size to pre-gesture values', async () => {
+    const { diagrams: apiDiagrams } = await import('@/api')
+    vi.mocked(apiDiagrams.getDiagram).mockResolvedValueOnce({
+      id: 1,
+      title: 'Cancel resize test',
+      scene_json: {
+        version: 1,
+        elements: [
+          {
+            id: 'rect-resize-cancel',
+            type: 'rectangle' as const,
+            x: 50,
+            y: 50,
+            width: 100,
+            height: 100,
+            stroke: '#000',
+            fill: null,
+            strokeWidth: 1,
+          },
+        ],
+        appState: { viewport: { scrollX: 0, scrollY: 0, zoom: 1 } },
+      },
+    } as never)
+
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(DiagramCanvas, {
+      global: { plugins: [pinia] },
+      props: { diagramId: 1 },
+      attachTo: document.body,
+    })
+    await flushPromises()
+
+    const storeState = pinia.state.value['diagrams']
+    storeState.tool = 'select'
+    storeState.loading = false
+    storeState.loadError = null
+    await wrapper.vm.$nextTick()
+
+    const svg = wrapper.find('svg.diagram-canvas')
+    // Stub pointer capture so jsdom does not throw
+    ;(svg.element as SVGSVGElement).setPointerCapture = vi.fn()
+
+    // Select the rect so resize handles render
+    const elementNode = wrapper.find('[data-element-id="rect-resize-cancel"]')
+    expect(elementNode.exists()).toBe(true)
+    await elementNode.trigger('pointerdown', { clientX: 100, clientY: 100, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+    expect(storeState.selectedIds).toContain('rect-resize-cancel')
+
+    // Start resize via se handle
+    const handle = wrapper.find('[data-resize-handle="se"]')
+    expect(handle.exists()).toBe(true)
+    await handle.trigger('pointerdown', { pointerId: 1, clientX: 150, clientY: 150 })
+    await wrapper.vm.$nextTick()
+
+    // Drag toward 175,175 — would produce ~125×125 if committed
+    await svg.trigger('pointermove', { clientX: 175, clientY: 175, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    // Mid-resize the element should have grown
+    const midResizeEl = (storeState.elements as DiagramElement[]).find(
+      (e) => e.id === 'rect-resize-cancel',
+    )
+    expect((midResizeEl as any).width).toBeGreaterThan(100)
+
+    // Cancel the gesture — must restore original 100×100
+    await svg.trigger('pointercancel', { pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    const afterCancel = (storeState.elements as DiagramElement[]).find(
+      (e) => e.id === 'rect-resize-cancel',
+    )
+    expect(afterCancel).toBeDefined()
+    expect((afterCancel as any).width).toBe(100)
+    expect((afterCancel as any).height).toBe(100)
+    expect((afterCancel as any).x).toBe(50)
+    expect((afterCancel as any).y).toBe(50)
   })
 
   it('unmounting flushes a pending autosave immediately', async () => {

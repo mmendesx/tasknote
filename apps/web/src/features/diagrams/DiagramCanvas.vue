@@ -614,6 +614,27 @@ function onCanvasPointerLeave(event: PointerEvent): void {
 
 function onCanvasPointerCancel(): void {
   cancelDraw()
+
+  // Restore pre-gesture geometry so no half-dragged positions survive the cancel
+  // (FR-A8 / FR-B2). We restore BEFORE clearing state because the state holds
+  // the original snapshots we need.
+  if (moveState.value) {
+    for (const [id, original] of moveState.value.originalElements) {
+      store.updateElement(id, original as Partial<DiagramElement>)
+    }
+  }
+  if (resizeState.value) {
+    const orig = resizeState.value.original
+    store.updateElement(orig.id, orig as Partial<DiagramElement>)
+  }
+
+  // If a history snapshot was already pushed for this gesture, remove it — the
+  // live elements are now identical to that snapshot so the entry is a no-op
+  // duplicate. Discarding it ensures undo goes to the state BEFORE the gesture.
+  if (gestureHistoryPushed.value) {
+    store.discardLastHistory()
+  }
+
   clearMove()
   cancelResize()
   cancelMarquee()

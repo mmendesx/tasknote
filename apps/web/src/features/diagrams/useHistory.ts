@@ -63,6 +63,20 @@ export function useHistory(getCurrentElements: () => DiagramElement[]) {
     redoStack.value = []
   }
 
+  /**
+   * Discard the most recent undo entry without touching redo.
+   * Used exclusively by the pointer-cancel path: after a cancelled gesture we
+   * restore the original geometry, leaving the live elements identical to the
+   * snapshot that was pushed at gesture start. The entry would therefore be a
+   * no-op duplicate — remove it so that undo goes to the state before the
+   * gesture, not to an identical copy of the current state.
+   */
+  function discardLast(): void {
+    if (undoStack.value.length === 0) return
+    const [, ...remaining] = undoStack.value
+    undoStack.value = remaining
+  }
+
   return {
     canUndo,
     canRedo,
@@ -70,5 +84,6 @@ export function useHistory(getCurrentElements: () => DiagramElement[]) {
     undo,
     redo,
     clear,
+    discardLast,
   }
 }
