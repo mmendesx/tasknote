@@ -398,6 +398,90 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     }
   }
 
+  // ── Style: last-used defaults for new elements ───────────────────────────────
+
+  const lastStroke = ref<string>('currentColor')
+  const lastFill = ref<string | null>(null)
+  const lastStrokeWidth = ref<number>(2)
+  const lastFontSize = ref<number>(16)
+
+  // ── Style action ─────────────────────────────────────────────────────────────
+
+  /**
+   * Apply a style patch to every currently selected element in one undo entry.
+   * - stroke → `stroke` on rect/ellipse/line/arrow/pen; `color` on text
+   * - fill → `fill` on rect/ellipse only
+   * - strokeWidth → all except text
+   * - fontSize → text only
+   *
+   * One pushHistory() call is made before the loop so the entire batch is a
+   * single undo step. updateElement() does NOT push history itself, so we use
+   * it directly after the push.
+   */
+  function applyStyle(patch: {
+    stroke?: string
+    fill?: string | null
+    strokeWidth?: number
+    fontSize?: number
+  }): void {
+    if (selectedIds.value.length === 0) return
+
+    pushHistory()
+
+    for (const elId of selectedIds.value) {
+      const el = elements.value.find((e) => e.id === elId)
+      if (!el) continue
+
+      // Partial<DiagramElement> distributes over the union, so per-variant keys
+      // (color, fontSize) are not assignable on it — build a flat style patch
+      // and cast at the updateElement call; the per-type guards above each key
+      // ensure only valid fields reach each element variant.
+      const elPatch: {
+        stroke?: string
+        color?: string
+        fill?: string | null
+        strokeWidth?: number
+        fontSize?: number
+      } = {}
+
+      if (patch.stroke !== undefined) {
+        if (el.type === 'text') {
+          elPatch.color = patch.stroke
+        } else {
+          elPatch.stroke = patch.stroke
+        }
+      }
+
+      if (patch.fill !== undefined) {
+        if (el.type === 'rectangle' || el.type === 'ellipse') {
+          elPatch.fill = patch.fill
+        }
+      }
+
+      if (patch.strokeWidth !== undefined) {
+        if (el.type !== 'text') {
+          elPatch.strokeWidth = patch.strokeWidth
+        }
+      }
+
+      if (patch.fontSize !== undefined) {
+        if (el.type === 'text') {
+          elPatch.fontSize = patch.fontSize
+        }
+      }
+
+      if (Object.keys(elPatch).length > 0) {
+        updateElement(elId, elPatch as Partial<DiagramElement>)
+      }
+    }
+
+    // Update last-used style memory
+    if (patch.stroke !== undefined) lastStroke.value = patch.stroke
+    if (patch.fill !== undefined) lastFill.value = patch.fill
+    if (patch.strokeWidth !== undefined) lastStrokeWidth.value = patch.strokeWidth
+    if (patch.fontSize !== undefined) lastFontSize.value = patch.fontSize
+  }
+
   // ── Ephemeral UI mutations (do NOT save) ─────────────────────────────────────
 
   function selectElement(elementId: string | null, additive = false): void {
@@ -466,6 +550,11 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     redoAction,
     canUndo,
     canRedo,
+    applyStyle,
+    lastStroke,
+    lastFill,
+    lastStrokeWidth,
+    lastFontSize,
     selectElement,
     setTool,
     setViewport,

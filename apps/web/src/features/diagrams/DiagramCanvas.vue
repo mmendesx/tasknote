@@ -475,18 +475,21 @@ function onCanvasPointerUp(event: PointerEvent): void {
 
   if (state.kind === 'shape') {
     const pt = getScenePt(event)
+    const style = { stroke: store.lastStroke, fill: store.lastFill, strokeWidth: store.lastStrokeWidth }
     const el = state.tool === 'rectangle'
-      ? buildRectangleElement(state.ax, state.ay, pt.x, pt.y)
-      : buildEllipseElement(state.ax, state.ay, pt.x, pt.y)
+      ? buildRectangleElement(state.ax, state.ay, pt.x, pt.y, style)
+      : buildEllipseElement(state.ax, state.ay, pt.x, pt.y, style)
     if (el) store.addElement(el as DiagramElement)
     cancelDraw()
   } else if (state.kind === 'linear') {
     const { ax, ay, bx, by, startBinding, endBinding } = resolveLinearEndpoints(state, event)
-    const el = buildLinearElement(state.tool, ax, ay, bx, by, startBinding, endBinding)
+    const style = { stroke: store.lastStroke, strokeWidth: store.lastStrokeWidth }
+    const el = buildLinearElement(state.tool, ax, ay, bx, by, startBinding, endBinding, style)
     if (el) store.addElement(el as DiagramElement)
     cancelDraw()
   } else if (state.kind === 'pen') {
-    const el = buildPenElement(state.points)
+    const style = { stroke: store.lastStroke, strokeWidth: store.lastStrokeWidth }
+    const el = buildPenElement(state.points, style)
     if (el) store.addElement(el as DiagramElement)
     cancelDraw()
   }
@@ -513,7 +516,8 @@ function onCanvasPointerCancel(): void {
 function commitText(): void {
   const state = drawState.value
   if (state.kind !== 'text') return
-  const el = buildTextElement(state.x, state.y, pendingText.value)
+  const style = { stroke: store.lastStroke, fontSize: store.lastFontSize }
+  const el = buildTextElement(state.x, state.y, pendingText.value, style)
   if (el) store.addElement(el as DiagramElement)
   cancelDraw()
 }

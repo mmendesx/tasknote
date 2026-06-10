@@ -6,6 +6,7 @@ import { Button, useToast } from '@tasknote/ui'
 import { useDiagramsStore } from '@/stores/diagrams'
 import DiagramCanvas from './DiagramCanvas.vue'
 import DiagramToolbar from './DiagramToolbar.vue'
+import DiagramStylePanel from './DiagramStylePanel.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -109,6 +110,7 @@ watch(
         <div class="diagrams-view__detail-header">
           <DiagramToolbar />
           <div class="diagrams-view__delete-zone">
+
             <template v-if="isPendingDelete">
               <button
                 class="diagrams-view__btn diagrams-view__btn--danger focus-ring"
@@ -144,6 +146,7 @@ watch(
             </button>
           </div>
         </div>
+        <DiagramStylePanel />
         <main class="diagrams-view__canvas" aria-label="Diagram canvas area">
           <DiagramCanvas :diagram-id="selectedId" />
         </main>

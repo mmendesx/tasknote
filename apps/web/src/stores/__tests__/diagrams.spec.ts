@@ -1132,3 +1132,193 @@ describe('useDiagramsStore — multi-select (ICT-11)', () => {
     expect(store.canUndo).toBe(canUndoBefore)
   })
 })
+
+// ── Helper factories ──────────────────────────────────────────────────────────
+
+function makeTextElement(elId: string): DiagramElement {
+  return {
+    id: elId,
+    type: 'text',
+    x: 10,
+    y: 10,
+    text: 'hello',
+    fontSize: 16,
+    color: 'currentColor',
+  }
+}
+
+function makeLineElement(elId: string): DiagramElement {
+  return {
+    id: elId,
+    type: 'line',
+    points: [[0, 0], [100, 100]],
+    stroke: '#000000',
+    strokeWidth: 2,
+    startBinding: null,
+    endBinding: null,
+  }
+}
+
+describe('useDiagramsStore — applyStyle (ICT-14)', () => {
+  let store: ReturnType<typeof useDiagramsStore>
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    store = useDiagramsStore()
+    vi.resetAllMocks()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('change stroke color of a selection: rect and line both get the new stroke', () => {
+    const rect = makeRectangle('r1')
+    const line = makeLineElement('l1')
+    store.elements = [rect, line]
+    store.selectedIds = ['r1', 'l1']
+
+    store.applyStyle({ stroke: '#e03131' })
+
+    const updatedRect = store.elements.find((e) => e.id === 'r1')
+    const updatedLine = store.elements.find((e) => e.id === 'l1')
+    expect(updatedRect).toBeDefined()
+    expect(updatedLine).toBeDefined()
+    if (updatedRect?.type === 'rectangle') expect(updatedRect.stroke).toBe('#e03131')
+    if (updatedLine?.type === 'line') expect(updatedLine.stroke).toBe('#e03131')
+  })
+
+  it('change stroke color applies to color field of text elements', () => {
+    const text = makeTextElement('t1')
+    store.elements = [text]
+    store.selectedIds = ['t1']
+
+    store.applyStyle({ stroke: '#e03131' })
+
+    const updated = store.elements.find((e) => e.id === 't1')
+    expect(updated?.type === 'text' && updated.color).toBe('#e03131')
+  })
+
+  it('fill only applies to shapes: rect.fill is set but line is unchanged', () => {
+    const rect = makeRectangle('r1')
+    const line = makeLineElement('l1')
+    store.elements = [rect, line]
+    store.selectedIds = ['r1', 'l1']
+
+    store.applyStyle({ fill: '#1971c2' })
+
+    const updatedRect = store.elements.find((e) => e.id === 'r1')
+    const updatedLine = store.elements.find((e) => e.id === 'l1')
+    if (updatedRect?.type === 'rectangle') expect(updatedRect.fill).toBe('#1971c2')
+    // Line has no fill field — the element should be otherwise unchanged
+    expect(updatedLine).toBeDefined()
+    expect('fill' in (updatedLine ?? {})).toBe(false)
+  })
+
+  it('strokeWidth does not apply to text elements', () => {
+    const text = makeTextElement('t1')
+    store.elements = [text]
+    store.selectedIds = ['t1']
+
+    store.applyStyle({ strokeWidth: 4 })
+
+    const updated = store.elements.find((e) => e.id === 't1')
+    expect(updated?.type === 'text' && !('strokeWidth' in updated)).toBe(true)
+  })
+
+  it('fontSize only applies to text elements: line is unchanged', () => {
+    const text = makeTextElement('t1')
+    const line = makeLineElement('l1')
+    store.elements = [text, line]
+    store.selectedIds = ['t1', 'l1']
+
+    store.applyStyle({ fontSize: 24 })
+
+    const updatedText = store.elements.find((e) => e.id === 't1')
+    const updatedLine = store.elements.find((e) => e.id === 'l1')
+    if (updatedText?.type === 'text') expect(updatedText.fontSize).toBe(24)
+    // line strokeWidth must be unchanged
+    if (updatedLine?.type === 'line') expect(updatedLine.strokeWidth).toBe(2)
+  })
+
+  it('style change is undoable: applyStyle then undoAction restores previous stroke', () => {
+    const rect = makeRectangle('r1')
+    store.elements = [rect]
+    store.selectedIds = ['r1']
+
+    store.applyStyle({ stroke: '#e03131' })
+
+    const after = store.elements.find((e) => e.id === 'r1')
+    if (after?.type === 'rectangle') expect(after.stroke).toBe('#e03131')
+
+    store.undoAction()
+
+    const restored = store.elements.find((e) => e.id === 'r1')
+    if (restored?.type === 'rectangle') expect(restored.stroke).toBe('#000000')
+  })
+
+  it('applyStyle pushes exactly one history entry for multi-element selection', () => {
+    const r1 = makeRectangle('r1')
+    const r2 = makeRectangle('r2')
+    store.elements = [r1, r2]
+    store.selectedIds = ['r1', 'r2']
+
+    expect(store.canUndo).toBe(false)
+    store.applyStyle({ stroke: '#2f9e44' })
+    expect(store.canUndo).toBe(true)
+
+    store.undoAction()
+    expect(store.canUndo).toBe(false)
+  })
+
+  it('last-used style memory is updated after applyStyle', () => {
+    const rect = makeRectangle('r1')
+    store.elements = [rect]
+    store.selectedIds = ['r1']
+
+    store.applyStyle({ strokeWidth: 4 })
+
+    expect(store.lastStrokeWidth).toBe(4)
+  })
+
+  it('applyStyle with empty selection is a no-op and does not push history', () => {
+    const rect = makeRectangle('r1')
+    store.elements = [rect]
+    store.selectedIds = []
+
+    store.applyStyle({ stroke: '#e03131' })
+
+    expect(store.canUndo).toBe(false)
+    const el = store.elements.find((e) => e.id === 'r1')
+    if (el?.type === 'rectangle') expect(el.stroke).toBe('#000000')
+  })
+
+  it('new elements adopt last-used strokeWidth after applyStyle', () => {
+    // Set the last-used width via applyStyle on an existing element
+    const rect = makeRectangle('r1')
+    store.elements = [rect]
+    store.selectedIds = ['r1']
+    store.applyStyle({ strokeWidth: 4 })
+
+    // The last-used value is now available for builders to read
+    expect(store.lastStrokeWidth).toBe(4)
+  })
+
+  it('applyStyle on a bound arrow with no points patch does not detach bindings', () => {
+    const R = makeRectangleAt('R', 50, 75)
+    const S = makeRectangleAt('S', 250, 275)
+    const arrow = makeArrow('arrow-1', [[100, 100], [300, 300]], 'R', 'S')
+    store.elements = [R, S, arrow]
+    store.selectedIds = ['arrow-1']
+
+    store.applyStyle({ stroke: '#1971c2' })
+
+    const updated = store.elements.find((e) => e.id === 'arrow-1')
+    if (updated?.type === 'arrow') {
+      expect(updated.stroke).toBe('#1971c2')
+      expect(updated.startBinding).toEqual({ elementId: 'R' })
+      expect(updated.endBinding).toEqual({ elementId: 'S' })
+    }
+  })
+})

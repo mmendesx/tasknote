@@ -118,24 +118,50 @@ export function rdp(points: [number, number][], epsilon: number): [number, numbe
   return [points[0], points[points.length - 1]]
 }
 
-// ── Per-tool commit builders ───────────────────────────────────────────────────
+// ── Style override bag passed into builders ────────────────────────────────────
 
-export function buildRectangleElement(ax: number, ay: number, bx: number, by: number) {
-  const x = Math.min(ax, bx)
-  const y = Math.min(ay, by)
-  const width = Math.abs(bx - ax)
-  const height = Math.abs(by - ay)
-  if (width < MIN_DRAG_PX || height < MIN_DRAG_PX) return null
-  return { id: generateId(), type: 'rectangle' as const, x, y, width, height, stroke: STROKE_COLOR, fill: null, strokeWidth: STROKE_WIDTH }
+export interface StyleOverrides {
+  stroke?: string
+  fill?: string | null
+  strokeWidth?: number
+  fontSize?: number
+  color?: string
 }
 
-export function buildEllipseElement(ax: number, ay: number, bx: number, by: number) {
+// ── Per-tool commit builders ───────────────────────────────────────────────────
+
+export function buildRectangleElement(
+  ax: number, ay: number, bx: number, by: number,
+  style: StyleOverrides = {},
+) {
   const x = Math.min(ax, bx)
   const y = Math.min(ay, by)
   const width = Math.abs(bx - ax)
   const height = Math.abs(by - ay)
   if (width < MIN_DRAG_PX || height < MIN_DRAG_PX) return null
-  return { id: generateId(), type: 'ellipse' as const, x, y, width, height, stroke: STROKE_COLOR, fill: null, strokeWidth: STROKE_WIDTH }
+  return {
+    id: generateId(), type: 'rectangle' as const, x, y, width, height,
+    stroke: style.stroke ?? STROKE_COLOR,
+    fill: style.fill !== undefined ? style.fill : null,
+    strokeWidth: style.strokeWidth ?? STROKE_WIDTH,
+  }
+}
+
+export function buildEllipseElement(
+  ax: number, ay: number, bx: number, by: number,
+  style: StyleOverrides = {},
+) {
+  const x = Math.min(ax, bx)
+  const y = Math.min(ay, by)
+  const width = Math.abs(bx - ax)
+  const height = Math.abs(by - ay)
+  if (width < MIN_DRAG_PX || height < MIN_DRAG_PX) return null
+  return {
+    id: generateId(), type: 'ellipse' as const, x, y, width, height,
+    stroke: style.stroke ?? STROKE_COLOR,
+    fill: style.fill !== undefined ? style.fill : null,
+    strokeWidth: style.strokeWidth ?? STROKE_WIDTH,
+  }
 }
 
 export function buildLinearElement(
@@ -143,6 +169,7 @@ export function buildLinearElement(
   ax: number, ay: number, bx: number, by: number,
   startBinding: DiagramBinding | null = null,
   endBinding: DiagramBinding | null = null,
+  style: StyleOverrides = {},
 ) {
   const isBound = startBinding !== null || endBinding !== null
   const dx = bx - ax, dy = by - ay
@@ -151,21 +178,35 @@ export function buildLinearElement(
     id: generateId(),
     type: tool,
     points: [[ax, ay], [bx, by]] as [[number, number], [number, number]],
-    stroke: STROKE_COLOR,
-    strokeWidth: STROKE_WIDTH,
+    stroke: style.stroke ?? STROKE_COLOR,
+    strokeWidth: style.strokeWidth ?? STROKE_WIDTH,
     startBinding,
     endBinding,
   }
 }
 
-export function buildTextElement(x: number, y: number, text: string) {
+export function buildTextElement(
+  x: number, y: number, text: string,
+  style: StyleOverrides = {},
+) {
   if (!text.trim()) return null
-  return { id: generateId(), type: 'text' as const, x, y, text, fontSize: FONT_SIZE, color: STROKE_COLOR }
+  return {
+    id: generateId(), type: 'text' as const, x, y, text,
+    fontSize: style.fontSize ?? FONT_SIZE,
+    color: style.color ?? style.stroke ?? STROKE_COLOR,
+  }
 }
 
-export function buildPenElement(points: [number, number][]) {
+export function buildPenElement(
+  points: [number, number][],
+  style: StyleOverrides = {},
+) {
   const simplified = rdp(points, 1)
   if (simplified.length < 2) return null
-  return { id: generateId(), type: 'pen' as const, points: simplified, stroke: STROKE_COLOR, strokeWidth: STROKE_WIDTH }
+  return {
+    id: generateId(), type: 'pen' as const, points: simplified,
+    stroke: style.stroke ?? STROKE_COLOR,
+    strokeWidth: style.strokeWidth ?? STROKE_WIDTH,
+  }
 }
 
