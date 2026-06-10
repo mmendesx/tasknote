@@ -855,7 +855,7 @@ describe('useDiagramsStore — bound connector rerouting (ICT-4)', () => {
     }
   })
 
-  it('moving the other bound shape updates only the end endpoint', () => {
+  it('moving one shape of a both-bound arrow re-anchors both endpoints along the new ray', () => {
     // R at center (100,100), E at center (300,300)
     const R = makeRectangleAt('R', 50, 75)
     const E = makeRectangleAt('E', 250, 275)
@@ -868,11 +868,13 @@ describe('useDiagramsStore — bound connector rerouting (ICT-4)', () => {
     const updatedArrow = store.elements.find((e) => e.id === 'arrow-1')!
     expect(updatedArrow.type).toBe('arrow')
     if (updatedArrow.type === 'arrow') {
-      // ICT-12: start is a stored point (not recomputed here — R didn't move).
-      expect(updatedArrow.points[0]).toEqual([100, 100])
-      // ICT-12: end is edge-anchored on E's boundary facing R's center (100,100).
-      expect(updatedArrow.points[1][0]).toBeCloseTo(372.1715728752538, 5)
-      expect(updatedArrow.points[1][1]).toBeCloseTo(372.1715728752538, 5)
+      // FR-B5/FR-B3: both ends recompute along the new center-to-center ray.
+      // Start is edge-anchored on R's boundary facing the new E center (400,400).
+      expect(updatedArrow.points[0][0]).toBeCloseTo(127.83, 1)
+      expect(updatedArrow.points[0][1]).toBeCloseTo(127.83, 1)
+      // End is edge-anchored on E's boundary facing R's center (100,100).
+      expect(updatedArrow.points[1][0]).toBeCloseTo(372.17, 1)
+      expect(updatedArrow.points[1][1]).toBeCloseTo(372.17, 1)
     }
   })
 
@@ -917,6 +919,110 @@ describe('useDiagramsStore — bound connector rerouting (ICT-4)', () => {
       // ICT-12: edge-anchored — start is on R's boundary facing the free end (300,300).
       expect(savedArrow!.points[0][0]).toBeCloseTo(201.15, 1)
       expect(savedArrow!.points[0][1]).toBeCloseTo(168.2, 1)
+    }
+  })
+})
+
+// ─── ICT-6: Both-ends-bound arrow re-anchors both endpoints ──────────────────
+
+describe('useDiagramsStore — both-bound arrow rerouting (ICT-6)', () => {
+  let store: ReturnType<typeof useDiagramsStore>
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    store = useDiagramsStore()
+    vi.resetAllMocks()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('moving one shape re-anchors both ends of a both-bound arrow', () => {
+    // A: x=0, y=0, w=100, h=50 → center (50, 25)
+    // B: x=300, y=0, w=100, h=50 → center (350, 25)
+    const A = makeRectangleAt('A', 0, 0)
+    const B = makeRectangleAt('B', 300, 0)
+    const arrow = makeArrow('arrow-1', [[50, 25], [350, 25]], 'A', 'B')
+    store.elements = [A, B, arrow]
+
+    // Move A right 100 → new A center (150, 25); B center stays (350, 25).
+    // New center-to-center ray is purely horizontal.
+    store.updateElement('A', { x: 100, y: 0 })
+
+    const updated = store.elements.find((e) => e.id === 'arrow-1')!
+    expect(updated.type).toBe('arrow')
+    if (updated.type === 'arrow') {
+      // Start: on new A boundary (cx=150) facing B center (350,25) → right edge, gap-stepped
+      expect(updated.points[0][0]).toBeCloseTo(204, 0)
+      expect(updated.points[0][1]).toBeCloseTo(25, 0)
+      // End: on B boundary (cx=350) facing new A center (150,25) → left edge, gap-stepped
+      expect(updated.points[1][0]).toBeCloseTo(296, 0)
+      expect(updated.points[1][1]).toBeCloseTo(25, 0)
+      // Bindings intact
+      expect(updated.startBinding).toEqual({ elementId: 'A' })
+      expect(updated.endBinding).toEqual({ elementId: 'B' })
+    }
+  })
+
+  it('resizing a bound shape re-anchors both ends of a both-bound arrow', () => {
+    // A: x=0, y=0, w=100, h=50 → center (50, 25)
+    // B: x=300, y=0, w=100, h=50 → center (350, 25)
+    const A = makeRectangleAt('A', 0, 0)
+    const B = makeRectangleAt('B', 300, 0)
+    const arrow = makeArrow('arrow-1', [[50, 25], [350, 25]], 'A', 'B')
+    store.elements = [A, B, arrow]
+
+    // Widen A to 200 → new A center (100, 25); B center stays (350, 25).
+    store.updateElement('A', { width: 200 })
+
+    const updated = store.elements.find((e) => e.id === 'arrow-1')!
+    expect(updated.type).toBe('arrow')
+    if (updated.type === 'arrow') {
+      // Start: on resized A boundary facing B center (350,25) → right edge, gap-stepped
+      expect(updated.points[0][0]).toBeCloseTo(204, 0)
+      expect(updated.points[0][1]).toBeCloseTo(25, 0)
+      // End: on B boundary facing new A center (100,25) → left edge, gap-stepped
+      expect(updated.points[1][0]).toBeCloseTo(296, 0)
+      expect(updated.points[1][1]).toBeCloseTo(25, 0)
+    }
+  })
+
+  it('single-bound arrow: only the bound end recomputes when its shape moves', () => {
+    // Regression: single-bound behaviour must be unaffected by the both-ends fix.
+    const R = makeRectangleAt('R', 50, 75)
+    const arrow = makeArrow('arrow-1', [[100, 100], [300, 300]], 'R', undefined)
+    store.elements = [R, arrow]
+
+    store.updateElement('R', { x: 130, y: 115 })
+
+    const updated = store.elements.find((e) => e.id === 'arrow-1')!
+    expect(updated.type).toBe('arrow')
+    if (updated.type === 'arrow') {
+      // Start is edge-anchored on R's new boundary facing the free end (300,300).
+      expect(updated.points[0][0]).toBeCloseTo(201.15, 1)
+      expect(updated.points[0][1]).toBeCloseTo(168.2, 1)
+      // End (free) is unchanged.
+      expect(updated.points[1]).toEqual([300, 300])
+    }
+  })
+
+  it('self-loop fallback: both ends on the same shape produce center for both', () => {
+    const R = makeRectangleAt('R', 50, 75)
+    const arrow = makeArrow('arrow-self', [[100, 100], [100, 100]], 'R', 'R')
+    store.elements = [R, arrow]
+
+    store.updateElement('R', { x: 130, y: 115 })
+
+    const updated = store.elements.find((e) => e.id === 'arrow-self')!
+    expect(updated.type).toBe('arrow')
+    if (updated.type === 'arrow') {
+      // Both points are the new center of R (130+50, 115+25) = (180, 140)
+      expect(updated.points[0][0]).toBeCloseTo(180, 0)
+      expect(updated.points[0][1]).toBeCloseTo(140, 0)
+      expect(updated.points[1][0]).toBeCloseTo(180, 0)
+      expect(updated.points[1][1]).toBeCloseTo(140, 0)
     }
   })
 })

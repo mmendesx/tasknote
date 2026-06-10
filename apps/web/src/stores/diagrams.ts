@@ -312,15 +312,29 @@ export const useDiagramsStore = defineStore('diagrams', () => {
         const from = otherEl ? elementCenter(otherEl) : { x: el.points[1][0], y: el.points[1][1] }
         const pt = boundEndpoint(movedShape, from)
         start = [pt.x, pt.y]
-        end = el.points[1]
+        if (otherEl) {
+          // Both ends bound to different shapes — recompute end against movedShape's new center
+          // so both endpoints stay on-boundary along the updated center-to-center ray (FR-B5/FR-B3).
+          const endPt = boundEndpoint(otherEl, elementCenter(movedShape))
+          end = [endPt.x, endPt.y]
+        } else {
+          end = el.points[1]
+        }
       } else {
         // End is bound to movedShape; start is either free or bound to another.
         const otherStartId = el.startBinding?.elementId
         const otherEl = otherStartId ? findElementById(elements.value, otherStartId) : undefined
         const from = otherEl ? elementCenter(otherEl) : { x: el.points[0][0], y: el.points[0][1] }
         const pt = boundEndpoint(movedShape, from)
-        start = el.points[0]
         end = [pt.x, pt.y]
+        if (otherEl) {
+          // Both ends bound to different shapes — recompute start against movedShape's new center
+          // so both endpoints stay on-boundary along the updated center-to-center ray (FR-B5/FR-B3).
+          const startPt = boundEndpoint(otherEl, elementCenter(movedShape))
+          start = [startPt.x, startPt.y]
+        } else {
+          start = el.points[0]
+        }
       }
 
       return { ...el, points: [start, end] }
@@ -384,6 +398,15 @@ export const useDiagramsStore = defineStore('diagrams', () => {
   }
 
   // ── History actions ──────────────────────────────────────────────────────────
+
+  /**
+   * Remove the most recent undo entry without affecting redo.
+   * Called by DiagramCanvas after a pointer-cancel restores original geometry —
+   * the pushed snapshot now duplicates the live state and would be a no-op undo.
+   */
+  function discardLastHistory(): void {
+    history.discardLast()
+  }
 
   function undoAction(): void {
     const restored = history.undo()
@@ -549,6 +572,7 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     removeElement,
     removeElements,
     pushHistory,
+    discardLastHistory,
     undoAction,
     redoAction,
     canUndo,
