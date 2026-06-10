@@ -1,6 +1,26 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mount, flushPromises } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 import { useResize } from '../useResize'
+import DiagramCanvas from '../DiagramCanvas.vue'
 import type { DiagramElement, DiagramViewport } from '@tasknote/shared'
+
+// ── API mock ──────────────────────────────────────────────────────────────────
+
+vi.mock('@/api', () => ({
+  diagrams: {
+    getDiagram: vi.fn().mockResolvedValue({
+      id: 1,
+      title: 'Test',
+      scene_json: {
+        version: 1,
+        elements: [],
+        appState: { viewport: { scrollX: 0, scrollY: 0, zoom: 1 } },
+      },
+    }),
+    updateDiagram: vi.fn().mockResolvedValue({}),
+  },
+}))
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -367,5 +387,193 @@ describe('DiagramResize', () => {
       const patch = updateResize(100, 100)
       expect(patch).toBeNull()
     })
+  })
+})
+
+// ── Pointer-capture integration tests ─────────────────────────────────────────
+//
+// These tests mount DiagramCanvas to verify the pointer-capture contract:
+// when a resize handle drag starts, setPointerCapture must be called on the SVG
+// so that move/up events continue to reach the canvas even if the pointer
+// leaves the SVG mid-gesture.
+
+vi.mock('@/api')
+
+async function mountCanvasWithRect() {
+  const { diagrams: apiDiagrams } = await import('@/api')
+  const rectEl: DiagramElement = {
+    id: 'rect-capture',
+    type: 'rectangle',
+    x: 50,
+    y: 50,
+    width: 100,
+    height: 80,
+    stroke: '#000000',
+    strokeWidth: 2,
+    fill: null,
+  }
+  vi.mocked(apiDiagrams.getDiagram).mockResolvedValueOnce({
+    id: 1,
+    title: 'Test',
+    scene_json: {
+      version: 1,
+      elements: [rectEl],
+      appState: { viewport: { scrollX: 0, scrollY: 0, zoom: 1 } },
+    },
+  } as never)
+
+  const pinia = createPinia()
+  setActivePinia(pinia)
+
+  const wrapper = mount(DiagramCanvas, {
+    global: { plugins: [pinia] },
+    props: { diagramId: 1 },
+    attachTo: document.body,
+  })
+
+  await flushPromises()
+
+  const storeState = pinia.state.value['diagrams']
+  storeState.tool = 'select'
+  storeState.loading = false
+  storeState.loadError = null
+  await wrapper.vm.$nextTick()
+
+  return { wrapper, pinia, storeState }
+}
+
+describe('DiagramResize pointer-capture integration', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('starting a handle drag captures the pointer on the SVG with the event pointerId', async () => {
+    const { wrapper, pinia } = await mountCanvasWithRect()
+
+    const svg = wrapper.find('svg.diagram-canvas')
+    expect(svg.exists()).toBe(true)
+
+    // Spy on setPointerCapture before the gesture
+    const capturespy = vi.fn()
+    ;(svg.element as SVGSVGElement).setPointerCapture = capturespy
+
+    // Select the rect so resize handles render
+    const elementNode = wrapper.find('[data-element-id="rect-capture"]')
+    expect(elementNode.exists()).toBe(true)
+    await elementNode.trigger('pointerdown', { clientX: 100, clientY: 90, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    expect(pinia.state.value['diagrams'].selectedIds).toContain('rect-capture')
+
+    // Handles should now be rendered — find the se handle
+    const handle = wrapper.find('[data-resize-handle="se"]')
+    expect(handle.exists()).toBe(true)
+
+    // Trigger pointerdown on the handle with a distinct pointerId
+    const pointerId = 7
+    await handle.trigger('pointerdown', { pointerId, clientX: 150, clientY: 130 })
+    await wrapper.vm.$nextTick()
+
+    // setPointerCapture must have been called on the SVG with this pointerId
+    expect(capturespy).toHaveBeenCalledWith(pointerId)
+  })
+
+  it('release outside the canvas ends the resize and clears resizeState', async () => {
+    const { wrapper, pinia } = await mountCanvasWithRect()
+
+    const svg = wrapper.find('svg.diagram-canvas')
+    // Stub capture so it does not throw in jsdom
+    ;(svg.element as SVGSVGElement).setPointerCapture = vi.fn()
+
+    // Select the rect
+    const elementNode = wrapper.find('[data-element-id="rect-capture"]')
+    await elementNode.trigger('pointerdown', { clientX: 100, clientY: 90, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    expect(pinia.state.value['diagrams'].selectedIds).toContain('rect-capture')
+
+    // Start resize via handle
+    const handle = wrapper.find('[data-resize-handle="se"]')
+    expect(handle.exists()).toBe(true)
+
+    await handle.trigger('pointerdown', { pointerId: 1, clientX: 150, clientY: 130 })
+    await wrapper.vm.$nextTick()
+
+    // Drag a bit
+    await svg.trigger('pointermove', { clientX: 170, clientY: 145, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    // Simulate pointerup on the capture target (SVG) — as if pointer was released
+    // outside the browser window but the captured element still receives it
+    await svg.trigger('pointerup', { clientX: 200, clientY: 200, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    // The element geometry should have been updated (resize committed on pointerup).
+    // Handle drag started at (150,130), pointerup at (200,200): delta (+50,+70) scene units.
+    // new width = 100+50=150, new height = 80+70=150.
+    const elements = pinia.state.value['diagrams'].elements as DiagramElement[]
+    const resized = elements.find((e) => e.id === 'rect-capture')
+    expect(resized).toBeDefined()
+    expect((resized as any).width).toBe(150)
+    expect((resized as any).height).toBe(150)
+
+    // resizeState must be null after pointerup — no stale state
+    // We verify this indirectly: a subsequent pointerdown on empty canvas starts a
+    // marquee (not inheriting the stale resize). The store's elements should not
+    // change from another pointerdown → pointermove on empty canvas area.
+    const widthBefore = (resized as any).width
+    await svg.trigger('pointerdown', { clientX: 10, clientY: 10, pointerId: 2 })
+    await svg.trigger('pointermove', { clientX: 30, clientY: 30, pointerId: 2 })
+    await wrapper.vm.$nextTick()
+
+    const elementsAfter = pinia.state.value['diagrams'].elements as DiagramElement[]
+    const rectAfter = elementsAfter.find((e) => e.id === 'rect-capture')
+    // Width should be unchanged — the new gesture is a marquee, not a resize continuation
+    expect((rectAfter as any).width).toBe(widthBefore)
+  })
+
+  it('next pointerdown starts fresh after a stale resizeState is left from an interrupted gesture', async () => {
+    const { wrapper, pinia } = await mountCanvasWithRect()
+
+    const svg = wrapper.find('svg.diagram-canvas')
+    ;(svg.element as SVGSVGElement).setPointerCapture = vi.fn()
+
+    // Select the rect
+    const elementNode = wrapper.find('[data-element-id="rect-capture"]')
+    await elementNode.trigger('pointerdown', { clientX: 100, clientY: 90, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    // Start resize — intentionally do NOT fire pointerup to simulate interrupted gesture
+    const handle = wrapper.find('[data-resize-handle="se"]')
+    expect(handle.exists()).toBe(true)
+
+    await handle.trigger('pointerdown', { pointerId: 1, clientX: 150, clientY: 130 })
+    await wrapper.vm.$nextTick()
+
+    // Move a little but do NOT release — stale resize state would persist
+    await svg.trigger('pointermove', { clientX: 160, clientY: 140, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    // Record element state before the next pointerdown
+    const elementsBefore = pinia.state.value['diagrams'].elements as DiagramElement[]
+    const rectBefore = elementsBefore.find((e) => e.id === 'rect-capture')
+    const widthBefore = (rectBefore as any).width
+
+    // Next pointerdown on empty canvas (no pointerup between) — guard should reset stale state
+    await svg.trigger('pointerdown', { clientX: 10, clientY: 10, pointerId: 2 })
+    await wrapper.vm.$nextTick()
+
+    // Move in the new gesture — should NOT affect rect geometry (marquee gesture, not resize)
+    await svg.trigger('pointermove', { clientX: 50, clientY: 50, pointerId: 2 })
+    await wrapper.vm.$nextTick()
+
+    const elementsAfter = pinia.state.value['diagrams'].elements as DiagramElement[]
+    const rectAfter = elementsAfter.find((e) => e.id === 'rect-capture')
+
+    // Geometry must not change from the stale resize being re-driven by the new gesture
+    expect((rectAfter as any).width).toBe(widthBefore)
+
+    // Selection should have been cleared (clicked empty canvas)
+    expect(pinia.state.value['diagrams'].selectedIds).toHaveLength(0)
   })
 })

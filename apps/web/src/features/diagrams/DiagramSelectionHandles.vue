@@ -11,7 +11,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  resizeStart: [handleId: HandleId | 0 | 1, screenX: number, screenY: number]
+  resizeStart: [handleId: HandleId | 0 | 1, screenX: number, screenY: number, event: PointerEvent]
 }>()
 
 // Handle size in screen pixels; dividing by zoom gives scene-space size
@@ -36,7 +36,7 @@ function getShapeHandles(bbox: SelectionBBox): Array<{ id: HandleId; cx: number;
 
 function onHandlePointerDown(handleId: HandleId | 0 | 1, event: PointerEvent): void {
   event.stopPropagation()
-  emit('resizeStart', handleId, event.clientX, event.clientY)
+  emit('resizeStart', handleId, event.clientX, event.clientY, event)
 }
 
 // Cursor per handle

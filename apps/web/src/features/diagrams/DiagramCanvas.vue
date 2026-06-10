@@ -293,6 +293,19 @@ function capturePointer(event: PointerEvent): void {
   }
 }
 
+/**
+ * Capture the pointer on the SVG canvas element by pointerId.
+ * Used when the initiating event originated on a child element (e.g. a resize
+ * handle) and event.currentTarget is not the SVG — we still want capture on
+ * the SVG so the existing onCanvasPointerMove/Up handlers receive all events.
+ */
+function capturePointerOnSvg(pointerId: number): void {
+  const svg = svgEl.value
+  if (svg?.setPointerCapture) {
+    svg.setPointerCapture(pointerId)
+  }
+}
+
 // ── Pointer-down branch handlers ──────────────────────────────────────────────
 
 function handlePanPointerDown(event: PointerEvent): void {
@@ -303,24 +316,6 @@ function handlePanPointerDown(event: PointerEvent): void {
 }
 
 function handleSelectPointerDown(event: PointerEvent): void {
-  // Check if the click landed on a resize handle
-  const target = event.target as Element | null
-  const resizeHandleAttr = target?.getAttribute('data-resize-handle')
-  if (resizeHandleAttr !== null && resizeHandleAttr !== undefined) {
-    const selectedId = store.selectedIds[0]
-    if (selectedId) {
-      // Normalize handle value: numeric strings → number, else string handle id
-      const handleRaw = resizeHandleAttr
-      const handle = handleRaw === '0' ? 0 : handleRaw === '1' ? 1 : handleRaw
-      // Capture pre-gesture snapshot; history is pushed only if the gesture
-      // moves (first pointermove), not on bare click/release.
-      beginGestureHistory([...store.elements])
-      beginResize(selectedId, handle as import('./useResize').HandleId | 0 | 1, event.clientX, event.clientY)
-      capturePointer(event)
-    }
-    return
-  }
-
   const elementId = hitElementId(event)
   if (elementId) {
     if (event.shiftKey) {
@@ -390,6 +385,21 @@ function handleDrawPointerDown(event: PointerEvent): void {
 
 // Seam for ICT-6/7: dispatches by tool to the appropriate handler.
 function onCanvasPointerDown(event: PointerEvent): void {
+  // Defensive: if a previous gesture was never properly ended (e.g., pointer
+  // released outside the browser window mid-resize), reset stale state so the
+  // new interaction starts clean without inheriting stale geometry.
+  if (isResizing.value) {
+    cancelResize()
+    endGestureHistory()
+  }
+  if (moveState.value) {
+    clearMove()
+    endGestureHistory()
+  }
+  if (marqueeActive.value) {
+    cancelMarquee()
+  }
+
   if (isPanTool()) return handlePanPointerDown(event)
   if (store.tool === 'select') return handleSelectPointerDown(event)
   if (isDrawingTool()) return handleDrawPointerDown(event)
@@ -809,11 +819,17 @@ function onCanvasDblClick(event: MouseEvent): void {
         :zoom="store.viewport.zoom"
         :show-endpoint-handles="singleSelectedElement?.type === 'line' || singleSelectedElement?.type === 'arrow'"
         :element="singleSelectedElement"
-        @resize-start="(handleId, screenX, screenY) => {
+        @resize-start="(handleId, screenX, screenY, pointerEvent) => {
           const selectedId = store.selectedIds[0]
           if (selectedId) {
             beginGestureHistory([...store.elements])
             beginResize(selectedId, handleId, screenX, screenY)
+            // Capture on the SVG so existing onCanvasPointerMove/Up flow handles
+            // move/up events. The handle's stopPropagation prevents this event
+            // from reaching onCanvasPointerDown, so we capture explicitly here.
+            // capturePointerOnSvg targets svgEl directly since pointerEvent.currentTarget
+            // is the handle element, not the SVG.
+            capturePointerOnSvg(pointerEvent.pointerId)
           }
         }"
       />
