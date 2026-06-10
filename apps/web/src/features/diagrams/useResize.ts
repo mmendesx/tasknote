@@ -24,15 +24,16 @@ const MIN_SIZE = 8
 
 /**
  * Given the original element, handle being dragged, and delta in scene space,
- * compute the new geometry patch. Clamps to MIN_SIZE and handles flip-safe
- * behavior when dragging past the opposite edge.
+ * compute the new geometry patch. Clamps to MIN_SIZE (spec-14 FR-B6: clamp,
+ * no flip — supersedes spec-13's flip wording; matches Draw.io behaviour).
  *
  * Strategy: work in absolute scene coordinates (left/right/top/bottom edges).
  * Move only the edges that the dragged handle controls, clamp each moved edge
  * so the resulting size never falls below MIN_SIZE, then compute x/y/w/h from
- * the final edges. This avoids the flip-then-clamp ordering bug where the
- * "flipped" distance (e.g. 40px overshot) was larger than MIN_SIZE and escaped
- * the clamp.
+ * the final edges. Because the moving edge is always clamped against its fixed
+ * counterpart (fixed ± MIN_SIZE), left ≤ right and top ≤ bottom are invariants
+ * — the "flip-safe normalisation" swap that previously followed is unreachable
+ * on all handle paths and has been removed.
  */
 function buildShapeResizePatch(
   original: DiagramElement,
@@ -105,32 +106,12 @@ function buildShapeResizePatch(
     bottom = Math.max(origBottom + dyScene, y + MIN_SIZE)
   }
 
-  // Flip-safe normalisation: if the moving edge crossed the fixed edge (which
-  // can happen on the non-clamped axis when only one axis is involved, e.g.
-  // dragging `n` so far down that top > bottom), swap so width/height stay +ve.
-  let newX: number
-  let newW: number
-  let newY: number
-  let newH: number
-
-  if (left <= right) {
-    newX = left
-    newW = right - left
-  } else {
-    newX = right
-    newW = left - right
-  }
-  if (top <= bottom) {
-    newY = top
-    newH = bottom - top
-  } else {
-    newY = bottom
-    newH = top - bottom
-  }
-
-  // Final safety clamp (should already be satisfied by the edge clamping above)
-  newW = Math.max(MIN_SIZE, newW)
-  newH = Math.max(MIN_SIZE, newH)
+  // left ≤ right and top ≤ bottom are guaranteed by the clamp above —
+  // no flip-safe swap needed (spec-14 FR-B6).
+  const newX = left
+  const newW = Math.max(MIN_SIZE, right - left)
+  const newY = top
+  const newH = Math.max(MIN_SIZE, bottom - top)
 
   if (original.type === 'text') {
     const textEl = original as Extract<DiagramElement, { type: 'text' }>

@@ -124,25 +124,41 @@ describe('DiagramResize', () => {
     })
   })
 
-  describe('resize flip: dragging nw past se flips correctly', () => {
-    it('dragging nw far right produces valid positive geometry', () => {
-      // rect at (50,50) 100×80 — drag nw past the right edge by 120px
+  describe('clamps at the fixed corner, no flip (spec-14 FR-B6)', () => {
+    it('dragging nw far right clamps width to 8 pinned at the fixed (se) corner', () => {
+      // rect at (50,50) 100×80 — drag nw 120px right: without clamp newW would be negative.
+      // Clamp: left is pinned at origRight - MIN_SIZE = 150-8 = 142, so x=142, w=8.
       const rect = makeRect()
       const { beginResize, updateResize } = makeResize([rect])
 
       beginResize('rect-1', 'nw', 0, 0)
-      // Dragging nw right by 120: newX=50+120=170, newW=100-120=-20 → flipped
-      // After flip: x = 170 + (-20) = 150, w = 20 (then clamped to 20 since 20>=8)
       const patch = updateResize(120, 0)
 
       expect(patch).not.toBeNull()
-      // Width must be positive after flip
-      expect((patch as any).width).toBeGreaterThan(0)
-      // x must be within reasonable scene bounds
-      expect((patch as any).x).toBeGreaterThanOrEqual(0)
+      expect((patch as any).width).toBe(8)
+      // x must be pinned at origRight - MIN_SIZE = (50+100) - 8 = 142
+      expect((patch as any).x).toBe(142)
     })
 
-    it('dragging se left past nw edge flips width', () => {
+    it('dragging se 100px past nw on a 40×40 rect clamps to exactly 8×8 at the fixed (nw) corner', () => {
+      // rect at (50,50) 40×40 — drag se 100px left and 100px up (well past nw corner).
+      // right clamps to x + MIN_SIZE = 50+8 = 58 → w = 8, x stays 50.
+      // bottom clamps to y + MIN_SIZE = 50+8 = 58 → h = 8, y stays 50.
+      const rect = makeRect({ x: 50, y: 50, width: 40, height: 40 })
+      const { beginResize, updateResize } = makeResize([rect])
+
+      beginResize('rect-1', 'se', 0, 0)
+      const patch = updateResize(-100, -100)
+
+      expect(patch).not.toBeNull()
+      expect((patch as any).width).toBe(8)
+      expect((patch as any).height).toBe(8)
+      // Fixed (nw) corner must not move
+      expect((patch as any).x).toBe(50)
+      expect((patch as any).y).toBe(50)
+    })
+
+    it('dragging se left past nw edge clamps width to 8 — no flip occurs', () => {
       const rect = makeRect({ x: 50, y: 50, width: 100, height: 80 })
       const { beginResize, updateResize } = makeResize([rect])
 
@@ -151,7 +167,9 @@ describe('DiagramResize', () => {
       const patch = updateResize(-200, 0)
 
       expect(patch).not.toBeNull()
-      expect((patch as any).width).toBeGreaterThan(0)
+      expect((patch as any).width).toBe(8)
+      // x stays at the fixed left edge (nw corner)
+      expect((patch as any).x).toBe(50)
     })
   })
 
