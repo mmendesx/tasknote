@@ -252,34 +252,104 @@ describe('DiagramResize', () => {
     })
   })
 
-  describe('acceptance: arrow endpoint commit returns newBindings when dropped on a shape', () => {
-    it('commitResize for arrow endpoint dropped on a rect resolves newBindings', () => {
-      // Place a rect at (0,0) 200x200 so resolveShapeIdAtPoint can hit it in screen coords
-      const rect: DiagramElement = {
-        id: 'target-rect',
+  describe('acceptance: endpoint dropped on a rectangle binds to it', () => {
+    it('end handle dragged to scene point inside target rect produces endBinding and edge-anchored point', () => {
+      // arrow starts at (10,10)→(300,300); target rect covers (100,100)→(200,180)
+      const targetRect: DiagramElement = {
+        id: 'target',
         type: 'rectangle',
-        x: 0,
-        y: 0,
+        x: 100,
+        y: 100,
+        width: 100,
+        height: 80,
+        stroke: '#000',
+        strokeWidth: 2,
+      }
+      const arrow = makeArrow({ points: [[10, 10], [300, 300]] })
+      const elements = [targetRect, arrow]
+      const viewport: DiagramViewport = { scrollX: 0, scrollY: 0, zoom: 1 }
+      const { beginResize, commitResize } = makeResize(elements, viewport)
+
+      // start at screen (300,300) == scene (300,300), drag to screen (150,140) == scene (150,140)
+      // scene (150,140) is inside the rect (100..200, 100..180)
+      beginResize('arrow-1', 1, 300, 300)
+      const result = commitResize(150, 140)
+
+      expect(result).not.toBeNull()
+      expect(result!.newBindings).toBeDefined()
+      expect(result!.newBindings!.endBinding).toEqual({ elementId: 'target' })
+
+      // The committed endpoint must lie on or near the rect boundary (edge-anchored)
+      const pts = (result!.patch as any).points as [[number, number], [number, number]]
+      expect(pts).toBeDefined()
+      const [ex, ey] = pts[1]
+      // boundEndpoint places the point on the rect boundary; it must be outside or at the edge
+      // The point should NOT be inside the rect interior (it's on the perimeter ± gap)
+      const insideX = ex > 100 && ex < 200
+      const insideY = ey > 100 && ey < 180
+      // At least one axis must be at or beyond the boundary (i.e., not strictly inside both)
+      expect(insideX && insideY).toBe(false)
+    })
+  })
+
+  describe('acceptance: endpoint dropped on empty canvas stays unbound', () => {
+    it('end handle dragged to empty scene point produces null endBinding at drop location', () => {
+      const arrow = makeArrow({ points: [[10, 10], [300, 300]] })
+      const elements = [arrow]
+      const viewport: DiagramViewport = { scrollX: 0, scrollY: 0, zoom: 1 }
+      const { beginResize, commitResize } = makeResize(elements, viewport)
+
+      // start at screen (300,300), drag end handle to scene (400,400) — no shape there
+      beginResize('arrow-1', 1, 300, 300)
+      const result = commitResize(400, 400)
+
+      expect(result).not.toBeNull()
+      expect(result!.newBindings).toBeDefined()
+      expect(result!.newBindings!.endBinding).toBeNull()
+
+      // Point should be at the drag location (no anchoring when unbound)
+      const pts = (result!.patch as any).points as [[number, number], [number, number]]
+      expect(pts[1][0]).toBe(300 + 100) // 300 original + 100 delta
+      expect(pts[1][1]).toBe(300 + 100)
+    })
+  })
+
+  describe('acceptance: topmost shape wins when endpoint dropped on overlapping shapes', () => {
+    it('binding resolves to the shape later in elements array (rendered on top)', () => {
+      const bottomRect: DiagramElement = {
+        id: 'bottom',
+        type: 'rectangle',
+        x: 50,
+        y: 50,
         width: 200,
         height: 200,
         stroke: '#000',
         strokeWidth: 2,
       }
+      const topRect: DiagramElement = {
+        id: 'top',
+        type: 'rectangle',
+        x: 100,
+        y: 100,
+        width: 100,
+        height: 100,
+        stroke: '#000',
+        strokeWidth: 2,
+      }
+      // arrow is after topRect in elements; but arrows aren't bindable so topRect is topmost bindable
       const arrow = makeArrow({ points: [[10, 10], [300, 300]] })
-      const elements = [rect, arrow]
+      const elements = [bottomRect, topRect, arrow]
       const viewport: DiagramViewport = { scrollX: 0, scrollY: 0, zoom: 1 }
       const { beginResize, commitResize } = makeResize(elements, viewport)
 
-      // Drag end handle (1) — start at screen (300,300), end at screen (100,100) — inside the rect
+      // drag end handle from screen (300,300) to screen (130,130)
+      // arrow end was at scene (300,300); delta = (130-300, 130-300) = (-170,-170) scene units
+      // new endpoint scene coords = (300-170, 300-170) = (130,130) — inside both rects
       beginResize('arrow-1', 1, 300, 300)
-      const result = commitResize(100, 100)
+      const result = commitResize(130, 130)
 
-      // commitResize should return a result with patch and newBindings
       expect(result).not.toBeNull()
-      expect(result!.patch).toBeDefined()
-      // newBindings may or may not resolve depending on resolveShapeIdAtPoint impl,
-      // but the result structure must always be present
-      expect('newBindings' in result!).toBe(true)
+      expect(result!.newBindings!.endBinding).toEqual({ elementId: 'top' })
     })
   })
 

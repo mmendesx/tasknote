@@ -1,7 +1,7 @@
 import { ref, computed } from 'vue'
 import type { Ref, ComputedRef } from 'vue'
 import type { DiagramElement, DiagramViewport } from '@tasknote/shared'
-import { resolveShapeIdAtPoint, findElementById, boundEndpoint, elementCenter } from './connectors'
+import { findShapeAtScenePoint, findElementById, boundEndpoint, elementCenter } from './connectors'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -254,11 +254,7 @@ export function useResize(
         const handle = state.handle as 0 | 1
         const [endX, endY] = patchPts[handle]
 
-        const shapeId = resolveShapeIdAtPoint(
-          (endX + (getViewport().scrollX)) * getViewport().zoom,
-          (endY + (getViewport().scrollY)) * getViewport().zoom,
-          getElements(),
-        )
+        const shapeId = findShapeAtScenePoint({ x: endX, y: endY }, getElements())
 
         const original = state.original as Extract<DiagramElement, { type: 'line' | 'arrow' }>
         let startBinding = original.startBinding ?? null

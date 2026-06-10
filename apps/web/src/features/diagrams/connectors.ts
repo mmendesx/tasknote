@@ -64,6 +64,53 @@ export function detachBindingsTo(
   })
 }
 
+// ── Pure geometric hit-test ───────────────────────────────────────────────────
+
+/**
+ * Returns the id of the topmost bindable shape (rectangle or ellipse) that
+ * contains `point` in scene coordinates, or null if none does.
+ *
+ * "Topmost" means last in the `elements` array, which is how the renderer
+ * stacks shapes (later = on top). Iterates in reverse so the first match is
+ * the visually frontmost shape.
+ *
+ * No DOM access — safe to call in tests and worker contexts.
+ */
+export function findShapeAtScenePoint(
+  point: { x: number; y: number },
+  elements: DiagramElement[],
+): string | null {
+  for (let i = elements.length - 1; i >= 0; i--) {
+    const el = elements[i]
+    if (!isBindableShape(el)) continue
+
+    const bbox = computeElementBbox(el)
+
+    if (el.type === 'rectangle') {
+      if (
+        point.x >= bbox.x &&
+        point.x <= bbox.x + bbox.width &&
+        point.y >= bbox.y &&
+        point.y <= bbox.y + bbox.height
+      ) {
+        return el.id
+      }
+    } else if (el.type === 'ellipse') {
+      const rx = bbox.width / 2
+      const ry = bbox.height / 2
+      if (rx === 0 || ry === 0) continue
+      const cx = bbox.x + rx
+      const cy = bbox.y + ry
+      const nx = (point.x - cx) / rx
+      const ny = (point.y - cy) / ry
+      if (nx * nx + ny * ny <= 1) {
+        return el.id
+      }
+    }
+  }
+  return null
+}
+
 // ── Capture-safe point resolver ───────────────────────────────────────────────
 
 export function resolveShapeIdAtPoint(
