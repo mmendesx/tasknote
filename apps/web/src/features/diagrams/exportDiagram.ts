@@ -184,38 +184,35 @@ export async function exportPng(
 
   const svg = buildExportSvg(elements, { resolvedColor, background })
 
+  const canvas = document.createElement('canvas')
+  canvas.width = vw * SCALE
+  canvas.height = vh * SCALE
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('PNG export failed: could not get 2d canvas context')
+
+  const img = new Image()
+  const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' })
+  const url = URL.createObjectURL(svgBlob)
+
   try {
-    const canvas = document.createElement('canvas')
-    canvas.width = vw * SCALE
-    canvas.height = vh * SCALE
-    const ctx = canvas.getContext('2d')
-    if (!ctx) throw new Error('Could not get 2d canvas context')
-
-    const img = new Image()
-    const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' })
-    const url = URL.createObjectURL(svgBlob)
-
     await new Promise<void>((resolve, reject) => {
       img.onload = () => resolve()
-      img.onerror = reject
+      img.onerror = () => reject(new Error('PNG export failed: image decode error'))
       img.src = url
     })
-
-    ctx.scale(SCALE, SCALE)
-    ctx.drawImage(img, 0, 0)
+  } finally {
     URL.revokeObjectURL(url)
-
-    await new Promise<void>((resolve, reject) => {
-      canvas.toBlob((blob) => {
-        if (!blob) { reject(new Error('canvas.toBlob returned null')); return }
-        const filename = `${slugify(title) || 'diagram'}.png`
-        downloadBlob(filename, blob)
-        resolve()
-      }, 'image/png')
-    })
-  } catch {
-    // Guard: jsdom / headless environments have no real canvas.
-    // Fall back to downloading the SVG so the user isn't left with nothing.
-    exportSvg(elements, title, resolvedColor)
   }
+
+  ctx.scale(SCALE, SCALE)
+  ctx.drawImage(img, 0, 0)
+
+  await new Promise<void>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) { reject(new Error('PNG export failed: canvas.toBlob returned null')); return }
+      const filename = `${slugify(title) || 'diagram'}.png`
+      downloadBlob(filename, blob)
+      resolve()
+    }, 'image/png')
+  })
 }

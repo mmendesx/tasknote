@@ -1,6 +1,46 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { DiagramElement } from '@tasknote/shared'
-import { computeContentBbox, buildExportSvg } from '../exportDiagram'
+import { computeContentBbox, buildExportSvg, exportPng } from '../exportDiagram'
+
+// ── exportPng helpers ─────────────────────────────────────────────────────────
+
+/**
+ * Build a minimal canvas mock whose toBlob calls back synchronously.
+ * Pass `blob` to simulate success (calls cb(blob)); pass null to simulate failure.
+ */
+function makeCanvasMock(blob: Blob | null) {
+  return {
+    width: 0,
+    height: 0,
+    getContext: vi.fn().mockReturnValue({
+      scale: vi.fn(),
+      drawImage: vi.fn(),
+    }),
+    toBlob: vi.fn((cb: (b: Blob | null) => void) => cb(blob)),
+  }
+}
+
+/**
+ * Build a mock Image constructor whose instances expose onload/onerror setters
+ * so tests can fire them manually by setting img.src.
+ *
+ * `triggerEvent` controls which event fires when src is assigned:
+ *   'load'  → calls onload
+ *   'error' → calls onerror
+ */
+function makeImageClass(triggerEvent: 'load' | 'error') {
+  return class MockImage {
+    onload: (() => void) | null = null
+    onerror: (() => void) | null = null
+    set src(_: string) {
+      // Use queueMicrotask so the Promise constructor has time to attach the handlers
+      queueMicrotask(() => {
+        if (triggerEvent === 'load') this.onload?.()
+        else this.onerror?.()
+      })
+    }
+  }
+}
 
 // ── Fixture helpers ───────────────────────────────────────────────────────────
 
@@ -166,5 +206,119 @@ describe('buildExportSvg', () => {
 
     expect(svg).toContain('<svg')
     expect(svg).toContain('</svg>')
+  })
+})
+
+// ── exportPng ─────────────────────────────────────────────────────────────────
+
+describe('exportPng', () => {
+  const FAKE_URL = 'blob:fake-svg-url'
+
+  let createObjectURLSpy: ReturnType<typeof vi.fn>
+  let revokeObjectURLSpy: ReturnType<typeof vi.fn>
+  let createElementSpy: ReturnType<typeof vi.spyOn>
+
+  beforeEach(() => {
+    createObjectURLSpy = vi.fn().mockReturnValue(FAKE_URL)
+    revokeObjectURLSpy = vi.fn()
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: createObjectURLSpy,
+      revokeObjectURL: revokeObjectURLSpy,
+    })
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    createElementSpy?.mockRestore()
+  })
+
+  it('rejects when image decoding fails', async () => {
+    vi.stubGlobal('Image', makeImageClass('error'))
+
+    const canvasMock = makeCanvasMock(new Blob())
+    createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag) => {
+      if (tag === 'canvas') return canvasMock as unknown as HTMLCanvasElement
+      return document.createElement.call(document, tag) as HTMLElement
+    })
+
+    await expect(
+      exportPng([makeRect()], 'test', '#000000', '#ffffff'),
+    ).rejects.toThrow('image decode error')
+  })
+
+  it('rejects when canvas.toBlob yields null', async () => {
+    vi.stubGlobal('Image', makeImageClass('load'))
+
+    const canvasMock = makeCanvasMock(null)
+    createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag) => {
+      if (tag === 'canvas') return canvasMock as unknown as HTMLCanvasElement
+      return document.createElement.call(document, tag) as HTMLElement
+    })
+
+    await expect(
+      exportPng([makeRect()], 'test', '#000000', '#ffffff'),
+    ).rejects.toThrow('toBlob')
+  })
+
+  it('revokes the object URL on image decode failure', async () => {
+    vi.stubGlobal('Image', makeImageClass('error'))
+
+    const canvasMock = makeCanvasMock(new Blob())
+    createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag) => {
+      if (tag === 'canvas') return canvasMock as unknown as HTMLCanvasElement
+      return document.createElement.call(document, tag) as HTMLElement
+    })
+
+    await expect(exportPng([makeRect()], 'test', '#000000', '#ffffff')).rejects.toThrow()
+
+    expect(revokeObjectURLSpy).toHaveBeenCalledWith(FAKE_URL)
+  })
+
+  it('revokes the object URL and triggers a download on success', async () => {
+    vi.stubGlobal('Image', makeImageClass('load'))
+
+    const canvasMock = makeCanvasMock(new Blob(['png'], { type: 'image/png' }))
+
+    // Track anchor creation to assert a download click happened.
+    const anchorClickSpy = vi.fn()
+    const realCreateElement = document.createElement.bind(document)
+    createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag) => {
+      if (tag === 'canvas') return canvasMock as unknown as HTMLCanvasElement
+      const el = realCreateElement(tag)
+      if (tag === 'a') {
+        vi.spyOn(el as HTMLAnchorElement, 'click').mockImplementation(anchorClickSpy)
+      }
+      return el
+    })
+
+    await exportPng([makeRect()], 'test', '#000000', '#ffffff')
+
+    expect(revokeObjectURLSpy).toHaveBeenCalledWith(FAKE_URL)
+    expect(anchorClickSpy).toHaveBeenCalledOnce()
+  })
+
+  it('performs no download when png export fails', async () => {
+    vi.stubGlobal('Image', makeImageClass('error'))
+
+    const canvasMock = makeCanvasMock(new Blob())
+    const anchorClickSpy = vi.fn()
+    const realCreateElement = document.createElement.bind(document)
+    createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag) => {
+      if (tag === 'canvas') return canvasMock as unknown as HTMLCanvasElement
+      const el = realCreateElement(tag)
+      if (tag === 'a') {
+        vi.spyOn(el as HTMLAnchorElement, 'click').mockImplementation(anchorClickSpy)
+      }
+      return el
+    })
+
+    await expect(exportPng([makeRect()], 'test', '#000000', '#ffffff')).rejects.toThrow()
+
+    // Failure path must not trigger any download anchor click.
+    expect(anchorClickSpy).not.toHaveBeenCalled()
+    // Only one createObjectURL call was made (for the SVG blob passed to Image).
+    // The downloadBlob path (which calls createObjectURL for the PNG blob) must not run.
+    expect(createObjectURLSpy).toHaveBeenCalledTimes(1)
   })
 })

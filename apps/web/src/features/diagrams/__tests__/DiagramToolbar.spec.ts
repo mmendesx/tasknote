@@ -1,9 +1,17 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import DiagramToolbar from '../DiagramToolbar.vue'
 import { useDiagramsStore } from '@/stores/diagrams'
 import type { DiagramElement } from '@tasknote/shared'
+
+// ── Module-level spies (hoisted so vi.mock factory can capture them) ──────────
+
+const toastErrorSpy = vi.hoisted(() => vi.fn())
+
+vi.mock('@tasknote/ui', () => ({
+  useToast: () => ({ error: toastErrorSpy, success: vi.fn() }),
+}))
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -264,5 +272,42 @@ describe('DiagramToolbar', () => {
     expect(exportSvgSpy.mock.calls[0]![1]).toBe('My Diagram')
 
     exportSvgSpy.mockRestore()
+  })
+
+  // ── PNG export failure (ICT-8) ────────────────────────────────────────────
+
+  it('export png failure shows an error toast', async () => {
+    const exportModule = await import('../exportDiagram')
+    const exportPngSpy = vi
+      .spyOn(exportModule, 'exportPng')
+      .mockRejectedValue(new Error('PNG export failed: image decode error'))
+
+    toastErrorSpy.mockClear()
+
+    const { wrapper, pinia } = mountToolbar()
+
+    const state = pinia.state.value['diagrams']
+    const el: DiagramElement = {
+      id: 'r1',
+      type: 'rectangle',
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      stroke: '#333',
+      fill: null,
+      strokeWidth: 2,
+    }
+    state.elements = [el]
+    await wrapper.vm.$nextTick()
+
+    const pngBtn = wrapper.find('button[aria-label="Export PNG"]')
+    await pngBtn.trigger('click')
+    await flushPromises()
+
+    expect(toastErrorSpy).toHaveBeenCalledOnce()
+    expect(toastErrorSpy.mock.calls[0]![0]).toMatch(/png export failed/i)
+
+    exportPngSpy.mockRestore()
   })
 })

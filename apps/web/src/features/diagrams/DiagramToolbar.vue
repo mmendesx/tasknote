@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useToast } from '@tasknote/ui'
 import { useDiagramsStore } from '@/stores/diagrams'
 import { exportSvg, exportPng } from './exportDiagram'
 
 const store = useDiagramsStore()
+const toast = useToast()
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -101,7 +103,11 @@ function handleExportSvg(): void {
 }
 
 async function handleExportPng(): Promise<void> {
-  await exportPng(store.elements, store.title ?? 'diagram', resolveCanvasColor(), resolveCanvasBg())
+  try {
+    await exportPng(store.elements, store.title ?? 'diagram', resolveCanvasColor(), resolveCanvasBg())
+  } catch {
+    toast.error('PNG export failed', 'Could not rasterize the diagram. Try again.')
+  }
 }
 
 const hasElements = computed(() => store.elements.length > 0)
