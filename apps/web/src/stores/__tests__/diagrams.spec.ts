@@ -1527,3 +1527,153 @@ describe('useDiagramsStore — applyStyle (ICT-14)', () => {
     }
   })
 })
+
+// ─── ICT-11: updateElements batched O(n) operations ──────────────────────────
+
+describe('useDiagramsStore — updateElements batch (ICT-11 FR-B8)', () => {
+  let store: ReturnType<typeof useDiagramsStore>
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    store = useDiagramsStore()
+    vi.resetAllMocks()
+    vi.mocked(api.diagrams.updateDiagram).mockResolvedValue(makeDiagram(1, 'Test'))
+    store.id = 1
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('group move patches all elements in one mutation and triggers exactly one save', async () => {
+    // 10 elements in the store; 3 are selected and will be patched.
+    const others = Array.from({ length: 7 }, (_, i) => makeRectangle(`other-${i}`))
+    const r1 = makeRectangleAt('r1', 0, 0)
+    const r2 = makeRectangleAt('r2', 200, 0)
+    const r3 = makeRectangleAt('r3', 400, 0)
+    store.elements = [...others, r1, r2, r3]
+
+    store.updateElements([
+      { id: 'r1', patch: { x: 10, y: 10 } },
+      { id: 'r2', patch: { x: 210, y: 10 } },
+      { id: 'r3', patch: { x: 410, y: 10 } },
+    ])
+
+    // All three elements moved to new positions.
+    const updated1 = store.elements.find((e) => e.id === 'r1')
+    const updated2 = store.elements.find((e) => e.id === 'r2')
+    const updated3 = store.elements.find((e) => e.id === 'r3')
+    expect(updated1?.type === 'rectangle' && updated1.x).toBe(10)
+    expect(updated2?.type === 'rectangle' && updated2.x).toBe(210)
+    expect(updated3?.type === 'rectangle' && updated3.x).toBe(410)
+
+    // One scheduleSave call → one debounced PATCH (dirty set, single timer).
+    expect(store.dirty).toBe(true)
+    vi.advanceTimersByTime(700)
+    await Promise.resolve()
+    expect(api.diagrams.updateDiagram).toHaveBeenCalledTimes(1)
+  })
+
+  it('batched patch preserves connector detach guard', () => {
+    // Arrow-A: bound and receives a points patch (no binding keys) → should detach.
+    // Arrow-B: bound and receives a points patch WITH explicit binding keys → bindings honored.
+    const R = makeRectangleAt('R', 50, 75)
+    const S = makeRectangleAt('S', 250, 275)
+    const arrowA = makeArrow('arrow-a', [[100, 100], [300, 300]], 'R', 'S')
+    const arrowB = makeArrow('arrow-b', [[100, 100], [300, 300]], 'R', 'S')
+    store.elements = [R, S, arrowA, arrowB]
+
+    store.updateElements([
+      // Points patch, no binding keys → should auto-detach.
+      { id: 'arrow-a', patch: { points: [[110, 110], [310, 310]] } as Partial<import('@tasknote/shared').DiagramElement> },
+      // Points patch WITH explicit binding keys → bindings honored (e.g. re-bind gesture).
+      {
+        id: 'arrow-b',
+        patch: {
+          points: [[110, 110], [310, 310]],
+          startBinding: { elementId: 'R' },
+          endBinding: { elementId: 'S' },
+        } as Partial<import('@tasknote/shared').DiagramElement>,
+      },
+    ])
+
+    const updatedA = store.elements.find((e) => e.id === 'arrow-a')
+    const updatedB = store.elements.find((e) => e.id === 'arrow-b')
+
+    // Arrow-A: bindings nulled by the detach guard.
+    if (updatedA?.type === 'arrow') {
+      expect(updatedA.startBinding).toBeNull()
+      expect(updatedA.endBinding).toBeNull()
+      expect(updatedA.points).toEqual([[110, 110], [310, 310]])
+    }
+
+    // Arrow-B: explicit binding patch honored.
+    if (updatedB?.type === 'arrow') {
+      expect(updatedB.startBinding).toEqual({ elementId: 'R' })
+      expect(updatedB.endBinding).toEqual({ elementId: 'S' })
+    }
+  })
+
+  it('batched move of a bound shape recomputes its connectors', () => {
+    // R at center (100,100): x=50, y=75.
+    const R = makeRectangleAt('R', 50, 75)
+    const arrow = makeArrow('arrow-1', [[100, 100], [300, 300]], 'R', undefined)
+    store.elements = [R, arrow]
+
+    // Batch-move R to new center (180,140): x=130, y=115.
+    store.updateElements([{ id: 'R', patch: { x: 130, y: 115 } }])
+
+    const updatedArrow = store.elements.find((e) => e.id === 'arrow-1')
+    expect(updatedArrow?.type).toBe('arrow')
+    if (updatedArrow?.type === 'arrow') {
+      // Edge-anchored result identical to single-call path (ICT-12).
+      expect(updatedArrow.points[0][0]).toBeCloseTo(201.15, 1)
+      expect(updatedArrow.points[0][1]).toBeCloseTo(168.2, 1)
+      expect(updatedArrow.points[1]).toEqual([300, 300])
+    }
+  })
+
+  it('nudge uses the batch path: two selected elements both move with one save per keydown', async () => {
+    const r1 = makeRectangleAt('r1', 0, 0)
+    const r2 = makeRectangleAt('r2', 200, 0)
+    store.elements = [r1, r2]
+
+    // Simulate what onKeyDown does: build patches then call updateElements once.
+    store.updateElements([
+      { id: 'r1', patch: { x: 1, y: 0 } },
+      { id: 'r2', patch: { x: 201, y: 0 } },
+    ])
+
+    const updated1 = store.elements.find((e) => e.id === 'r1')
+    const updated2 = store.elements.find((e) => e.id === 'r2')
+    expect(updated1?.type === 'rectangle' && updated1.x).toBe(1)
+    expect(updated2?.type === 'rectangle' && updated2.x).toBe(201)
+
+    // One batch call → one debounced PATCH.
+    expect(store.dirty).toBe(true)
+    vi.advanceTimersByTime(700)
+    await Promise.resolve()
+    expect(api.diagrams.updateDiagram).toHaveBeenCalledTimes(1)
+  })
+
+  it('applyStyle uses the batch path: two rects styled with one save call', async () => {
+    const r1 = makeRectangle('r1')
+    const r2 = makeRectangle('r2')
+    store.elements = [r1, r2]
+    store.selectedIds = ['r1', 'r2']
+
+    store.applyStyle({ stroke: '#e03131' })
+
+    const updated1 = store.elements.find((e) => e.id === 'r1')
+    const updated2 = store.elements.find((e) => e.id === 'r2')
+    if (updated1?.type === 'rectangle') expect(updated1.stroke).toBe('#e03131')
+    if (updated2?.type === 'rectangle') expect(updated2.stroke).toBe('#e03131')
+
+    // applyStyle → updateElements → one scheduleSave → one debounced PATCH.
+    expect(store.dirty).toBe(true)
+    vi.advanceTimersByTime(700)
+    await Promise.resolve()
+    expect(api.diagrams.updateDiagram).toHaveBeenCalledTimes(1)
+  })
+})

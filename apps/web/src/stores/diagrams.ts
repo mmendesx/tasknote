@@ -280,106 +280,152 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     scheduleSave()
   }
 
-  function recomputeBoundConnectors(movedElementId: string): void {
-    const movedShape = findElementById(elements.value, movedElementId)
-    if (!movedShape) return
+  /**
+   * Recompute connector endpoints for all arrows/lines bound to any shape in
+   * `movedShapeIds`. ONE map pass over elements handles every affected connector.
+   *
+   * Per-connector logic is unchanged from the single-shape version: for each
+   * connector, we look up which of its bound ends belong to a moved shape and
+   * recompute those boundary points. Both-ends-bound semantics (FR-B5/FR-B3) are
+   * preserved exactly — when both ends are bound to different shapes, both
+   * endpoints are re-anchored along the new center-to-center ray.
+   */
+  function recomputeBoundConnectorsForSet(movedShapeIds: Set<string>): void {
+    if (movedShapeIds.size === 0) return
 
     elements.value = elements.value.map((el) => {
       if (el.type !== 'arrow' && el.type !== 'line') return el
 
-      const matchesStart = el.startBinding?.elementId === movedElementId
-      const matchesEnd = el.endBinding?.elementId === movedElementId
+      const startShapeId = el.startBinding?.elementId
+      const endShapeId = el.endBinding?.elementId
+      const matchesStart = startShapeId != null && movedShapeIds.has(startShapeId)
+      const matchesEnd = endShapeId != null && movedShapeIds.has(endShapeId)
       if (!matchesStart && !matchesEnd) return el
 
-      // For the bound end, compute the edge-anchor point.
-      // The `from` direction for the bound end is the OTHER end's coordinate:
-      //   - If the other end is also bound, use that shape's center.
-      //   - If the other end is free, use its stored point coordinate.
+      // Resolve the concrete moved shape for each bound end.
+      const startShape = matchesStart ? findElementById(elements.value, startShapeId!) : undefined
+      const endShape = matchesEnd ? findElementById(elements.value, endShapeId!) : undefined
+
       let start: [number, number]
       let end: [number, number]
 
-      if (matchesStart && matchesEnd) {
-        // Both ends bound to the moved shape — both anchor to its boundary from
-        // the other's center. Since both point at the same shape, fall back to
-        // storing the center for both (self-loop).
-        const center = elementCenter(movedShape)
-        start = [center.x, center.y]
-        end = [center.x, center.y]
-      } else if (matchesStart) {
-        // Start is bound to movedShape; end is either free or bound to another.
+      if (matchesStart && matchesEnd && startShape && endShape) {
+        if (startShapeId === endShapeId) {
+          // Self-loop: both ends on the same shape — fall back to center.
+          const center = elementCenter(startShape)
+          start = [center.x, center.y]
+          end = [center.x, center.y]
+        } else {
+          // Both ends bound to different moved shapes — recompute both along the
+          // new center-to-center ray.
+          const startCenter = elementCenter(startShape)
+          const endCenter = elementCenter(endShape)
+          const startPt = boundEndpoint(startShape, endCenter)
+          const endPt = boundEndpoint(endShape, startCenter)
+          start = [startPt.x, startPt.y]
+          end = [endPt.x, endPt.y]
+        }
+      } else if (matchesStart && startShape) {
+        // Start is bound to a moved shape; end is either free or bound to an
+        // unmoved shape.
         const otherEndId = el.endBinding?.elementId
         const otherEl = otherEndId ? findElementById(elements.value, otherEndId) : undefined
         const from = otherEl ? elementCenter(otherEl) : { x: el.points[1][0], y: el.points[1][1] }
-        const pt = boundEndpoint(movedShape, from)
+        const pt = boundEndpoint(startShape, from)
         start = [pt.x, pt.y]
         if (otherEl) {
-          // Both ends bound to different shapes — recompute end against movedShape's new center
-          // so both endpoints stay on-boundary along the updated center-to-center ray (FR-B5/FR-B3).
-          const endPt = boundEndpoint(otherEl, elementCenter(movedShape))
+          // Both ends bound to different shapes (other end unmoved) — recompute
+          // end against startShape's new center (FR-B5/FR-B3).
+          const endPt = boundEndpoint(otherEl, elementCenter(startShape))
           end = [endPt.x, endPt.y]
         } else {
           end = el.points[1]
         }
-      } else {
-        // End is bound to movedShape; start is either free or bound to another.
+      } else if (matchesEnd && endShape) {
+        // End is bound to a moved shape; start is either free or bound to an
+        // unmoved shape.
         const otherStartId = el.startBinding?.elementId
         const otherEl = otherStartId ? findElementById(elements.value, otherStartId) : undefined
         const from = otherEl ? elementCenter(otherEl) : { x: el.points[0][0], y: el.points[0][1] }
-        const pt = boundEndpoint(movedShape, from)
+        const pt = boundEndpoint(endShape, from)
         end = [pt.x, pt.y]
         if (otherEl) {
-          // Both ends bound to different shapes — recompute start against movedShape's new center
-          // so both endpoints stay on-boundary along the updated center-to-center ray (FR-B5/FR-B3).
-          const startPt = boundEndpoint(otherEl, elementCenter(movedShape))
+          // Both ends bound to different shapes (other end unmoved) — recompute
+          // start against endShape's new center (FR-B5/FR-B3).
+          const startPt = boundEndpoint(otherEl, elementCenter(endShape))
           start = [startPt.x, startPt.y]
         } else {
           start = el.points[0]
         }
+      } else {
+        return el
       }
 
       return { ...el, points: [start, end] }
     })
   }
 
-  function updateElement(elementId: string, patch: Partial<DiagramElement>): void {
-    const idx = elements.value.findIndex((e) => e.id === elementId)
-    if (idx === -1) return
+  /** Thin single-shape wrapper — preserves the existing call signature. */
+  function recomputeBoundConnectors(movedElementId: string): void {
+    recomputeBoundConnectorsForSet(new Set([movedElementId]))
+  }
 
-    const current = elements.value[idx]!
+  /**
+   * Apply a batch of patches in a single array copy.
+   *
+   * - Builds a Map<id, patch> from the input.
+   * - Maps over elements.value ONCE, applying each patch inline.
+   * - Per-element connector-detach guard (ICT-3/ICT-2 era) runs per patched
+   *   element identically to updateElement.
+   * - After the single copy, runs recomputeBoundConnectorsForSet ONCE for all
+   *   affected bindable shapes — O(n) connector scan regardless of batch size.
+   * - Calls scheduleSave() exactly once.
+   *
+   * Does NOT push history — callers are responsible for their own push semantics.
+   */
+  function updateElements(patches: Array<{ id: string; patch: Partial<DiagramElement> }>): void {
+    if (patches.length === 0) return
 
-    // When a user manually moves a connector (arrow/line), the drag produces a
-    // `points` patch. That intent — "I placed this connector here" — must
-    // override the binding: if bindings survived, recomputeBoundConnectors would
-    // snap the arrow back to its bound shapes on the next shape move, undoing the
-    // explicit repositioning. We therefore null both bindings in the same
-    // mutation whenever a points-patch lands on a linear element that is still
-    // bound. Style patches (stroke, strokeWidth, …) do NOT include `points` and
-    // leave bindings intact, which is the correct narrow rule.
-    const isLinear = current.type === 'arrow' || current.type === 'line'
-    const hasPointsPatch = 'points' in patch
-    const isBound =
-      (current.type === 'arrow' || current.type === 'line') &&
-      (current.startBinding != null || current.endBinding != null)
-
-    // If the incoming patch already explicitly sets binding keys, the caller is
-    // deliberately overriding bindings (e.g. endpoint drag that re-binds to a
-    // shape). In that case do NOT auto-detach — honour the caller's intent.
-    const hasBindingPatch = 'startBinding' in patch || 'endBinding' in patch
-    const detachPatch: Partial<DiagramElement> =
-      isLinear && hasPointsPatch && isBound && !hasBindingPatch
-        ? { startBinding: null, endBinding: null }
-        : {}
-
-    const copy = [...elements.value]
-    copy[idx] = { ...current, ...patch, ...detachPatch } as DiagramElement
-    elements.value = copy
-
-    const updatedElement = elements.value[idx]
-    if (updatedElement && isBindableShape(updatedElement)) {
-      recomputeBoundConnectors(elementId)
+    const patchMap = new Map<string, Partial<DiagramElement>>()
+    for (const { id: elId, patch } of patches) {
+      patchMap.set(elId, patch)
     }
 
+    const bindableShapesMoved = new Set<string>()
+
+    elements.value = elements.value.map((el) => {
+      const patch = patchMap.get(el.id)
+      if (!patch) return el
+
+      // Connector-detach guard: identical logic to updateElement.
+      const isLinear = el.type === 'arrow' || el.type === 'line'
+      const hasPointsPatch = 'points' in patch
+      const isBound =
+        (el.type === 'arrow' || el.type === 'line') &&
+        (el.startBinding != null || el.endBinding != null)
+      const hasBindingPatch = 'startBinding' in patch || 'endBinding' in patch
+      const detachPatch: Partial<DiagramElement> =
+        isLinear && hasPointsPatch && isBound && !hasBindingPatch
+          ? { startBinding: null, endBinding: null }
+          : {}
+
+      const updated = { ...el, ...patch, ...detachPatch } as DiagramElement
+
+      if (isBindableShape(updated)) {
+        bindableShapesMoved.add(el.id)
+      }
+
+      return updated
+    })
+
+    // ONE recompute pass for all moved bindable shapes.
+    recomputeBoundConnectorsForSet(bindableShapesMoved)
+
     scheduleSave()
+  }
+
+  function updateElement(elementId: string, patch: Partial<DiagramElement>): void {
+    updateElements([{ id: elementId, patch }])
   }
 
   function removeElements(ids: string[]): void {
@@ -454,13 +500,17 @@ export const useDiagramsStore = defineStore('diagrams', () => {
 
     pushHistory()
 
+    // Build a patches array so updateElements makes ONE array copy and ONE
+    // scheduleSave() call for the entire style batch (FR-B8).
+    const patches: Array<{ id: string; patch: Partial<DiagramElement> }> = []
+
     for (const elId of selectedIds.value) {
       const el = elements.value.find((e) => e.id === elId)
       if (!el) continue
 
       // Partial<DiagramElement> distributes over the union, so per-variant keys
       // (color, fontSize) are not assignable on it — build a flat style patch
-      // and cast at the updateElement call; the per-type guards above each key
+      // and cast at the updateElements call; the per-type guards above each key
       // ensure only valid fields reach each element variant.
       const elPatch: {
         stroke?: string
@@ -497,8 +547,12 @@ export const useDiagramsStore = defineStore('diagrams', () => {
       }
 
       if (Object.keys(elPatch).length > 0) {
-        updateElement(elId, elPatch as Partial<DiagramElement>)
+        patches.push({ id: elId, patch: elPatch as Partial<DiagramElement> })
       }
+    }
+
+    if (patches.length > 0) {
+      updateElements(patches)
     }
 
     // Update last-used style memory
@@ -569,6 +623,7 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     flushSave,
     addElement,
     updateElement,
+    updateElements,
     removeElement,
     removeElements,
     pushHistory,

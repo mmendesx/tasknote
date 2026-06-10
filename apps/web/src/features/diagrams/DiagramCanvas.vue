@@ -224,12 +224,16 @@ function onKeyDown(event: KeyboardEvent): void {
       store.pushHistory()
     }
     lastNudgeTimestamp.value = now
+    // Build all patches then apply in one batched call (FR-B8).
+    const nudgePatches: Array<{ id: string; patch: ReturnType<typeof buildMovePatch> }> = []
     for (const id of store.selectedIds) {
       const original = store.elements.find((e) => e.id === id)
       if (original) {
-        const patch = buildMovePatch(original, dx, dy)
-        store.updateElement(id, patch)
+        nudgePatches.push({ id, patch: buildMovePatch(original, dx, dy) })
       }
+    }
+    if (nudgePatches.length > 0) {
+      store.updateElements(nudgePatches)
     }
     return
   }
@@ -440,12 +444,16 @@ function onCanvasPointerMove(event: PointerEvent): void {
     const dyScene = dyScreen / zoom
     // Push the pre-gesture snapshot exactly once, before the first mutation.
     pushGestureHistoryOnce()
+    // Build all patches first, then apply in one batched call (FR-B8).
+    const patches: Array<{ id: string; patch: ReturnType<typeof buildMovePatch> }> = []
     for (const id of mv.ids) {
       const original = mv.originalElements.get(id)
       if (original) {
-        const patch = buildMovePatch(original, dxScene, dyScene)
-        store.updateElement(id, patch)
+        patches.push({ id, patch: buildMovePatch(original, dxScene, dyScene) })
       }
+    }
+    if (patches.length > 0) {
+      store.updateElements(patches)
     }
     return
   }
