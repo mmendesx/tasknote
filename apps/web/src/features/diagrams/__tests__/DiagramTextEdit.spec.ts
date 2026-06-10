@@ -251,4 +251,43 @@ describe('DiagramTextEdit', () => {
     expect(elements[0].type).toBe('text')
     expect(elements[0].text).toBe('brand new')
   })
+
+  // ICT-1 acceptance: double-click text edit produces exactly one history entry
+  it('double-click edit produces one undo entry: one undo restores original text', async () => {
+    const textEl = makeTextElement({ text: 'draft', x: 50, y: 80 })
+    const { wrapper, pinia, store } = await mountCanvasWithText(textEl)
+
+    const textNode = wrapper.find(`[data-element-id="${textEl.id}"]`)
+    expect(textNode.exists()).toBe(true)
+
+    // Simulate realistic interaction: pointerdown+up before dblclick
+    await textNode.trigger('pointerdown', { clientX: 60, clientY: 80, pointerId: 1 })
+    await textNode.trigger('pointerup', { clientX: 60, clientY: 80, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    // Double-click opens the editor
+    const dblClickEvent = new MouseEvent('dblclick', { bubbles: true, cancelable: true })
+    textNode.element.dispatchEvent(dblClickEvent)
+    await wrapper.vm.$nextTick()
+
+    const input = wrapper.find('input.diagram-text-input')
+    expect(input.exists()).toBe(true)
+    expect((input.element as HTMLInputElement).value).toBe('draft')
+
+    // Edit and commit
+    await input.setValue('draft v2')
+    await input.trigger('keydown', { key: 'Enter' })
+    await wrapper.vm.$nextTick()
+
+    expect(pinia.state.value['diagrams'].elements[0].text).toBe('draft v2')
+
+    // Exactly one undo entry: restores original text
+    store.undoAction()
+    await wrapper.vm.$nextTick()
+
+    expect(pinia.state.value['diagrams'].elements[0].text).toBe('draft')
+
+    // No further undo entries — the bare clicks before dblclick pushed nothing
+    expect(store.canUndo).toBe(false)
+  })
 })

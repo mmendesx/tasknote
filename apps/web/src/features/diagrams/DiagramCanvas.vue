@@ -97,6 +97,41 @@ const { resizeState, beginResize, updateResize, commitResize, cancelResize, isRe
   () => store.viewport,
 )
 
+// ── Gesture-scoped history ────────────────────────────────────────────────────
+//
+// History is pushed at most once per gesture (move or resize), and only when
+// the gesture actually changes geometry. We capture the pre-gesture snapshot at
+// pointerdown and defer the push until the first pointermove that applies a
+// patch. A plain click (down → up with no move) never calls pushHistory at all.
+
+const gestureHistorySnapshot = ref<import('@tasknote/shared').DiagramElement[] | null>(null)
+const gestureHistoryPushed = ref(false)
+
+/** Call at the start of any move/resize gesture (before any mutation). */
+function beginGestureHistory(snapshot: import('@tasknote/shared').DiagramElement[]): void {
+  gestureHistorySnapshot.value = snapshot
+  gestureHistoryPushed.value = false
+}
+
+/**
+ * Call on the first pointermove of a gesture, BEFORE applying the patch.
+ * Pushes the pre-gesture snapshot exactly once per gesture.
+ */
+function pushGestureHistoryOnce(): void {
+  if (gestureHistoryPushed.value) return
+  const snapshot = gestureHistorySnapshot.value
+  if (snapshot !== null) {
+    store.pushHistory(snapshot)
+    gestureHistoryPushed.value = true
+  }
+}
+
+/** Call at gesture end (pointerup / cancel) to reset gesture state. */
+function endGestureHistory(): void {
+  gestureHistorySnapshot.value = null
+  gestureHistoryPushed.value = false
+}
+
 const selectedElements = computed<DiagramElement[]>(() =>
   store.elements.filter((e) => store.selectedIds.includes(e.id)),
 )
@@ -277,7 +312,9 @@ function handleSelectPointerDown(event: PointerEvent): void {
       // Normalize handle value: numeric strings → number, else string handle id
       const handleRaw = resizeHandleAttr
       const handle = handleRaw === '0' ? 0 : handleRaw === '1' ? 1 : handleRaw
-      store.pushHistory()
+      // Capture pre-gesture snapshot; history is pushed only if the gesture
+      // moves (first pointermove), not on bare click/release.
+      beginGestureHistory([...store.elements])
       beginResize(selectedId, handle as import('./useResize').HandleId | 0 | 1, event.clientX, event.clientY)
       capturePointer(event)
     }
@@ -299,8 +336,9 @@ function handleSelectPointerDown(event: PointerEvent): void {
         store.selectedIds.includes(e.id),
       )
       if (originalsInSelection.length > 0) {
-        // Push the pre-gesture snapshot so the entire drag is one undo entry.
-        store.pushHistory()
+        // Capture pre-gesture snapshot; history is pushed only on first actual
+        // pointermove — a bare click (down → up, no move) adds nothing.
+        beginGestureHistory([...store.elements])
         beginMove(
           originalsInSelection.map((e) => e.id),
           event.clientX,
@@ -375,6 +413,8 @@ function onCanvasPointerMove(event: PointerEvent): void {
     if (state) {
       const patch = updateResize(event.clientX, event.clientY)
       if (patch) {
+        // Push the pre-gesture snapshot exactly once, before the first mutation.
+        pushGestureHistoryOnce()
         store.updateElement(state.elementId, patch)
       }
     }
@@ -388,6 +428,8 @@ function onCanvasPointerMove(event: PointerEvent): void {
     const dyScreen = event.clientY - mv.startScreenY
     const dxScene = dxScreen / zoom
     const dyScene = dyScreen / zoom
+    // Push the pre-gesture snapshot exactly once, before the first mutation.
+    pushGestureHistoryOnce()
     for (const id of mv.ids) {
       const original = mv.originalElements.get(id)
       if (original) {
@@ -503,12 +545,14 @@ function onCanvasPointerUp(event: PointerEvent): void {
         }
       }
     }
+    endGestureHistory()
     return
   }
 
   if (moveState.value) {
     // Final commit already applied via pointermove; just end the move.
     clearMove()
+    endGestureHistory()
     return
   }
 
@@ -564,6 +608,7 @@ function onCanvasPointerCancel(): void {
   cancelResize()
   cancelMarquee()
   isPanning.value = false
+  endGestureHistory()
 }
 
 // ── Text commit ───────────────────────────────────────────────────────────────
@@ -767,7 +812,7 @@ function onCanvasDblClick(event: MouseEvent): void {
         @resize-start="(handleId, screenX, screenY) => {
           const selectedId = store.selectedIds[0]
           if (selectedId) {
-            store.pushHistory()
+            beginGestureHistory([...store.elements])
             beginResize(selectedId, handleId, screenX, screenY)
           }
         }"

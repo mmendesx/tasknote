@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import DiagramCanvas from '../DiagramCanvas.vue'
+import { useDiagramsStore } from '@/stores/diagrams'
 import type { DiagramElement } from '@tasknote/shared'
 
 // ── API mock ──────────────────────────────────────────────────────────────────
@@ -369,5 +370,151 @@ describe('DiagramSelection — multi-select (ICT-11)', () => {
     expect(elements.find((e) => e.id === 'el-A')).toBeUndefined()
     expect(elements.find((e) => e.id === 'el-B')).toBeUndefined()
     expect(pinia.state.value['diagrams'].selectedIds).toHaveLength(0)
+  })
+})
+
+// ── ICT-1 gesture-scoped history acceptance scenarios ─────────────────────────
+
+describe('DiagramSelection — gesture-scoped history (ICT-1)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  // Scenario: click-select does not destroy redo
+  it('click-select does not destroy redo: after undo, clicking an element preserves the redo stack', async () => {
+    const rect = makeRect('rect-redo', 50, 50)
+    const { wrapper, pinia } = await mountCanvasWithElements([rect])
+    const store = useDiagramsStore(pinia)
+
+    // Produce a history entry via addElement
+    store.addElement(makeRect('rect-second', 200, 200))
+    await wrapper.vm.$nextTick()
+
+    // Undo — redo stack now holds the "rect-second was added" state
+    store.undoAction()
+    await wrapper.vm.$nextTick()
+
+    expect(store.canRedo).toBe(true)
+
+    // Act: click on rect-redo (pointerdown + pointerup, no move)
+    const elementNode = wrapper.find('[data-element-id="rect-redo"]')
+    expect(elementNode.exists()).toBe(true)
+    await elementNode.trigger('pointerdown', { clientX: 100, clientY: 80, pointerId: 1 })
+    await elementNode.trigger('pointerup', { clientX: 100, clientY: 80, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    // Assert: redo stack is still intact — redoAction restores rect-second
+    expect(store.canRedo).toBe(true)
+    store.redoAction()
+    await wrapper.vm.$nextTick()
+
+    const elementsAfterRedo = pinia.state.value['diagrams'].elements as DiagramElement[]
+    expect(elementsAfterRedo.find((e) => e.id === 'rect-second')).toBeDefined()
+  })
+
+  // Scenario: click without drag adds no history entry
+  it('click without drag adds no history entry: only the prior mutation is undoable', async () => {
+    const rect = makeRect('rect-click', 50, 50)
+    const { wrapper, pinia } = await mountCanvasWithElements([rect])
+    const store = useDiagramsStore(pinia)
+
+    // Create exactly one committed mutation
+    store.addElement(makeRect('rect-extra', 200, 200))
+    await wrapper.vm.$nextTick()
+
+    // Act: click rect-click (down + up, no move)
+    const elementNode = wrapper.find('[data-element-id="rect-click"]')
+    await elementNode.trigger('pointerdown', { clientX: 100, clientY: 80, pointerId: 1 })
+    await elementNode.trigger('pointerup', { clientX: 100, clientY: 80, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    // First undo removes the addElement mutation
+    store.undoAction()
+    await wrapper.vm.$nextTick()
+
+    const afterFirstUndo = pinia.state.value['diagrams'].elements as DiagramElement[]
+    expect(afterFirstUndo.find((e) => e.id === 'rect-extra')).toBeUndefined()
+
+    // No further undo entries — the bare click pushed nothing
+    expect(store.canUndo).toBe(false)
+  })
+
+  // Scenario: drag gesture is exactly one history entry
+  it('drag gesture is exactly one undo entry: one undo restores original position', async () => {
+    const rect = makeRect('rect-drag', 10, 10)
+    const { wrapper, pinia } = await mountCanvasWithElements([rect])
+    const store = useDiagramsStore(pinia)
+
+    const svg = wrapper.find('svg.diagram-canvas')
+    const elementNode = wrapper.find('[data-element-id="rect-drag"]')
+
+    // Drag: down → two moves → up (verifies hasPushed fires exactly once)
+    await elementNode.trigger('pointerdown', { clientX: 50, clientY: 50, pointerId: 1 })
+    await svg.trigger('pointermove', { clientX: 70, clientY: 60, pointerId: 1 })
+    await svg.trigger('pointermove', { clientX: 90, clientY: 70, pointerId: 1 })
+    await svg.trigger('pointerup', { clientX: 90, clientY: 70, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    // Element should have moved 40px right, 20px down
+    const elements = pinia.state.value['diagrams'].elements as DiagramElement[]
+    const moved = elements.find((e) => e.id === 'rect-drag') as any
+    expect(moved.x).toBe(50)  // 10 + 40
+    expect(moved.y).toBe(30)  // 10 + 20
+
+    // One undo restores the original position
+    store.undoAction()
+    await wrapper.vm.$nextTick()
+
+    const restored = (pinia.state.value['diagrams'].elements as DiagramElement[]).find(
+      (e) => e.id === 'rect-drag',
+    ) as any
+    expect(restored.x).toBe(10)
+    expect(restored.y).toBe(10)
+
+    // No further undo — the initial state had no prior mutations
+    expect(store.canUndo).toBe(false)
+  })
+
+  // Scenario: bare click (no drag) after undo still allows redo
+  it('click on element after undo does not clear redo: redo restores geometry', async () => {
+    const rectA = makeRect('rect-a', 10, 10)
+    const rectB = makeRect('rect-b', 200, 200)
+    const { wrapper, pinia } = await mountCanvasWithElements([rectA, rectB])
+    const store = useDiagramsStore(pinia)
+
+    // Move rect-a by dragging it
+    const svg = wrapper.find('svg.diagram-canvas')
+    const nodeA = wrapper.find('[data-element-id="rect-a"]')
+    await nodeA.trigger('pointerdown', { clientX: 50, clientY: 50, pointerId: 1 })
+    await svg.trigger('pointermove', { clientX: 100, clientY: 50, pointerId: 1 })
+    await svg.trigger('pointerup', { clientX: 100, clientY: 50, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    const movedX = ((pinia.state.value['diagrams'].elements as DiagramElement[]).find(
+      (e) => e.id === 'rect-a',
+    ) as any).x
+    expect(movedX).toBe(60) // 10 + 50
+
+    // Undo the drag — rect-a back at x=10
+    store.undoAction()
+    await wrapper.vm.$nextTick()
+    expect(store.canRedo).toBe(true)
+
+    // Click rect-b (select only, no move) — must NOT clear redo
+    const nodeB = wrapper.find('[data-element-id="rect-b"]')
+    await nodeB.trigger('pointerdown', { clientX: 250, clientY: 250, pointerId: 1 })
+    await nodeB.trigger('pointerup', { clientX: 250, clientY: 250, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    expect(store.canRedo).toBe(true)
+
+    // Redo restores the drag
+    store.redoAction()
+    await wrapper.vm.$nextTick()
+
+    const afterRedo = ((pinia.state.value['diagrams'].elements as DiagramElement[]).find(
+      (e) => e.id === 'rect-a',
+    ) as any).x
+    expect(afterRedo).toBe(60)
   })
 })

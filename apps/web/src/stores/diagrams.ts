@@ -262,13 +262,14 @@ export const useDiagramsStore = defineStore('diagrams', () => {
   // ── Element mutations ────────────────────────────────────────────────────────
 
   /**
-   * Explicitly push a history snapshot of the current elements.
-   * DiagramCanvas calls this at pointerdown (gesture start) so that the
-   * continuous pointermove updates during drag/resize are captured as a
-   * single undo entry rather than one per move event.
+   * Explicitly push a history snapshot.
+   * Pass an explicit snapshot (pre-gesture elements) to record that state.
+   * When no snapshot is provided, the CURRENT elements are snapshotted —
+   * this preserves existing callers (applyStyle, etc.) that call pushHistory()
+   * immediately before mutating.
    */
-  function pushHistory(): void {
-    history.push(elements.value)
+  function pushHistory(snapshot?: DiagramElement[]): void {
+    history.push(snapshot ?? elements.value)
   }
 
   function addElement(el: DiagramElement): void {
