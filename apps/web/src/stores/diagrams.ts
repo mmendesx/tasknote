@@ -344,8 +344,12 @@ export const useDiagramsStore = defineStore('diagrams', () => {
       (current.type === 'arrow' || current.type === 'line') &&
       (current.startBinding != null || current.endBinding != null)
 
+    // If the incoming patch already explicitly sets binding keys, the caller is
+    // deliberately overriding bindings (e.g. endpoint drag that re-binds to a
+    // shape). In that case do NOT auto-detach — honour the caller's intent.
+    const hasBindingPatch = 'startBinding' in patch || 'endBinding' in patch
     const detachPatch: Partial<DiagramElement> =
-      isLinear && hasPointsPatch && isBound
+      isLinear && hasPointsPatch && isBound && !hasBindingPatch
         ? { startBinding: null, endBinding: null }
         : {}
 

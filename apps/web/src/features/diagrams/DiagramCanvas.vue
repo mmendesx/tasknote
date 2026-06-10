@@ -19,9 +19,11 @@ import {
   unionBboxes,
 } from './useSelection'
 import { useMarquee } from './useMarquee'
+import { useResize } from './useResize'
 import { resolveShapeIdAtPoint, elementCenter, findElementById, boundEndpoint } from './connectors'
 import DiagramElementView from './DiagramElementView.vue'
 import DiagramPreview from './DiagramPreview.vue'
+import DiagramSelectionHandles from './DiagramSelectionHandles.vue'
 
 // ── Props ────────────────────────────────────────────────────────────────────
 
@@ -90,6 +92,10 @@ const {
 
 const { moveState, beginMove, clearMove } = useSelection()
 const { marqueeRect, active: marqueeActive, startMarquee, updateMarquee, finishMarquee, cancelMarquee } = useMarquee()
+const { resizeState, beginResize, updateResize, commitResize, cancelResize, isResizing } = useResize(
+  () => store.elements,
+  () => store.viewport,
+)
 
 const selectedElements = computed<DiagramElement[]>(() =>
   store.elements.filter((e) => store.selectedIds.includes(e.id)),
@@ -102,6 +108,11 @@ const selectionBBox = computed(() => {
 
 /** Only show resize handles for single-element selections (multi-select shows outline only). */
 const showResizeHandles = computed(() => selectedElements.value.length === 1)
+
+/** The single selected element, or null when 0 or 2+ are selected. */
+const singleSelectedElement = computed<import('@tasknote/shared').DiagramElement | null>(() =>
+  selectedElements.value.length === 1 ? selectedElements.value[0]! : null,
+)
 
 // ── Escape + Delete handler ───────────────────────────────────────────────────
 
@@ -202,6 +213,22 @@ function handlePanPointerDown(event: PointerEvent): void {
 }
 
 function handleSelectPointerDown(event: PointerEvent): void {
+  // Check if the click landed on a resize handle
+  const target = event.target as Element | null
+  const resizeHandleAttr = target?.getAttribute('data-resize-handle')
+  if (resizeHandleAttr !== null && resizeHandleAttr !== undefined) {
+    const selectedId = store.selectedIds[0]
+    if (selectedId) {
+      // Normalize handle value: numeric strings → number, else string handle id
+      const handleRaw = resizeHandleAttr
+      const handle = handleRaw === '0' ? 0 : handleRaw === '1' ? 1 : handleRaw
+      store.pushHistory()
+      beginResize(selectedId, handle as import('./useResize').HandleId | 0 | 1, event.clientX, event.clientY)
+      capturePointer(event)
+    }
+    return
+  }
+
   const elementId = hitElementId(event)
   if (elementId) {
     if (event.shiftKey) {
@@ -285,6 +312,17 @@ function onCanvasPointerMove(event: PointerEvent): void {
       scrollY: panViewportStart.value.scrollY + dy / zoom,
       zoom,
     })
+    return
+  }
+
+  if (isResizing.value) {
+    const state = resizeState.value
+    if (state) {
+      const patch = updateResize(event.clientX, event.clientY)
+      if (patch) {
+        store.updateElement(state.elementId, patch)
+      }
+    }
     return
   }
 
@@ -397,6 +435,22 @@ function onCanvasPointerUp(event: PointerEvent): void {
     return
   }
 
+  if (isResizing.value) {
+    const state = resizeState.value
+    if (state) {
+      const result = commitResize(event.clientX, event.clientY)
+      if (result) {
+        const { patch, newBindings } = result
+        if (newBindings) {
+          store.updateElement(state.elementId, { ...patch, ...newBindings } as Partial<DiagramElement>)
+        } else {
+          store.updateElement(state.elementId, patch)
+        }
+      }
+    }
+    return
+  }
+
   if (moveState.value) {
     // Final commit already applied via pointermove; just end the move.
     clearMove()
@@ -449,6 +503,7 @@ function onCanvasPointerLeave(event: PointerEvent): void {
 function onCanvasPointerCancel(): void {
   cancelDraw()
   clearMove()
+  cancelResize()
   cancelMarquee()
   isPanning.value = false
 }
@@ -597,6 +652,22 @@ const textEditState = computed(() => {
         stroke-dasharray="5 3"
         vector-effect="non-scaling-stroke"
         pointer-events="none"
+      />
+
+      <!-- Resize handles (single-element selection only) -->
+      <DiagramSelectionHandles
+        v-if="showResizeHandles && selectionBBox"
+        :bbox="selectionBBox"
+        :zoom="store.viewport.zoom"
+        :show-endpoint-handles="singleSelectedElement?.type === 'line' || singleSelectedElement?.type === 'arrow'"
+        :element="singleSelectedElement"
+        @resize-start="(handleId, screenX, screenY) => {
+          const selectedId = store.selectedIds[0]
+          if (selectedId) {
+            store.pushHistory()
+            beginResize(selectedId, handleId, screenX, screenY)
+          }
+        }"
       />
 
       <!-- Marquee selection rectangle (dashed outline while dragging) -->
