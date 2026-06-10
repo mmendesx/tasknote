@@ -88,7 +88,8 @@ function resetZoom(): void {
       <button
         class="diagram-toolbar__btn focus-ring"
         :class="{ 'diagram-toolbar__btn--active': store.tool === 'select' }"
-        aria-label="Select"
+        aria-label="Select (V)"
+        title="Select (V)"
         :aria-pressed="store.tool === 'select'"
         @click="selectTool('select')"
       >
@@ -101,7 +102,8 @@ function resetZoom(): void {
       <button
         class="diagram-toolbar__btn focus-ring"
         :class="{ 'diagram-toolbar__btn--active': store.tool === 'hand' }"
-        aria-label="Hand (pan)"
+        aria-label="Hand (pan) (H)"
+        title="Hand (pan) (H)"
         :aria-pressed="store.tool === 'hand'"
         @click="selectTool('hand')"
       >
@@ -114,7 +116,8 @@ function resetZoom(): void {
       <button
         class="diagram-toolbar__btn focus-ring"
         :class="{ 'diagram-toolbar__btn--active': store.tool === 'rectangle' }"
-        aria-label="Rectangle"
+        aria-label="Rectangle (R)"
+        title="Rectangle (R)"
         :aria-pressed="store.tool === 'rectangle'"
         @click="selectTool('rectangle')"
       >
@@ -127,7 +130,8 @@ function resetZoom(): void {
       <button
         class="diagram-toolbar__btn focus-ring"
         :class="{ 'diagram-toolbar__btn--active': store.tool === 'ellipse' }"
-        aria-label="Ellipse"
+        aria-label="Ellipse (E)"
+        title="Ellipse (E)"
         :aria-pressed="store.tool === 'ellipse'"
         @click="selectTool('ellipse')"
       >
@@ -140,7 +144,8 @@ function resetZoom(): void {
       <button
         class="diagram-toolbar__btn focus-ring"
         :class="{ 'diagram-toolbar__btn--active': store.tool === 'line' }"
-        aria-label="Line"
+        aria-label="Line (L)"
+        title="Line (L)"
         :aria-pressed="store.tool === 'line'"
         @click="selectTool('line')"
       >
@@ -153,7 +158,8 @@ function resetZoom(): void {
       <button
         class="diagram-toolbar__btn focus-ring"
         :class="{ 'diagram-toolbar__btn--active': store.tool === 'arrow' }"
-        aria-label="Arrow"
+        aria-label="Arrow (A)"
+        title="Arrow (A)"
         :aria-pressed="store.tool === 'arrow'"
         @click="selectTool('arrow')"
       >
@@ -167,7 +173,8 @@ function resetZoom(): void {
       <button
         class="diagram-toolbar__btn focus-ring"
         :class="{ 'diagram-toolbar__btn--active': store.tool === 'text' }"
-        aria-label="Text"
+        aria-label="Text (T)"
+        title="Text (T)"
         :aria-pressed="store.tool === 'text'"
         @click="selectTool('text')"
       >
@@ -180,7 +187,8 @@ function resetZoom(): void {
       <button
         class="diagram-toolbar__btn focus-ring"
         :class="{ 'diagram-toolbar__btn--active': store.tool === 'pen' }"
-        aria-label="Pen"
+        aria-label="Pen (P)"
+        title="Pen (P)"
         :aria-pressed="store.tool === 'pen'"
         @click="selectTool('pen')"
       >

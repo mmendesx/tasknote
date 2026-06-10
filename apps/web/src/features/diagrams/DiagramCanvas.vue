@@ -123,9 +123,30 @@ function isTextInputFocused(): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || (active as HTMLElement).isContentEditable
 }
 
+// ── Tool shortcut map ─────────────────────────────────────────────────────────
+
+const TOOL_SHORTCUTS: Record<string, string> = {
+  v: 'select',
+  h: 'hand',
+  r: 'rectangle',
+  e: 'ellipse',
+  o: 'ellipse',
+  l: 'line',
+  a: 'arrow',
+  t: 'text',
+  p: 'pen',
+}
+
+// ── Arrow-key nudge: debounced history ────────────────────────────────────────
+
+const NUDGE_HISTORY_DEBOUNCE_MS = 500
+
+const lastNudgeTimestamp = ref(0)
+
 function onKeyDown(event: KeyboardEvent): void {
   if (event.key === 'Escape') {
     cancelDraw()
+    store.selectElement(null)
     return
   }
   if (event.key === 'Delete' || event.key === 'Backspace') {
@@ -144,12 +165,46 @@ function onKeyDown(event: KeyboardEvent): void {
     } else {
       store.undoAction()
     }
+    return
   }
   if (isMod && event.key === 'Z') {
     // Shift+Cmd+Z on some platforms produces uppercase Z without shiftKey flag
     if (isTextInputFocused()) return
     event.preventDefault()
     store.redoAction()
+    return
+  }
+
+  // Arrow-key nudge: moves all selected elements
+  const isArrowKey = event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'ArrowUp' || event.key === 'ArrowDown'
+  if (isArrowKey) {
+    if (isTextInputFocused()) return
+    if (store.selectedIds.length === 0) return
+    event.preventDefault()
+    const step = event.shiftKey ? 10 : 1
+    const dx = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0
+    const dy = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0
+    const now = Date.now()
+    if (now - lastNudgeTimestamp.value > NUDGE_HISTORY_DEBOUNCE_MS) {
+      store.pushHistory()
+    }
+    lastNudgeTimestamp.value = now
+    for (const id of store.selectedIds) {
+      const original = store.elements.find((e) => e.id === id)
+      if (original) {
+        const patch = buildMovePatch(original, dx, dy)
+        store.updateElement(id, patch)
+      }
+    }
+    return
+  }
+
+  // Tool shortcuts: no modifier keys allowed
+  if (isMod || event.altKey) return
+  if (isTextInputFocused()) return
+  const tool = TOOL_SHORTCUTS[event.key.toLowerCase()]
+  if (tool) {
+    store.setTool(tool)
   }
 }
 

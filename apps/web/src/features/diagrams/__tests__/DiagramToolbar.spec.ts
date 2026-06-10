@@ -26,7 +26,7 @@ describe('DiagramToolbar', () => {
   it('clicking the rectangle tool button sets store.tool to rectangle and aria-pressed reflects it', async () => {
     const { wrapper, store } = mountToolbar()
 
-    const rectBtn = wrapper.find('button[aria-label="Rectangle"]')
+    const rectBtn = wrapper.find('button[aria-label="Rectangle (R)"]')
     expect(rectBtn.exists()).toBe(true)
 
     await rectBtn.trigger('click')
@@ -35,14 +35,14 @@ describe('DiagramToolbar', () => {
     expect(rectBtn.attributes('aria-pressed')).toBe('true')
 
     // Previously active button (select) should no longer be pressed
-    const selectBtn = wrapper.find('button[aria-label="Select"]')
+    const selectBtn = wrapper.find('button[aria-label="Select (V)"]')
     expect(selectBtn.attributes('aria-pressed')).toBe('false')
   })
 
   it('clicking the hand tool button sets store.tool to hand', async () => {
     const { wrapper, store } = mountToolbar()
 
-    const handBtn = wrapper.find('button[aria-label="Hand (pan)"]')
+    const handBtn = wrapper.find('button[aria-label="Hand (pan) (H)"]')
     expect(handBtn.exists()).toBe(true)
 
     await handBtn.trigger('click')
