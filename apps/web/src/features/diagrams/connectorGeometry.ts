@@ -21,6 +21,10 @@ export function rectEdgePoint(
   const cx = rect.x + rect.width / 2
   const cy = rect.y + rect.height / 2
 
+  // Degenerate (zero/negative size) rects have no boundary to intersect —
+  // the ray hits the center itself, and gap-stepping would overshoot past it.
+  if (rect.width <= 0 || rect.height <= 0) return { x: cx, y: cy }
+
   const dx = cx - from.x
   const dy = cy - from.y
 
@@ -77,10 +81,13 @@ export function rectEdgePoint(
 
   const boundaryT = tMin - gapT
 
-  return {
-    x: from.x + boundaryT * dx,
-    y: from.y + boundaryT * dy,
-  }
+  const rx = from.x + boundaryT * dx
+  const ry = from.y + boundaryT * dy
+
+  // Belt-and-braces: degenerate geometry (zero-size rect) can yield non-finite coords.
+  if (!Number.isFinite(rx) || !Number.isFinite(ry)) return { x: cx, y: cy }
+
+  return { x: rx, y: ry }
 }
 
 // ── Ellipse ───────────────────────────────────────────────────────────────────
@@ -121,8 +128,11 @@ export function ellipseEdgePoint(
   // |t-1| = 1 / sqrt(...)
   // t = 1 ± 1/sqrt(...)
 
+  // Guard degenerate ellipses: rx or ry can be 0 for legacy/imported scenes.
+  // When rx===0 and dx===0, (dx/rx)^2 is NaN; when rx===0 and dx!==0, it is Infinity.
+  // Neither is caught by denom===0, so we must check for non-finite values.
   const denom = (dx / rx) * (dx / rx) + (dy / ry) * (dy / ry)
-  if (denom === 0) return { x: cx, y: cy }
+  if (!Number.isFinite(denom) || denom === 0) return { x: cx, y: cy }
 
   const inv = 1 / Math.sqrt(denom)
 

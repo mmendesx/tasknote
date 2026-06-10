@@ -116,4 +116,88 @@ describe('ellipseEdgePoint', () => {
     const val = Math.pow((pt.x - cx) / rx, 2) + Math.pow((pt.y - cy) / ry, 2)
     expect(val).toBeCloseTo(1, 6)
   })
+
+  // ── Degenerate geometry guards ────────────────────────────────────────────────
+
+  it('zero-width ellipse returns its center, not NaN — from any external point', () => {
+    // rx === 0 makes (dx/rx)^2 either NaN (when dx===0) or Infinity (when dx!==0).
+    // Both must be handled: result should be the center with finite coordinates.
+    const ellipse = { x: 10, y: 10, width: 0, height: 40 }
+    const center = { x: 10, y: 30 } // cx = 10 + 0/2, cy = 10 + 40/2
+
+    // dx === 0 case: from directly above — (dx/rx)^2 = (0/0)^2 = NaN
+    const ptAbove = ellipseEdgePoint(ellipse, { x: 10, y: -50 })
+    expect(Number.isFinite(ptAbove.x)).toBe(true)
+    expect(Number.isFinite(ptAbove.y)).toBe(true)
+    expect(ptAbove).toEqual(center)
+
+    // dx !== 0 case: from offset — (dx/rx)^2 = (nonzero/0)^2 = Infinity
+    const ptSide = ellipseEdgePoint(ellipse, { x: 100, y: 30 })
+    expect(Number.isFinite(ptSide.x)).toBe(true)
+    expect(Number.isFinite(ptSide.y)).toBe(true)
+    expect(ptSide).toEqual(center)
+
+    // Diagonal — both dx and dy nonzero
+    const ptDiag = ellipseEdgePoint(ellipse, { x: 50, y: -50 })
+    expect(Number.isFinite(ptDiag.x)).toBe(true)
+    expect(Number.isFinite(ptDiag.y)).toBe(true)
+    expect(ptDiag).toEqual(center)
+  })
+
+  it('zero-height ellipse returns its center, not NaN', () => {
+    const ellipse = { x: 10, y: 10, width: 40, height: 0 }
+    const center = { x: 30, y: 10 }
+
+    const pt = ellipseEdgePoint(ellipse, { x: 30, y: 100 })
+    expect(Number.isFinite(pt.x)).toBe(true)
+    expect(Number.isFinite(pt.y)).toBe(true)
+    expect(pt).toEqual(center)
+  })
+
+  it('zero-size ellipse (width=0, height=0) returns its center', () => {
+    const ellipse = { x: 20, y: 15, width: 0, height: 0 }
+    const center = { x: 20, y: 15 }
+
+    const pt = ellipseEdgePoint(ellipse, { x: 50, y: 50 })
+    expect(Number.isFinite(pt.x)).toBe(true)
+    expect(Number.isFinite(pt.y)).toBe(true)
+    expect(pt).toEqual(center)
+  })
+})
+
+// ── rectEdgePoint — degenerate geometry guards ────────────────────────────────
+
+describe('rectEdgePoint — degenerate geometry', () => {
+  it('zero-size rect returns its center, not NaN', () => {
+    // width=0, height=0 → all edges collapse; tMin stays Infinity → center returned.
+    const rect = { x: 5, y: 5, width: 0, height: 0 }
+    const center = { x: 5, y: 5 }
+
+    const pt = rectEdgePoint(rect, { x: 100, y: 200 })
+    expect(Number.isFinite(pt.x)).toBe(true)
+    expect(Number.isFinite(pt.y)).toBe(true)
+    expect(pt).toEqual(center)
+  })
+
+  it('zero-width rect returns a finite point or center', () => {
+    // width=0 → left and right edges coincide at cx; only vertical edges matter.
+    const rect = { x: 10, y: 0, width: 0, height: 60 }
+    const center = { x: 10, y: 30 }
+
+    const pt = rectEdgePoint(rect, { x: 10, y: -50 })
+    expect(Number.isFinite(pt.x)).toBe(true)
+    expect(Number.isFinite(pt.y)).toBe(true)
+    // from directly above: top edge hit expected (or center fallback — either is safe)
+    expect(pt.y).toBeLessThanOrEqual(center.y)
+  })
+
+  it('zero-height rect returns a finite point or center', () => {
+    const rect = { x: 0, y: 10, width: 100, height: 0 }
+    const center = { x: 50, y: 10 }
+
+    const pt = rectEdgePoint(rect, { x: -50, y: 10 })
+    expect(Number.isFinite(pt.x)).toBe(true)
+    expect(Number.isFinite(pt.y)).toBe(true)
+    expect(pt.x).toBeLessThanOrEqual(center.x)
+  })
 })
