@@ -516,6 +516,21 @@ function onCanvasPointerCancel(): void {
 function commitText(): void {
   const state = drawState.value
   if (state.kind !== 'text') return
+
+  if (state.elId) {
+    // Edit mode: update or delete the existing element.
+    const trimmed = pendingText.value.trim()
+    if (trimmed) {
+      store.pushHistory()
+      store.updateElement(state.elId, { text: trimmed } as Partial<DiagramElement>)
+    } else {
+      store.removeElements([state.elId])
+    }
+    cancelDraw()
+    return
+  }
+
+  // Create mode: build a new element.
   const style = { stroke: store.lastStroke, fontSize: store.lastFontSize }
   const el = buildTextElement(state.x, state.y, pendingText.value, style)
   if (el) store.addElement(el as DiagramElement)
@@ -583,6 +598,33 @@ const textEditState = computed(() => {
   if (s.kind !== 'text') return null
   return { x: s.x, y: s.y }
 })
+
+/** The element id currently being edited in text mode (empty string = new). */
+const editingElId = computed(() => {
+  const s = drawState.value
+  if (s.kind !== 'text') return ''
+  return s.elId
+})
+
+// ── Double-click to edit existing text elements ───────────────────────────────
+
+function onCanvasDblClick(event: MouseEvent): void {
+  if (store.tool !== 'select') return
+
+  // Use a PointerEvent-like object for hitElementId — target is all we need.
+  const target = event.target as Element | null
+  if (!target) return
+  const hit = target.closest('[data-element-id]')
+  const elementId = hit ? (hit.getAttribute('data-element-id') ?? null) : null
+  if (!elementId) return
+
+  const el = store.elements.find((e) => e.id === elementId)
+  if (!el || el.type !== 'text') return
+
+  drawState.value = { kind: 'text', x: el.x, y: el.y, elId: el.id }
+  pendingText.value = el.text
+  nextTick(() => textInputRef.value?.focus())
+}
 </script>
 
 <template>
@@ -618,6 +660,7 @@ const textEditState = computed(() => {
     @pointerup="onCanvasPointerUp"
     @pointerleave="onCanvasPointerLeave"
     @pointercancel="onCanvasPointerCancel"
+    @dblclick="onCanvasDblClick"
     @wheel.prevent="onCanvasWheel"
   >
     <defs>
@@ -634,9 +677,10 @@ const textEditState = computed(() => {
     </defs>
 
     <g :transform="viewportTransform">
-      <!-- Committed elements -->
+      <!-- Committed elements (hide the one actively being edited) -->
       <DiagramElementView
         v-for="el in elements"
+        v-show="el.id !== editingElId || !editingElId"
         :key="el.id"
         :element="el"
         :zoom="store.viewport.zoom"
