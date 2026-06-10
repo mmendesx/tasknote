@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useDiagramsStore } from '@/stores/diagrams'
+import { exportSvg, exportPng } from './exportDiagram'
 
 const store = useDiagramsStore()
 
@@ -76,6 +77,34 @@ function zoomOut(): void {
 function resetZoom(): void {
   zoomAroundCenter(1)
 }
+
+// ── Export helpers ────────────────────────────────────────────────────────────
+
+function resolveCanvasColor(): string {
+  try {
+    return getComputedStyle(document.body).color || '#1f2937'
+  } catch {
+    return '#1f2937'
+  }
+}
+
+function resolveCanvasBg(): string {
+  try {
+    return getComputedStyle(document.body).backgroundColor || '#ffffff'
+  } catch {
+    return '#ffffff'
+  }
+}
+
+function handleExportSvg(): void {
+  exportSvg(store.elements, store.title ?? 'diagram', resolveCanvasColor())
+}
+
+async function handleExportPng(): Promise<void> {
+  await exportPng(store.elements, store.title ?? 'diagram', resolveCanvasColor(), resolveCanvasBg())
+}
+
+const hasElements = computed(() => store.elements.length > 0)
 </script>
 
 <template>
@@ -264,6 +293,39 @@ function resetZoom(): void {
         <svg viewBox="0 0 16 16" width="16" height="16" fill="none" aria-hidden="true">
           <path d="M13 7a5 5 0 1 0 0 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
           <path d="M13 3v4H9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+
+    </div>
+
+    <div class="diagram-toolbar__divider" aria-hidden="true" />
+
+    <!-- Export -->
+    <div class="diagram-toolbar__group" role="group" aria-label="Export">
+
+      <button
+        class="diagram-toolbar__btn focus-ring"
+        aria-label="Export SVG"
+        title="Export SVG"
+        :disabled="!hasElements"
+        @click="handleExportSvg"
+      >
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" aria-hidden="true">
+          <path d="M8 11V3M5 8l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M3 13h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </button>
+
+      <button
+        class="diagram-toolbar__btn focus-ring"
+        aria-label="Export PNG"
+        title="Export PNG"
+        :disabled="!hasElements"
+        @click="handleExportPng"
+      >
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" aria-hidden="true">
+          <rect x="2" y="2" width="12" height="10" rx="1" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M8 11V7M5 8.5l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </button>
 

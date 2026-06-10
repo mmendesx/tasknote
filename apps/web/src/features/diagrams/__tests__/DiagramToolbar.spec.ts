@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import DiagramToolbar from '../DiagramToolbar.vue'
 import { useDiagramsStore } from '@/stores/diagrams'
+import type { DiagramElement } from '@tasknote/shared'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -192,5 +193,76 @@ describe('DiagramToolbar', () => {
     // scroll must be unchanged (fallback path)
     expect(store.viewport.scrollX).toBe(5)
     expect(store.viewport.scrollY).toBe(7)
+  })
+
+  // ── Export buttons (ICT-17) ───────────────────────────────────────────────
+
+  it('export buttons are disabled when store has no elements', async () => {
+    const { wrapper } = mountToolbar()
+    // No elements — store.elements defaults to []
+    const svgBtn = wrapper.find('button[aria-label="Export SVG"]')
+    const pngBtn = wrapper.find('button[aria-label="Export PNG"]')
+
+    expect(svgBtn.exists()).toBe(true)
+    expect(pngBtn.exists()).toBe(true)
+    expect(svgBtn.attributes('disabled')).toBeDefined()
+    expect(pngBtn.attributes('disabled')).toBeDefined()
+  })
+
+  it('export buttons are enabled when store has elements', async () => {
+    const { wrapper, pinia } = mountToolbar()
+
+    const state = pinia.state.value['diagrams']
+    const el: DiagramElement = {
+      id: 'r1',
+      type: 'rectangle',
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      stroke: 'currentColor',
+      fill: null,
+      strokeWidth: 2,
+    }
+    state.elements = [el]
+    await wrapper.vm.$nextTick()
+
+    const svgBtn = wrapper.find('button[aria-label="Export SVG"]')
+    const pngBtn = wrapper.find('button[aria-label="Export PNG"]')
+
+    expect(svgBtn.attributes('disabled')).toBeUndefined()
+    expect(pngBtn.attributes('disabled')).toBeUndefined()
+  })
+
+  it('clicking Export SVG calls exportSvg with store elements and title', async () => {
+    const exportModule = await import('../exportDiagram')
+    const exportSvgSpy = vi.spyOn(exportModule, 'exportSvg').mockImplementation(() => {})
+
+    const { wrapper, pinia } = mountToolbar()
+
+    const state = pinia.state.value['diagrams']
+    const el: DiagramElement = {
+      id: 'r1',
+      type: 'rectangle',
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      stroke: '#333',
+      fill: null,
+      strokeWidth: 2,
+    }
+    state.elements = [el]
+    state.title = 'My Diagram'
+    await wrapper.vm.$nextTick()
+
+    const svgBtn = wrapper.find('button[aria-label="Export SVG"]')
+    await svgBtn.trigger('click')
+
+    expect(exportSvgSpy).toHaveBeenCalledOnce()
+    expect(exportSvgSpy.mock.calls[0]![0]).toEqual([el])
+    expect(exportSvgSpy.mock.calls[0]![1]).toBe('My Diagram')
+
+    exportSvgSpy.mockRestore()
   })
 })
