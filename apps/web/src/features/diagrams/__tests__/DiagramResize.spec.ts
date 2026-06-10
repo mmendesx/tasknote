@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import type { VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { useResize } from '../useResize'
 import DiagramCanvas from '../DiagramCanvas.vue'
@@ -417,6 +418,10 @@ describe('DiagramResize', () => {
 
 vi.mock('@/api')
 
+// ── Mount tracking ────────────────────────────────────────────────────────────
+
+const _mountedWrappers: VueWrapper[] = []
+
 async function mountCanvasWithRect() {
   const { diagrams: apiDiagrams } = await import('@/api')
   const rectEl: DiagramElement = {
@@ -448,6 +453,7 @@ async function mountCanvasWithRect() {
     props: { diagramId: 1 },
     attachTo: document.body,
   })
+  _mountedWrappers.push(wrapper)
 
   await flushPromises()
 
@@ -463,6 +469,10 @@ async function mountCanvasWithRect() {
 describe('DiagramResize pointer-capture integration', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+  })
+
+  afterEach(() => {
+    while (_mountedWrappers.length) _mountedWrappers.pop()!.unmount()
   })
 
   it('starting a handle drag captures the pointer on the SVG with the event pointerId', async () => {

@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeAll, beforeEach, afterAll, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import type { VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import DiagramCanvas from '../DiagramCanvas.vue'
 import type { DiagramElement } from '@tasknote/shared'
@@ -25,7 +26,16 @@ vi.mock('@/api', () => ({
 // jsdom does not implement setPointerCapture on SVGElement. Production code
 // guards with `if (target?.setPointerCapture)`, but we add an explicit no-op
 // here so the full captured-draw path runs without relying on that guard.
-SVGElement.prototype.setPointerCapture = () => {}
+let _originalSetPointerCapture: typeof SVGElement.prototype.setPointerCapture
+
+beforeAll(() => {
+  _originalSetPointerCapture = SVGElement.prototype.setPointerCapture
+  SVGElement.prototype.setPointerCapture = () => {}
+})
+
+afterAll(() => {
+  SVGElement.prototype.setPointerCapture = _originalSetPointerCapture
+})
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -58,6 +68,8 @@ const eNode = makeDomNodeWithId('E')
 
 // ── Mount helper ──────────────────────────────────────────────────────────────
 
+const _mountedWrappers: VueWrapper[] = []
+
 async function mountCanvasWithShapes(shapes: DiagramElement[]) {
   const pinia = createPinia()
   setActivePinia(pinia)
@@ -67,12 +79,12 @@ async function mountCanvasWithShapes(shapes: DiagramElement[]) {
     props: { diagramId: 1 },
     attachTo: document.body,
   })
+  _mountedWrappers.push(wrapper)
 
   await flushPromises()
 
   const storeState = pinia.state.value['diagrams']
   storeState.loading = false
-  storeState.error = null
   storeState.tool = 'arrow'
   // Seed store elements so resolveShapeIdAtPoint can look up shapes.
   // We mutate via pinia state to bypass any API round-trip.
@@ -101,6 +113,10 @@ describe('DiagramConnectors — arrow binding on draw (captured-pointer path)', 
 
   beforeEach(() => {
     setActivePinia(createPinia())
+  })
+
+  afterEach(() => {
+    while (_mountedWrappers.length) _mountedWrappers.pop()!.unmount()
   })
 
   // BDD: arrow start-over-R end-over-E → binds both, points = boundary edge points (ICT-12)

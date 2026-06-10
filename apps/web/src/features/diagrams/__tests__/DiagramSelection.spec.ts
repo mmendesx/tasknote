@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import type { VueWrapper } from '@vue/test-utils'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import DiagramCanvas from '../DiagramCanvas.vue'
@@ -21,6 +22,10 @@ vi.mock('@/api', () => ({
     updateDiagram: vi.fn().mockResolvedValue({}),
   },
 }))
+
+// ── Mount tracking ────────────────────────────────────────────────────────────
+
+const _mountedWrappers: VueWrapper[] = []
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -72,13 +77,13 @@ async function mountCanvasWithElements(elements: DiagramElement[]) {
     props: { diagramId: 1 },
     attachTo: document.body,
   })
+  _mountedWrappers.push(wrapper)
 
   await flushPromises()
 
   const storeState = pinia.state.value['diagrams']
   storeState.tool = 'select'
   storeState.loading = false
-  storeState.error = null
   await wrapper.vm.$nextTick()
 
   return { wrapper, pinia, storeState }
@@ -89,6 +94,10 @@ async function mountCanvasWithElements(elements: DiagramElement[]) {
 describe('DiagramSelection', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+  })
+
+  afterEach(() => {
+    while (_mountedWrappers.length) _mountedWrappers.pop()!.unmount()
   })
 
   it('clicking an element selects it and renders a selection outline', async () => {
@@ -214,6 +223,10 @@ describe('DiagramSelection', () => {
 describe('DiagramSelection — multi-select (ICT-11)', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+  })
+
+  afterEach(() => {
+    while (_mountedWrappers.length) _mountedWrappers.pop()!.unmount()
   })
 
   it('shift-click on a second element adds it to the selection', async () => {
@@ -378,6 +391,10 @@ describe('DiagramSelection — multi-select (ICT-11)', () => {
 describe('DiagramSelection — gesture-scoped history (ICT-1)', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+  })
+
+  afterEach(() => {
+    while (_mountedWrappers.length) _mountedWrappers.pop()!.unmount()
   })
 
   // Scenario: click-select does not destroy redo

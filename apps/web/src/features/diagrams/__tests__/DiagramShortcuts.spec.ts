@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import type { VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import DiagramCanvas from '../DiagramCanvas.vue'
 import { useDiagramsStore } from '@/stores/diagrams'
@@ -20,6 +21,10 @@ vi.mock('@/api', () => ({
     updateDiagram: vi.fn().mockResolvedValue({}),
   },
 }))
+
+// ── Mount tracking ────────────────────────────────────────────────────────────
+
+const _mountedWrappers: VueWrapper[] = []
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -46,6 +51,7 @@ async function mountCanvas(diagramId = 1) {
     props: { diagramId },
     attachTo: document.body,
   })
+  _mountedWrappers.push(wrapper)
 
   await flushPromises()
   return { wrapper, pinia, store: useDiagramsStore(pinia) }
@@ -65,6 +71,7 @@ describe('DiagramShortcuts', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+    while (_mountedWrappers.length) _mountedWrappers.pop()!.unmount()
   })
 
   // SCN: pressing R activates the rectangle tool

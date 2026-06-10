@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import type { VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import DiagramCanvas from '../DiagramCanvas.vue'
 import { useDiagramsStore } from '@/stores/diagrams'
@@ -22,6 +23,10 @@ vi.mock('@/api', () => ({
   },
 }))
 
+// ── Mount tracking ────────────────────────────────────────────────────────────
+
+const _mountedWrappers: VueWrapper[] = []
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function makeArrowElement() {
@@ -43,6 +48,7 @@ async function mountCanvas(diagramId = 1) {
     props: { diagramId },
     attachTo: document.body,
   })
+  _mountedWrappers.push(wrapper)
 
   await flushPromises()
   return { wrapper, pinia }
@@ -53,6 +59,10 @@ async function mountCanvas(diagramId = 1) {
 describe('DiagramCanvas', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+  })
+
+  afterEach(() => {
+    while (_mountedWrappers.length) _mountedWrappers.pop()!.unmount()
   })
 
   // SCN-1: pan updates the viewport
@@ -423,6 +433,7 @@ describe('DiagramCanvas', () => {
       props: { diagramId: 1 },
       attachTo: document.body,
     })
+    _mountedWrappers.push(wrapper)
     await flushPromises()
 
     const storeState = pinia.state.value['diagrams']
@@ -515,6 +526,7 @@ describe('DiagramCanvas', () => {
       props: { diagramId: 1 },
       attachTo: document.body,
     })
+    _mountedWrappers.push(wrapper)
     await flushPromises()
 
     const storeState = pinia.state.value['diagrams']
@@ -610,6 +622,7 @@ describe('DiagramCanvas', () => {
       props: { diagramId: 1 },
       attachTo: document.body,
     })
+    _mountedWrappers.push(wrapper)
     await flushPromises()
 
     const state = pinia.state.value['diagrams']
