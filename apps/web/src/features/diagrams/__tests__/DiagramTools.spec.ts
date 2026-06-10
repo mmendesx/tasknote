@@ -5,6 +5,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import DiagramCanvas from '../DiagramCanvas.vue'
 import { useDiagramsStore } from '@/stores/diagrams'
 import { rdp } from '../useDrawTools'
+import type { DiagramElement } from '@tasknote/shared'
 
 // ── API mock ──────────────────────────────────────────────────────────────────
 
@@ -358,7 +359,7 @@ describe('DiagramTools', () => {
 
     const elements = pinia.state.value['diagrams'].elements
     // Find the newly committed line (not the dummy rect)
-    const line = elements.find((e) => e.type === 'line')
+    const line = elements.find((e: DiagramElement) => e.type === 'line')
     expect(line).toBeDefined()
     expect((line as any).strokeWidth).toBe(4)
   })
