@@ -13,12 +13,15 @@ const theme = ref<Theme>(readStoredTheme())
 
 document.documentElement.dataset.theme = theme.value
 
-export function useTheme() {
-  watch(theme, (next) => {
-    document.documentElement.dataset.theme = next
-    localStorage.setItem(STORAGE_KEY, next)
-  })
+// Module-scoped watcher: one for the whole app. Registering it inside
+// useTheme() created one (component-disposed) watcher per caller, each doing
+// identical DOM/localStorage writes.
+watch(theme, (next) => {
+  document.documentElement.dataset.theme = next
+  localStorage.setItem(STORAGE_KEY, next)
+})
 
+export function useTheme() {
   function setTheme(next: Theme) {
     theme.value = next
   }
