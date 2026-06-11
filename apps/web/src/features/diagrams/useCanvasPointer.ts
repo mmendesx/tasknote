@@ -199,8 +199,10 @@ export function useCanvasPointer(
       pendingText.value = ''
       nextTick(() => textInputRef.value?.focus())
     } else if (tool === 'pen') {
-      drawState.value = { kind: 'pen', points: [[pt.x, pt.y]] }
+      // previewPen and drawState share ONE reactive array: per-move appends
+      // mutate it in place (deep-ref reactivity), so no per-frame copying.
       previewPen.value = [[pt.x, pt.y]]
+      drawState.value = { kind: 'pen', points: previewPen.value }
     }
 
     // Text is click-to-place (no drag): capturing the pointer to the SVG steals
@@ -311,8 +313,9 @@ export function useCanvasPointer(
       const pt = getScenePt(event)
       const lastPt = state.points[state.points.length - 1]
       if (Math.hypot(pt.x - lastPt[0], pt.y - lastPt[1]) < 2) return
+      // In-place append on the array shared with previewPen — deep-ref
+      // reactivity propagates the mutation without copying per move.
       state.points.push([pt.x, pt.y])
-      previewPen.value = [...state.points]
     }
   }
 
