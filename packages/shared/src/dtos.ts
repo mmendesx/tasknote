@@ -265,7 +265,12 @@ export const CreateDiagramDtoSchema = z.object({
   scene_json: DiagramSceneSchema.optional(),
 });
 
-export const UpdateDiagramDtoSchema = CreateDiagramDtoSchema.partial();
+// `viewport` is a delta-save shortcut: pan/zoom-only changes PATCH just the
+// viewport (~80 bytes) instead of the full scene_json. Ignored when scene_json
+// is also present (the full scene already carries its own viewport).
+export const UpdateDiagramDtoSchema = CreateDiagramDtoSchema.partial().extend({
+  viewport: DiagramViewportSchema.optional(),
+});
 
 export type DiagramViewport = z.infer<typeof DiagramViewportSchema>;
 export type DiagramElement = z.infer<typeof DiagramElementSchema>;

@@ -70,6 +70,13 @@ export class DiagramsService {
 
     if (dto.scene_json !== undefined) {
       diagram.sceneJson = dto.scene_json;
+    } else if (dto.viewport !== undefined) {
+      // Viewport-only delta save: merge into the stored scene so pan/zoom
+      // persistence doesn't require re-uploading every element.
+      diagram.sceneJson = {
+        ...diagram.sceneJson,
+        appState: { ...diagram.sceneJson.appState, viewport: dto.viewport },
+      };
     }
 
     const updated = await this.diagramsRepo.save(diagram);

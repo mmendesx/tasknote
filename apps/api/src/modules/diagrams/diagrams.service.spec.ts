@@ -201,6 +201,32 @@ describe('DiagramsService', () => {
         service.updateDiagram(9999, { title: 'Does not matter' }),
       ).rejects.toThrow(NotFoundException);
     });
+
+    it('viewport-only update merges into the stored scene without touching elements', async () => {
+      const diagram = await service.createDiagram({ title: 'Pan Me', scene_json: SAMPLE_SCENE });
+      const updated = await service.updateDiagram(diagram.id, {
+        viewport: { scrollX: 120, scrollY: -40, zoom: 2 },
+      });
+      expect(updated.sceneJson.appState.viewport).toEqual({ scrollX: 120, scrollY: -40, zoom: 2 });
+      expect(updated.sceneJson.elements).toHaveLength(1);
+      expect(updated.sceneJson.elements[0]!.id).toBe('rect-1');
+    });
+
+    it('viewport is ignored when scene_json is also present (scene carries its own viewport)', async () => {
+      const diagram = await service.createDiagram({ title: 'Both', scene_json: EMPTY_SCENE });
+      const updated = await service.updateDiagram(diagram.id, {
+        scene_json: SAMPLE_SCENE,
+        viewport: { scrollX: 999, scrollY: 999, zoom: 9 },
+      });
+      expect(updated.sceneJson.appState.viewport).toEqual(SAMPLE_SCENE.appState.viewport);
+    });
+
+    it('UpdateDiagramDtoSchema accepts a viewport-only payload', () => {
+      const result = UpdateDiagramDtoSchema.safeParse({
+        viewport: { scrollX: 1, scrollY: 2, zoom: 0.5 },
+      });
+      expect(result.success).toBe(true);
+    });
   });
 
   describe('DiagramSceneSchema — rejects scenes that exceed size caps', () => {

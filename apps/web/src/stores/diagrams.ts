@@ -76,6 +76,13 @@ export const useDiagramsStore = defineStore('diagrams', () => {
   // back. Guarantees "no stale write" without relying on incidental ordering.
   let epoch = 0
 
+  // Scene-change generation counters (delta saves). sceneGen bumps on every
+  // scene-mutating scheduleSave; savedSceneGen records the last generation
+  // persisted. Equal ⇒ only the viewport can be stale ⇒ save() sends the
+  // ~80-byte viewport-only PATCH instead of the full element array.
+  let sceneGen = 0
+  let savedSceneGen = 0
+
   // ── List actions ────────────────────────────────────────────────────────────
 
   // Abort the previous in-flight read when a new one starts: a superseded
@@ -176,6 +183,8 @@ export const useDiagramsStore = defineStore('diagrams', () => {
       elements.value = diagram.scene_json.elements
       viewport.value = diagram.scene_json.appState.viewport
       dirty.value = false
+      sceneGen = 0
+      savedSceneGen = 0
       saveError.value = null
       history.clear()
     } catch (err) {
@@ -194,20 +203,33 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     if (id.value === null) return
 
     const myEpoch = epoch
+    // Generation snapshot BEFORE the await: a scene edit landing mid-save
+    // bumps sceneGen past this snapshot, so completion can't mark it saved
+    // and the follow-up save still sends the full scene.
+    const genAtStart = sceneGen
+    const savingScene = genAtStart !== savedSceneGen
     saving.value = true
     try {
-      const updated = await api.diagrams.updateDiagram(id.value, {
-        title: title.value,
-        scene_json: {
-          version: 1,
-          elements: elements.value,
-          appState: { viewport: viewport.value },
-        },
-      })
+      // Delta save: pan/zoom-only changes send just the viewport (~80 bytes)
+      // instead of serializing and uploading the entire element array.
+      const updated = await api.diagrams.updateDiagram(
+        id.value,
+        savingScene
+          ? {
+              title: title.value,
+              scene_json: {
+                version: 1,
+                elements: elements.value,
+                appState: { viewport: viewport.value },
+              },
+            }
+          : { viewport: viewport.value },
+      )
       // The open diagram changed (switched/deleted) while this save was in
       // flight — discard its result so it cannot write back stale state.
       if (myEpoch !== epoch) return
       dirty.value = false
+      savedSceneGen = genAtStart
       saveError.value = null
       cancelRetry()
       // Patch list if the diagram is visible there
@@ -256,6 +278,7 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     }
     cancelRetry()
     dirty.value = false
+    savedSceneGen = sceneGen
   }
 
   async function flushSave(): Promise<void> {
@@ -268,8 +291,9 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     }
   }
 
-  function scheduleSave(): void {
+  function scheduleSave(opts?: { sceneChanged?: boolean }): void {
     dirty.value = true
+    if (opts?.sceneChanged !== false) sceneGen += 1
 
     if (debounceTimer !== null) {
       clearTimeout(debounceTimer)
@@ -622,7 +646,8 @@ export const useDiagramsStore = defineStore('diagrams', () => {
 
   function setViewport(v: DiagramViewport): void {
     viewport.value = v
-    scheduleSave()
+    // Pan/zoom never changes elements — let save() take the viewport-only path.
+    scheduleSave({ sceneChanged: false })
   }
 
   function setCanvasSize(width: number, height: number): void {

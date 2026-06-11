@@ -134,6 +134,93 @@ describe('useDiagramsStore — debounced autosave', () => {
   })
 })
 
+describe('useDiagramsStore — viewport delta saves', () => {
+  let store: ReturnType<typeof useDiagramsStore>
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    store = useDiagramsStore()
+    vi.resetAllMocks()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('pan/zoom-only changes PATCH just the viewport, not the scene', async () => {
+    store.id = 1
+    vi.mocked(api.diagrams.updateDiagram).mockResolvedValue(makeDiagram(1, 'Test'))
+
+    store.setViewport({ scrollX: 40, scrollY: -10, zoom: 1.5 })
+    vi.advanceTimersByTime(700)
+    await vi.runAllTimersAsync()
+
+    expect(api.diagrams.updateDiagram).toHaveBeenCalledTimes(1)
+    expect(api.diagrams.updateDiagram).toHaveBeenCalledWith(1, {
+      viewport: { scrollX: 40, scrollY: -10, zoom: 1.5 },
+    })
+  })
+
+  it('a scene edit sends the full scene_json even when the viewport also changed', async () => {
+    store.id = 1
+    vi.mocked(api.diagrams.updateDiagram).mockResolvedValue(makeDiagram(1, 'Test'))
+
+    store.setViewport({ scrollX: 40, scrollY: 0, zoom: 1 })
+    store.addElement(makeRectangle('el-1'))
+    vi.advanceTimersByTime(700)
+    await vi.runAllTimersAsync()
+
+    expect(api.diagrams.updateDiagram).toHaveBeenCalledTimes(1)
+    const payload = vi.mocked(api.diagrams.updateDiagram).mock.calls[0]![1]
+    expect(payload.scene_json).toBeDefined()
+    expect(payload.scene_json!.elements.map((e) => e.id)).toEqual(['el-1'])
+    expect(payload.scene_json!.appState.viewport.scrollX).toBe(40)
+  })
+
+  it('after a successful scene save, a later pan saves viewport-only again', async () => {
+    store.id = 1
+    vi.mocked(api.diagrams.updateDiagram).mockResolvedValue(makeDiagram(1, 'Test'))
+
+    store.addElement(makeRectangle('el-1'))
+    vi.advanceTimersByTime(700)
+    await vi.runAllTimersAsync()
+
+    store.setViewport({ scrollX: 99, scrollY: 0, zoom: 1 })
+    vi.advanceTimersByTime(700)
+    await vi.runAllTimersAsync()
+
+    expect(api.diagrams.updateDiagram).toHaveBeenCalledTimes(2)
+    const second = vi.mocked(api.diagrams.updateDiagram).mock.calls[1]![1]
+    expect(second.scene_json).toBeUndefined()
+    expect(second.viewport).toEqual({ scrollX: 99, scrollY: 0, zoom: 1 })
+  })
+
+  it('a scene edit landing mid-save is not marked clean by that save', async () => {
+    store.id = 1
+    let resolveFirst!: (d: Diagram) => void
+    vi.mocked(api.diagrams.updateDiagram)
+      .mockImplementationOnce(() => new Promise<Diagram>((res) => { resolveFirst = res }))
+      .mockResolvedValue(makeDiagram(1, 'Test'))
+
+    // First scene edit → save fires and hangs in flight
+    store.addElement(makeRectangle('el-1'))
+    vi.advanceTimersByTime(700)
+
+    // Scene edit lands while the first save is in flight
+    store.addElement(makeRectangle('el-2'))
+    resolveFirst(makeDiagram(1, 'Test'))
+    await vi.advanceTimersByTimeAsync(700)
+
+    // The follow-up save must carry the full scene (el-2 included), not a
+    // viewport-only delta.
+    expect(api.diagrams.updateDiagram).toHaveBeenCalledTimes(2)
+    const second = vi.mocked(api.diagrams.updateDiagram).mock.calls[1]![1]
+    expect(second.scene_json).toBeDefined()
+    expect(second.scene_json!.elements.map((e) => e.id)).toEqual(['el-1', 'el-2'])
+  })
+})
+
 describe('useDiagramsStore — timer lifecycle (R2, R3)', () => {
   let store: ReturnType<typeof useDiagramsStore>
 
