@@ -2,7 +2,7 @@ import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import * as api from '@/api'
 import type { Diagram, DiagramElement, DiagramViewport } from '@tasknote/shared'
-import { detachBindingsTo, elementCenter, findElementById, isBindableShape, boundEndpoint } from '../features/diagrams/connectors'
+import { detachBindingsTo, elementCenter, isBindableShape, boundEndpoint } from '../features/diagrams/connectors'
 import { useHistory } from '../features/diagrams/useHistory'
 
 const DEBOUNCE_MS = 600
@@ -281,30 +281,37 @@ export const useDiagramsStore = defineStore('diagrams', () => {
   }
 
   /**
-   * Recompute connector endpoints for all arrows/lines bound to any shape in
-   * `movedShapeIds`. ONE map pass over elements handles every affected connector.
+   * Re-anchor bound connectors against moved shapes, mutating `arr` IN PLACE.
+   * Both-ends-bound semantics (FR-B5/FR-B3) preserved: when both ends bind to
+   * different shapes, both endpoints re-anchor along the center-to-center ray.
    *
-   * Per-connector logic is unchanged from the single-shape version: for each
-   * connector, we look up which of its bound ends belong to a moved shape and
-   * recompute those boundary points. Both-ends-bound semantics (FR-B5/FR-B3) are
-   * preserved exactly — when both ends are bound to different shapes, both
-   * endpoints are re-anchored along the new center-to-center ray.
+   * Hot-path helper: callers own a fresh array copy and assign it to
+   * `elements.value` themselves, so a gesture costs ONE array copy total
+   * (updateElements' map) instead of two. Lookups go through a prebuilt
+   * id→element Map instead of repeated O(n) findElementById scans.
    */
-  function recomputeBoundConnectorsForSet(movedShapeIds: Set<string>): void {
+  function reanchorBoundConnectorsInPlace(
+    arr: DiagramElement[],
+    movedShapeIds: Set<string>,
+  ): void {
     if (movedShapeIds.size === 0) return
 
-    elements.value = elements.value.map((el) => {
-      if (el.type !== 'arrow' && el.type !== 'line') return el
+    const byId = new Map<string, DiagramElement>()
+    for (const el of arr) byId.set(el.id, el)
+
+    for (let i = 0; i < arr.length; i++) {
+      const el = arr[i]!
+      if (el.type !== 'arrow' && el.type !== 'line') continue
 
       const startShapeId = el.startBinding?.elementId
       const endShapeId = el.endBinding?.elementId
       const matchesStart = startShapeId != null && movedShapeIds.has(startShapeId)
       const matchesEnd = endShapeId != null && movedShapeIds.has(endShapeId)
-      if (!matchesStart && !matchesEnd) return el
+      if (!matchesStart && !matchesEnd) continue
 
       // Resolve the concrete moved shape for each bound end.
-      const startShape = matchesStart ? findElementById(elements.value, startShapeId!) : undefined
-      const endShape = matchesEnd ? findElementById(elements.value, endShapeId!) : undefined
+      const startShape = matchesStart ? byId.get(startShapeId!) : undefined
+      const endShape = matchesEnd ? byId.get(endShapeId!) : undefined
 
       let start: [number, number]
       let end: [number, number]
@@ -329,7 +336,7 @@ export const useDiagramsStore = defineStore('diagrams', () => {
         // Start is bound to a moved shape; end is either free or bound to an
         // unmoved shape.
         const otherEndId = el.endBinding?.elementId
-        const otherEl = otherEndId ? findElementById(elements.value, otherEndId) : undefined
+        const otherEl = otherEndId ? byId.get(otherEndId) : undefined
         const from = otherEl ? elementCenter(otherEl) : { x: el.points[1][0], y: el.points[1][1] }
         const pt = boundEndpoint(startShape, from)
         start = [pt.x, pt.y]
@@ -345,7 +352,7 @@ export const useDiagramsStore = defineStore('diagrams', () => {
         // End is bound to a moved shape; start is either free or bound to an
         // unmoved shape.
         const otherStartId = el.startBinding?.elementId
-        const otherEl = otherStartId ? findElementById(elements.value, otherStartId) : undefined
+        const otherEl = otherStartId ? byId.get(otherStartId) : undefined
         const from = otherEl ? elementCenter(otherEl) : { x: el.points[0][0], y: el.points[0][1] }
         const pt = boundEndpoint(endShape, from)
         end = [pt.x, pt.y]
@@ -358,11 +365,22 @@ export const useDiagramsStore = defineStore('diagrams', () => {
           start = el.points[0]
         }
       } else {
-        return el
+        continue
       }
 
-      return { ...el, points: [start, end] }
-    })
+      arr[i] = { ...el, points: [start, end] } as DiagramElement
+    }
+  }
+
+  /**
+   * Standalone recompute — copies the array once, re-anchors in place, assigns.
+   * Hot paths (updateElements) skip this wrapper and re-anchor their own copy.
+   */
+  function recomputeBoundConnectorsForSet(movedShapeIds: Set<string>): void {
+    if (movedShapeIds.size === 0) return
+    const next = [...elements.value]
+    reanchorBoundConnectorsInPlace(next, movedShapeIds)
+    elements.value = next
   }
 
   /** Thin single-shape wrapper — preserves the existing call signature. */
@@ -393,7 +411,7 @@ export const useDiagramsStore = defineStore('diagrams', () => {
 
     const bindableShapesMoved = new Set<string>()
 
-    elements.value = elements.value.map((el) => {
+    const next = elements.value.map((el) => {
       const patch = patchMap.get(el.id)
       if (!patch) return el
 
@@ -418,8 +436,10 @@ export const useDiagramsStore = defineStore('diagrams', () => {
       return updated
     })
 
-    // ONE recompute pass for all moved bindable shapes.
-    recomputeBoundConnectorsForSet(bindableShapesMoved)
+    // Re-anchor connectors on the same fresh copy, then assign ONCE — a drag
+    // frame costs one array copy and one reactive assignment, not two.
+    reanchorBoundConnectorsInPlace(next, bindableShapesMoved)
+    elements.value = next
 
     scheduleSave()
   }
