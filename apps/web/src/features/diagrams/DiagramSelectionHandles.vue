@@ -88,6 +88,7 @@ function isPenElement(el: DiagramElement | null): boolean {
             :r="HIT_HALF_SCREEN / zoom"
             fill="transparent"
             stroke="none"
+            pointer-events="all"
             class="diagram-handle-hit"
           />
           <!-- Visible circle — 8 screen px -->
@@ -127,7 +128,7 @@ function isPenElement(el: DiagramElement | null): boolean {
               fill="transparent"
               stroke="none"
               rx="1"
-              pointer-events="none"
+              pointer-events="all"
               class="diagram-handle-hit"
             />
             <!-- Visible rect — 8 screen px -->
