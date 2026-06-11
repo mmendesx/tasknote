@@ -221,6 +221,16 @@ function onTextKeyDown(event: KeyboardEvent): void {
   }
 }
 
+// Prevent the browser from moving focus away from the text input when the user
+// clicks on the SVG canvas while a text edit session is active. Mousedown (not
+// pointerdown) is what triggers the browser's focus-management; preventing it
+// keeps the foreignObject <input> focused so keystrokes reach it.
+function onCanvasMouseDown(event: MouseEvent): void {
+  if (drawState.value.kind === 'text') {
+    event.preventDefault()
+  }
+}
+
 // ── Double-click to edit existing text elements ───────────────────────────────
 
 function onCanvasDblClick(event: MouseEvent): void {
@@ -269,6 +279,7 @@ function onCanvasDblClick(event: MouseEvent): void {
     role="img"
     :aria-label="store.title || 'Diagram canvas'"
     :style="{ cursor: canvasCursor }"
+    @mousedown="onCanvasMouseDown"
     @pointerdown="onCanvasPointerDown"
     @pointermove="onCanvasPointerMove"
     @pointerup="onCanvasPointerUp"
