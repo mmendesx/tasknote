@@ -8,6 +8,7 @@ import NoteList from '@/features/notes/NoteList.vue'
 import DiagramList from '@/features/diagrams/DiagramList.vue'
 import { useNavigationState } from '@/composables/useNavigationState'
 import { useDiagramsStore } from '@/stores/diagrams'
+import { BrandMark } from '@tasknote/ui'
 
 const { theme, toggleTheme } = useTheme()
 const route = useRoute()
@@ -251,37 +252,13 @@ const routeLabel = computed(() => {
     >
       
       <div class="sidebar__logo">
-        <RouterLink to="/" class="logo-link focus-ring" @click="closeDrawer">
-          
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 32 32"
-            fill="none"
-            aria-hidden="true"
-            class="logo-mark"
-          >
-            <path
-              d="M5 3H20L27 10V29H5Z"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linejoin="round"
-              stroke-linecap="round"
-            />
-            <path
-              d="M20 3V10H27"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linejoin="round"
-              stroke-linecap="round"
-            />
-            <path
-              d="M9 17L13 21L22 11"
-              stroke="var(--color-accent)"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
+        <RouterLink
+          to="/"
+          class="logo-link focus-ring"
+          aria-label="tasknote — home"
+          @click="closeDrawer"
+        >
+          <BrandMark class="logo-mark" />
           <span class="logo-wordmark">tasknote</span>
         </RouterLink>
         <button

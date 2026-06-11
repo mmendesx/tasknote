@@ -1,12 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" aria-hidden="true">
   <!--
-    TaskNote mark: a checkmark whose descending tail folds into a note corner.
-    Single weight, geometric, readable at 16px. Uses currentColor stroke.
+    TaskNote mark — canonical stroke form (same geometry as BrandMark.vue).
+    Standalone asset: currentColor outline; check hardcoded lime so the
+    accent survives <img>/URL usage where CSS vars don't resolve.
   -->
 
-  <!-- Note body: rectangle with folded top-right corner -->
+  <!-- Note sheet with folded corner -->
   <path
-    d="M6 4 H22 L26 8 V28 H6 Z"
+    d="M6 3 H21 L27 9 V29 H6 Z"
     stroke="currentColor"
     stroke-width="2"
     stroke-linejoin="round"
@@ -14,9 +15,9 @@
     fill="none"
   />
 
-  <!-- Folded corner fold lines -->
+  <!-- Fold crease -->
   <path
-    d="M22 4 L22 8 H26"
+    d="M21 3 V9 H27"
     stroke="currentColor"
     stroke-width="2"
     stroke-linejoin="round"
@@ -24,12 +25,11 @@
     fill="none"
   />
 
-  <!-- Checkmark: starts at left of note, sweeps through mid and up-right,
-       tail anchors near the fold corner -->
+  <!-- Checkmark — brand accent -->
   <path
-    d="M10 17 L14 21 L22 10"
-    stroke="currentColor"
-    stroke-width="2"
+    d="M11 17 L15 21 L23 12"
+    stroke="#A3E635"
+    stroke-width="2.5"
     stroke-linecap="round"
     stroke-linejoin="round"
     fill="none"

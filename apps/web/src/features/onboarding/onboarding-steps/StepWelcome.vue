@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { Button } from '@tasknote/ui'
+import { BrandMark, Button } from '@tasknote/ui'
 import { useAnime } from '@/composables/useAnime'
 
 const emit = defineEmits<{
@@ -26,36 +26,7 @@ onMounted(() => {
   <div ref="containerRef" class="step-welcome">
     
     <div class="step-welcome__logo" aria-hidden="true">
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 32 32"
-        fill="none"
-        width="56"
-        height="56"
-        class="step-welcome__logo-svg"
-      >
-        <path
-          d="M6 4 H22 L26 8 V28 H6 Z"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linejoin="round"
-          stroke-linecap="round"
-        />
-        <path
-          d="M22 4 L22 8 H26"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linejoin="round"
-          stroke-linecap="round"
-        />
-        <path
-          d="M10 17 L14 21 L22 10"
-          stroke="var(--color-accent)"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
-      </svg>
+      <BrandMark :size="56" />
     </div>
 
     <p class="step-welcome__tagline">Your work, your way — local.</p>
@@ -78,10 +49,6 @@ onMounted(() => {
 
 .step-welcome__logo {
   color: var(--color-text-primary);
-}
-
-.step-welcome__logo-svg {
-  display: block;
 }
 
 .step-welcome__tagline {

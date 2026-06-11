@@ -1,34 +1,26 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" aria-hidden="true">
   <!--
-    TaskNote favicon: simplified mark, optimised for 16x16.
-    Note outline + checkmark, single weight, currentColor.
+    TaskNote app icon — "tile" form of the brand mark.
+    Solid lime tile with folded note corner + ink checkmark.
+    Self-contained colors: readable on light and dark browser chrome.
+    Inline "stroke" form lives in @tasknote/ui BrandMark.vue — same
+    geometry family; update both together if the mark changes.
   -->
 
-  <!-- Note body with folded corner -->
+  <!-- Tile with cut top-right corner (note fold) -->
   <path
-    d="M2 1 H11 L14 4 V15 H2 Z"
-    stroke="currentColor"
-    stroke-width="1.5"
-    stroke-linejoin="round"
-    stroke-linecap="round"
-    fill="none"
+    d="M9 1 H20 L31 12 V23 A8 8 0 0 1 23 31 H9 A8 8 0 0 1 1 23 V9 A8 8 0 0 1 9 1 Z"
+    fill="#A3E635"
   />
 
-  <!-- Fold crease -->
-  <path
-    d="M11 1 L11 4 H14"
-    stroke="currentColor"
-    stroke-width="1.5"
-    stroke-linejoin="round"
-    stroke-linecap="round"
-    fill="none"
-  />
+  <!-- Fold flap — darker lime triangle -->
+  <path d="M20 1 L31 12 H20 Z" fill="#4D7C0F" />
 
-  <!-- Checkmark -->
+  <!-- Checkmark — ink -->
   <path
-    d="M4.5 8.5 L6.5 10.5 L11 6"
-    stroke="currentColor"
-    stroke-width="1.5"
+    d="M9.5 17 L14.5 22 L23 11.5"
+    stroke="#0B0C0E"
+    stroke-width="3.5"
     stroke-linecap="round"
     stroke-linejoin="round"
     fill="none"

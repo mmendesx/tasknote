@@ -1,6 +1,7 @@
 // @tasknote/ui — Vue component primitives and design tokens
 
 // ─── Components ───────────────────────────────────────────────────
+export { default as BrandMark }    from './components/BrandMark.vue'
 export { default as Button }       from './components/Button.vue'
 export { default as IconButton }   from './components/IconButton.vue'
 export { default as Input }        from './components/Input.vue'
