@@ -34,9 +34,13 @@ function closeDrawer() {
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
+// Cached on drawer open: querying per keydown rescans the sidebar DOM on
+// every keystroke for no reason — the focusable set only changes when the
+// drawer's content does, and the drawer is static while open.
+let drawerFocusable: HTMLElement[] = []
+
 function trapFocus(event: KeyboardEvent) {
-  if (!sidebarRef.value) return
-  const focusable = Array.from(sidebarRef.value.querySelectorAll<HTMLElement>(FOCUSABLE))
+  const focusable = drawerFocusable
   if (focusable.length === 0) return
   const first = focusable[0]
   const last = focusable[focusable.length - 1]
@@ -63,11 +67,13 @@ watch(
   () => isDrawerOpen.value && isMobile.value,
   (active) => {
     if (active) {
-      
-      const first = sidebarRef.value?.querySelector<HTMLElement>(FOCUSABLE)
-      first?.focus()
+      drawerFocusable = sidebarRef.value
+        ? Array.from(sidebarRef.value.querySelectorAll<HTMLElement>(FOCUSABLE))
+        : []
+      drawerFocusable[0]?.focus()
       window.addEventListener('keydown', trapFocus)
     } else {
+      drawerFocusable = []
       window.removeEventListener('keydown', trapFocus)
     }
   },
@@ -259,7 +265,7 @@ const routeLabel = computed(() => {
           @click="closeDrawer"
         >
           <BrandMark class="logo-mark" />
-          <span class="logo-wordmark">tasknote</span>
+          <span class="logo-wordmark">TaskNote</span>
         </RouterLink>
         <button
           class="sidebar__collapse-btn focus-ring"
