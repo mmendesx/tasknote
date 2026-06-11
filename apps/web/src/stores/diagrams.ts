@@ -78,15 +78,27 @@ export const useDiagramsStore = defineStore('diagrams', () => {
 
   // ── List actions ────────────────────────────────────────────────────────────
 
+  // Abort the previous in-flight read when a new one starts: a superseded
+  // response must neither write state nor clobber the newer call's
+  // loading/error flags (identity check in finally).
+  let listAbort: AbortController | null = null
+
   async function loadList(): Promise<void> {
+    listAbort?.abort()
+    const ctrl = new AbortController()
+    listAbort = ctrl
     loading.value = true
     listError.value = null
     try {
-      list.value = await api.diagrams.listDiagrams()
+      list.value = await api.diagrams.listDiagrams(ctrl.signal)
     } catch (err) {
+      if (ctrl.signal.aborted) return
       listError.value = err instanceof Error ? err.message : 'Failed to load diagrams'
     } finally {
-      loading.value = false
+      if (listAbort === ctrl) {
+        loading.value = false
+        listAbort = null
+      }
     }
   }
 
@@ -142,7 +154,12 @@ export const useDiagramsStore = defineStore('diagrams', () => {
 
   // ── Editor actions ──────────────────────────────────────────────────────────
 
+  let loadDiagramAbort: AbortController | null = null
+
   async function loadDiagram(diagramId: number): Promise<void> {
+    loadDiagramAbort?.abort()
+    const ctrl = new AbortController()
+    loadDiagramAbort = ctrl
     try {
       await flushSave()
     } catch {
@@ -152,7 +169,7 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     loading.value = true
     loadError.value = null
     try {
-      const diagram = await api.diagrams.getDiagram(diagramId)
+      const diagram = await api.diagrams.getDiagram(diagramId, ctrl.signal)
       epoch += 1
       id.value = diagram.id
       title.value = diagram.title
@@ -162,10 +179,14 @@ export const useDiagramsStore = defineStore('diagrams', () => {
       saveError.value = null
       history.clear()
     } catch (err) {
+      if (ctrl.signal.aborted) return
       loadError.value = err instanceof Error ? err.message : 'Failed to load diagram'
       elements.value = []
     } finally {
-      loading.value = false
+      if (loadDiagramAbort === ctrl) {
+        loading.value = false
+        loadDiagramAbort = null
+      }
     }
   }
 

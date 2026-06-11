@@ -17,15 +17,24 @@ export const useNotesStore = defineStore('notes', () => {
   // Alias so existing consumers of `list` continue to work (maps to globalList)
   const list = globalList
 
+  // Abort the previous in-flight load for the SAME scope when a new one
+  // starts. Keyed per scope (global vs per-task) because a global load and a
+  // per-task load are independent and may legitimately run concurrently.
+  const loadAborts = new Map<number | 'global', AbortController>()
+
   /**
    * load() — no arg: populates globalList only.
    * load(taskId) — populates byTask.get(taskId) only, never touches globalList.
    */
   async function load(taskId?: number): Promise<void> {
+    const scope = taskId ?? 'global'
+    loadAborts.get(scope)?.abort()
+    const ctrl = new AbortController()
+    loadAborts.set(scope, ctrl)
     loading.value = true
     error.value = null
     try {
-      const notes = await api.notes.listNotes(taskId)
+      const notes = await api.notes.listNotes(taskId, ctrl.signal)
       if (taskId === undefined) {
         globalList.value = notes
       } else {
@@ -33,9 +42,13 @@ export const useNotesStore = defineStore('notes', () => {
         byTask.value.set(taskId, notes)
       }
     } catch (err) {
+      if (ctrl.signal.aborted) return
       error.value = err instanceof Error ? err.message : 'Failed to load notes'
     } finally {
-      loading.value = false
+      if (loadAborts.get(scope) === ctrl) {
+        loading.value = false
+        loadAborts.delete(scope)
+      }
     }
   }
 

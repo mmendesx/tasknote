@@ -15,15 +15,26 @@ export const useBoardsStore = defineStore('boards', () => {
     return sorted[0]?.id ?? null
   })
 
+  // Abort the previous in-flight load when a new one starts: a superseded
+  // response must neither write state nor clobber the newer call's flags.
+  let loadAbort: AbortController | null = null
+
   async function load(): Promise<void> {
+    loadAbort?.abort()
+    const ctrl = new AbortController()
+    loadAbort = ctrl
     loading.value = true
     error.value = null
     try {
-      list.value = await api.boards.listBoards()
+      list.value = await api.boards.listBoards(ctrl.signal)
     } catch (err) {
+      if (ctrl.signal.aborted) return
       error.value = err instanceof Error ? err.message : 'Failed to load boards'
     } finally {
-      loading.value = false
+      if (loadAbort === ctrl) {
+        loading.value = false
+        loadAbort = null
+      }
     }
   }
 

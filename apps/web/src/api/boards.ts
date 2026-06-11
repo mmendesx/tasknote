@@ -2,8 +2,8 @@ import { http } from './client'
 import type { Board, BoardWithColumns } from '@tasknote/shared'
 import type { CreateBoardDto, UpdateBoardDto } from '@tasknote/shared'
 
-export function listBoards(): Promise<Board[]> {
-  return http<Board[]>('/boards')
+export function listBoards(signal?: AbortSignal): Promise<Board[]> {
+  return http<Board[]>('/boards', { signal })
 }
 
 export function getBoard(id: number): Promise<BoardWithColumns> {

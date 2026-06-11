@@ -2,9 +2,9 @@ import { http } from './client'
 import type { Note } from '@tasknote/shared'
 import type { CreateNoteDto, UpdateNoteDto } from '@tasknote/shared'
 
-export function listNotes(taskId?: number): Promise<Note[]> {
+export function listNotes(taskId?: number, signal?: AbortSignal): Promise<Note[]> {
   const query = taskId !== undefined ? `?task_id=${taskId}` : ''
-  return http<Note[]>(`/notes${query}`)
+  return http<Note[]>(`/notes${query}`, { signal })
 }
 
 export function getNote(id: number): Promise<Note> {

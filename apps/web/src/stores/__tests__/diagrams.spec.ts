@@ -218,7 +218,7 @@ describe('useDiagramsStore — timer lifecycle (R2, R3)', () => {
     // Should not throw; diagram 2 should load normally
     await expect(store.loadDiagram(2)).resolves.toBeUndefined()
 
-    expect(api.diagrams.getDiagram).toHaveBeenCalledWith(2)
+    expect(api.diagrams.getDiagram).toHaveBeenCalledWith(2, expect.any(AbortSignal))
     expect(store.id).toBe(2)
     expect(store.title).toBe('Diagram Two')
   })

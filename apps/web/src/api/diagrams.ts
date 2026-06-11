@@ -2,12 +2,12 @@ import { http } from './client'
 import type { Diagram } from '@tasknote/shared'
 import type { CreateDiagramDto, UpdateDiagramDto } from '@tasknote/shared'
 
-export function listDiagrams(): Promise<Diagram[]> {
-  return http<Diagram[]>('/diagrams')
+export function listDiagrams(signal?: AbortSignal): Promise<Diagram[]> {
+  return http<Diagram[]>('/diagrams', { signal })
 }
 
-export function getDiagram(id: number): Promise<Diagram> {
-  return http<Diagram>(`/diagrams/${id}`)
+export function getDiagram(id: number, signal?: AbortSignal): Promise<Diagram> {
+  return http<Diagram>(`/diagrams/${id}`, { signal })
 }
 
 export function createDiagram(dto: CreateDiagramDto): Promise<Diagram> {
