@@ -90,50 +90,54 @@ export function buildExportSvg(elements: DiagramElement[], opts: ExportSvgOpts):
   }
 
   // ── Marker defs ───────────────────────────────────────────────────────────
-  let markerDefs = ''
+  // Accumulate parts in arrays and join once: string += in a loop copies the
+  // whole accumulated string per iteration (O(n²) on large scenes).
+  const markerParts: string[] = []
   for (const strokeColor of arrowStrokes) {
     // Safe id: strip non-alphanumeric chars so the color value is a valid XML id.
     const safeId = `diagram-arrowhead-${strokeColor.replace(/[^a-zA-Z0-9]/g, '_')}`
-    markerDefs += `<marker id="${safeId}" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="${escapeXml(strokeColor)}"/></marker>`
+    markerParts.push(`<marker id="${safeId}" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="${escapeXml(strokeColor)}"/></marker>`)
   }
+  const markerDefs = markerParts.join('')
 
   // ── Element markup ────────────────────────────────────────────────────────
-  let body = ''
+  const bodyParts: string[] = []
 
   // Optional background rect (for PNG path)
   if (background) {
-    body += `<rect x="${vx}" y="${vy}" width="${vw}" height="${vh}" fill="${escapeXml(background)}"/>`
+    bodyParts.push(`<rect x="${vx}" y="${vy}" width="${vw}" height="${vh}" fill="${escapeXml(background)}"/>`)
   }
 
   for (const el of elements) {
     if (el.type === 'rectangle') {
       const stroke = resolveColor(el.stroke, resolvedColor)
       const fill = el.fill ? resolveColor(el.fill, resolvedColor) : 'none'
-      body += `<rect x="${el.x}" y="${el.y}" width="${el.width}" height="${el.height}" stroke="${escapeXml(stroke)}" fill="${escapeXml(fill)}" stroke-width="${el.strokeWidth}"/>`
+      bodyParts.push(`<rect x="${el.x}" y="${el.y}" width="${el.width}" height="${el.height}" stroke="${escapeXml(stroke)}" fill="${escapeXml(fill)}" stroke-width="${el.strokeWidth}"/>`)
     } else if (el.type === 'ellipse') {
       const stroke = resolveColor(el.stroke, resolvedColor)
       const fill = el.fill ? resolveColor(el.fill, resolvedColor) : 'none'
       const cx2 = el.x + el.width / 2
       const cy2 = el.y + el.height / 2
-      body += `<ellipse cx="${cx2}" cy="${cy2}" rx="${el.width / 2}" ry="${el.height / 2}" stroke="${escapeXml(stroke)}" fill="${escapeXml(fill)}" stroke-width="${el.strokeWidth}"/>`
+      bodyParts.push(`<ellipse cx="${cx2}" cy="${cy2}" rx="${el.width / 2}" ry="${el.height / 2}" stroke="${escapeXml(stroke)}" fill="${escapeXml(fill)}" stroke-width="${el.strokeWidth}"/>`)
     } else if (el.type === 'line') {
       const stroke = resolveColor(el.stroke, resolvedColor)
       const [[x1, y1], [x2, y2]] = el.points
-      body += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${escapeXml(stroke)}" stroke-width="${el.strokeWidth}"/>`
+      bodyParts.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${escapeXml(stroke)}" stroke-width="${el.strokeWidth}"/>`)
     } else if (el.type === 'arrow') {
       const stroke = resolveColor(el.stroke, resolvedColor)
       const safeId = `diagram-arrowhead-${stroke.replace(/[^a-zA-Z0-9]/g, '_')}`
       const [[x1, y1], [x2, y2]] = el.points
-      body += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${escapeXml(stroke)}" stroke-width="${el.strokeWidth}" marker-end="url(#${safeId})"/>`
+      bodyParts.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${escapeXml(stroke)}" stroke-width="${el.strokeWidth}" marker-end="url(#${safeId})"/>`)
     } else if (el.type === 'text') {
       const fill = resolveColor(el.color, resolvedColor)
-      body += `<text x="${el.x}" y="${el.y}" font-size="${el.fontSize}" fill="${escapeXml(fill)}">${escapeXml(el.text)}</text>`
+      bodyParts.push(`<text x="${el.x}" y="${el.y}" font-size="${el.fontSize}" fill="${escapeXml(fill)}">${escapeXml(el.text)}</text>`)
     } else if (el.type === 'pen') {
       const stroke = resolveColor(el.stroke, resolvedColor)
       const pts = pointsToAttr(el.points as [number, number][])
-      body += `<polyline points="${escapeXml(pts)}" fill="none" stroke="${escapeXml(stroke)}" stroke-width="${el.strokeWidth}"/>`
+      bodyParts.push(`<polyline points="${escapeXml(pts)}" fill="none" stroke="${escapeXml(stroke)}" stroke-width="${el.strokeWidth}"/>`)
     }
   }
+  const body = bodyParts.join('')
 
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${vw}" height="${vh}" viewBox="${vx} ${vy} ${vw} ${vh}">`,
