@@ -301,14 +301,16 @@ function onCanvasDblClick(event: MouseEvent): void {
       </marker>
     </defs>
 
-    <g :transform="viewportTransform">
+    <g
+      :transform="viewportTransform"
+      :style="{ '--diagram-hit-sw': 12 / store.viewport.zoom }"
+    >
       <!-- Committed elements (hide the one actively being edited) -->
       <DiagramElementView
         v-for="el in elements"
         v-show="el.id !== editingElId || !editingElId"
         :key="el.id"
         :element="el"
-        :zoom="store.viewport.zoom"
       />
 
       <!-- Selection outline -->

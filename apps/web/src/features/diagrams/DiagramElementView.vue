@@ -1,10 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import type { DiagramElement } from '@tasknote/shared'
 
-const props = defineProps<{ element: DiagramElement; zoom?: number }>()
-
-const hitTargetStrokeWidth = computed(() => 12 / (props.zoom ?? 1))
+defineProps<{ element: DiagramElement }>()
 
 // Narrow helpers for accessing typed union fields without TS errors
 type RectEl = Extract<DiagramElement, { type: 'rectangle' }>
@@ -41,7 +38,6 @@ function pointsToAttr(points: [number, number][]): string {
       :width="(element as RectEl).width"
       :height="(element as RectEl).height"
       stroke="transparent"
-      :stroke-width="hitTargetStrokeWidth"
       fill="transparent"
       class="diagram-hit-target"
     />
@@ -68,7 +64,6 @@ function pointsToAttr(points: [number, number][]): string {
       :rx="(element as EllEl).width / 2"
       :ry="(element as EllEl).height / 2"
       stroke="transparent"
-      :stroke-width="hitTargetStrokeWidth"
       fill="transparent"
       class="diagram-hit-target"
     />
@@ -93,7 +88,6 @@ function pointsToAttr(points: [number, number][]): string {
       :x2="(element as LineEl).points[1][0]"
       :y2="(element as LineEl).points[1][1]"
       stroke="transparent"
-      :stroke-width="hitTargetStrokeWidth"
       class="diagram-hit-target"
     />
   </template>
@@ -118,7 +112,6 @@ function pointsToAttr(points: [number, number][]): string {
       :x2="(element as ArrowEl).points[1][0]"
       :y2="(element as ArrowEl).points[1][1]"
       stroke="transparent"
-      :stroke-width="hitTargetStrokeWidth"
       class="diagram-hit-target"
     />
   </template>
@@ -148,7 +141,6 @@ function pointsToAttr(points: [number, number][]): string {
       :points="pointsToAttr((element as PenEl).points)"
       fill="none"
       stroke="transparent"
-      :stroke-width="hitTargetStrokeWidth"
       class="diagram-hit-target"
     />
   </template>
@@ -157,5 +149,9 @@ function pointsToAttr(points: [number, number][]): string {
 <style scoped>
 .diagram-hit-target {
   cursor: default;
+  /* 12 screen-px hit area at any zoom. The viewport <g> in DiagramCanvas sets
+     --diagram-hit-sw (12 / zoom): zoom changes update one CSS var instead of
+     re-rendering every element component. */
+  stroke-width: var(--diagram-hit-sw, 12);
 }
 </style>
