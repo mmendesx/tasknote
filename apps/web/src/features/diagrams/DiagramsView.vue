@@ -8,6 +8,7 @@ import DiagramCanvas from './DiagramCanvas.vue'
 import DiagramToolbar from './DiagramToolbar.vue'
 import DiagramStylePanel from './DiagramStylePanel.vue'
 import DiagramToolPalette from './DiagramToolPalette.vue'
+import DiagramZoomCluster from './DiagramZoomCluster.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -151,6 +152,7 @@ watch(
         <main class="diagrams-view__canvas" aria-label="Diagram canvas area">
           <DiagramCanvas :diagram-id="selectedId" />
           <DiagramToolPalette class="diagrams-view__tool-palette" />
+          <DiagramZoomCluster class="diagrams-view__zoom-cluster" />
         </main>
       </div>
     </template>
@@ -282,6 +284,13 @@ watch(
   top: 12px;
   left: 50%;
   transform: translateX(-50%);
+  z-index: 10;
+}
+
+.diagrams-view__zoom-cluster {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
   z-index: 10;
 }
 
