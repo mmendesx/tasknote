@@ -2,7 +2,7 @@
  * Re-export stub — styles have moved to the shared floating-chrome module.
  * Import the canonical source directly for new consumers:
  *
- *   @import '../../../styles/floating-chrome.css';
+ *   @import '../../styles/floating-chrome.css';
  */
 
-@import '../../../styles/floating-chrome.css';
+@import '../../styles/floating-chrome.css';
