@@ -16,8 +16,9 @@ const toast = useToast()
 const selectedId = computed<number | null>(() => {
   const raw = route.params.id
   const id = Array.isArray(raw) ? raw[0] : raw
-  const parsed = id ? parseInt(id, 10) : NaN
-  return isNaN(parsed) ? null : parsed
+  if (!id) return null
+  const parsed = Number(id)
+  return Number.isNaN(parsed) ? null : parsed
 })
 
 async function createNote(): Promise<void> {
