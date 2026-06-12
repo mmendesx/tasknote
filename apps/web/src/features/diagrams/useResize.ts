@@ -1,7 +1,7 @@
 import { ref, computed } from 'vue'
 import type { Ref, ComputedRef } from 'vue'
 import type { DiagramElement, DiagramViewport } from '@tasknote/shared'
-import { findShapeAtScenePoint, findElementById, boundEndpoint, elementCenter } from './connectors'
+import { findShapeAtScenePoint, findElementById, boundEndpoint } from './connectors'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

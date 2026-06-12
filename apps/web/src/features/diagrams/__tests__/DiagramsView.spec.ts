@@ -96,7 +96,6 @@ describe('DiagramsView', () => {
   it('creating a diagram navigates to its canvas route', async () => {
     const { wrapper, router } = await mountView({ path: '/diagrams' })
 
-    const newBtn = wrapper.find('button[aria-label*="New diagram"], button[aria-label="+ New diagram"]')
     // The teleport stub renders inline — find the primary action button
     const allBtns = wrapper.findAll('button')
     const createBtn = allBtns.find((b) => b.text().includes('New diagram'))

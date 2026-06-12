@@ -1,4 +1,4 @@
-import { ref, nextTick } from 'vue'
+import { ref } from 'vue'
 import { screenToScene } from '@/stores/diagrams'
 import type { DiagramBinding, DiagramViewport } from '@tasknote/shared'
 

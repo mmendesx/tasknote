@@ -125,7 +125,7 @@ describe('DiagramConnectors — arrow binding on draw (captured-pointer path)', 
     // The stub discriminates by x so the start/end resolution is unambiguous.
     stubElementFromPoint((x) => x < 100 ? rNode : eNode)
 
-    const { wrapper, pinia, storeState } = await mountCanvasWithShapes([RECT_R, ELLIPSE_E])
+    const { wrapper, pinia } = await mountCanvasWithShapes([RECT_R, ELLIPSE_E])
     const svg = wrapper.find('svg.diagram-canvas')
 
     // Dispatch on the SVG (captured-pointer path) — not on the shape nodes.

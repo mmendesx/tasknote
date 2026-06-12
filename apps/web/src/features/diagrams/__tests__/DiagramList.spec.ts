@@ -132,15 +132,15 @@ describe('DiagramList', () => {
     expect(createBtn.text()).toBeTruthy()
   })
 
-  // BDD: clicking the create button in empty state emits select
-  it('clicking the create button in the empty state emits select', async () => {
+  // BDD: clicking the create button in empty state emits create
+  it('clicking the create button in the empty state emits create', async () => {
     const { wrapper } = await mountList()
 
     const createBtn = wrapper.find('.diagram-list__empty button')
     expect(createBtn.exists()).toBe(true)
     await createBtn.trigger('click')
 
-    expect(wrapper.emitted('select')).toBeTruthy()
+    expect(wrapper.emitted('create')).toBeTruthy()
   })
 
   // ── Hover-revealed delete ─────────────────────────────────────────────────

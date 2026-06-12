@@ -11,6 +11,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   select: [id: number]
+  create: []
   deleted: [id: number]
 }>()
 
@@ -98,7 +99,7 @@ const sortedDiagrams = computed<Diagram[]>(() =>
   </div>
 
   <!-- Empty state -->
-  <div v-else-if="!sortedDiagrams.length" class="diagram-list__empty">
+  <div v-else-if="!sortedDiagrams.length" class="diagram-list__empty" aria-live="polite">
     <IconDiagramEmpty
       class="diagram-list__empty-icon"
       width="48"
@@ -106,7 +107,7 @@ const sortedDiagrams = computed<Diagram[]>(() =>
       aria-hidden="true"
     />
     <p class="diagram-list__empty-prompt">No diagrams yet — create your first one</p>
-    <Button variant="primary" size="sm" @click="emit('select', 0)">New diagram</Button>
+    <Button variant="primary" size="sm" @click="emit('create')">New diagram</Button>
   </div>
 
   <!-- Card grid -->
@@ -369,5 +370,16 @@ const sortedDiagrams = computed<Diagram[]>(() =>
 .focus-ring:focus-visible {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
+}
+
+/* ── Reduced motion ──────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .diagram-card,
+  .diagram-card__actions,
+  .diagram-card__rename-btn,
+  .diagram-card__delete-btn {
+    transition: none;
+  }
 }
 </style>

@@ -90,8 +90,6 @@ describe('DiagramTextEdit', () => {
     const textEl = makeTextElement({ text: 'draft', x: 50, y: 80 })
     const { wrapper, pinia } = await mountCanvasWithText(textEl)
 
-    const svg = wrapper.find('svg.diagram-canvas')
-
     // Find the rendered text element with data-element-id
     const textNode = wrapper.find(`[data-element-id="${textEl.id}"]`)
     expect(textNode.exists()).toBe(true)

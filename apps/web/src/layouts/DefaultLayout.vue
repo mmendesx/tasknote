@@ -531,6 +531,7 @@ const routeLabel = computed(() => {
               <DiagramList
                 :selected-id="currentDiagramId"
                 @select="(id) => { router.push({ name: 'diagram-detail', params: { id } }); closeDrawer() }"
+                @create="createDiagram"
                 @deleted="(id) => { if (currentDiagramId === id) router.push({ name: 'diagrams' }) }"
               />
             </div>

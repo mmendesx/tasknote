@@ -106,7 +106,7 @@ describe('DiagramToolPalette', () => {
   })
 
   it('palette is reactive to external store changes (e.g. keyboard shortcuts)', async () => {
-    const { wrapper, store, pinia } = mountPalette()
+    const { wrapper, pinia } = mountPalette()
 
     // Simulate useCanvasKeyboard setting store.tool to 'rectangle' (e.g. key R)
     const state = pinia.state.value['diagrams']

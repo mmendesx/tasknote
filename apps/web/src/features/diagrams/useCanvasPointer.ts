@@ -9,7 +9,6 @@ import {
   buildRectangleElement,
   buildEllipseElement,
   buildLinearElement,
-  buildTextElement,
   buildPenElement,
 } from './useDrawTools'
 import type { useDrawState } from './useDrawTools'
@@ -50,7 +49,7 @@ export function useCanvasPointer(
   const { drawState, pendingText, textInputRef, previewShape, previewLinear, previewPen, cancelDraw } = drawTools
   const { moveState, beginMove, clearMove } = selection
   const { isActive: marqueeIsActive, startMarquee, updateMarquee, finishMarquee, cancelMarquee } = marquee
-  const { resizeState, beginResize, updateResize, commitResize, cancelResize, isResizing } = resize
+  const { resizeState, updateResize, commitResize, cancelResize, isResizing } = resize
 
   // ── Pan state ──────────────────────────────────────────────────────────────
 
