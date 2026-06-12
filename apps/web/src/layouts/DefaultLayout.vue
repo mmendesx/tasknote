@@ -699,8 +699,6 @@ const routeLabel = computed(() => {
   background-color: var(--color-surface);
   border-right: 1px solid var(--color-border);
   overflow: hidden;
-  transition: width var(--motion-duration-base) var(--motion-easing);
-  will-change: width;
 }
 
 .sidebar__logo {
@@ -738,7 +736,7 @@ const routeLabel = computed(() => {
   white-space: nowrap;
   overflow: hidden;
   opacity: 1;
-  transition: opacity var(--motion-duration-fast) var(--motion-easing), width var(--motion-duration-fast) var(--motion-easing);
+  transition: opacity var(--motion-duration-fast) var(--motion-easing);
 }
 
 .sidebar__nav {
@@ -768,7 +766,7 @@ const routeLabel = computed(() => {
   white-space: nowrap;
   overflow: hidden;
   opacity: 1;
-  transition: opacity var(--motion-duration-fast) var(--motion-easing), width var(--motion-duration-fast) var(--motion-easing);
+  transition: opacity var(--motion-duration-fast) var(--motion-easing);
 }
 
 .nav-item {
@@ -809,7 +807,7 @@ const routeLabel = computed(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   opacity: 1;
-  transition: opacity var(--motion-duration-fast) var(--motion-easing), width var(--motion-duration-fast) var(--motion-easing);
+  transition: opacity var(--motion-duration-fast) var(--motion-easing);
 }
 
 .sidebar__footer {
@@ -1251,14 +1249,12 @@ const routeLabel = computed(() => {
     grid-template-columns: 64px 1fr;
   }
 
-  .sidebar--collapsed {
-    width: 64px !important;
-  }
-
   .sidebar--collapsed .logo-wordmark,
   .sidebar--collapsed .nav-item__label,
   .sidebar--collapsed .nav-section__label {
     opacity: 0;
+    /* width is not in the transition list: collapses instantly, masked by the
+       opacity fade; keeps icons centered in the 64px rail */
     width: 0;
     pointer-events: none;
   }
