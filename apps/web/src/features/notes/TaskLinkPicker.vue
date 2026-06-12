@@ -38,13 +38,16 @@ const linkedTask = computed<Task | null>(
   () => allTasks.value.find((t) => t.id === props.linkedTaskId) ?? null
 )
 
+const hasLinkedTask = computed<boolean>(() => props.linkedTaskId !== null)
+
 function openPicker(): void {
   query.value = ''
   activeIndex.value = -1
   isOpen.value = true
   nextTick(() => {
     // Focus the search input after the dropdown renders
-    const inputEl = rootRef.value?.querySelector<HTMLInputElement>('.task-link-picker__input input, .task-link-picker__input')
+    const el = searchInputRef.value?.$el as HTMLElement | undefined
+    const inputEl = el?.tagName === 'INPUT' ? (el as HTMLInputElement) : el?.querySelector<HTMLInputElement>('input')
     inputEl?.focus()
   })
 }
@@ -116,10 +119,10 @@ function optionId(index: number): string {
     class="task-link-picker"
     @keydown="handleKeydown"
   >
-    <!-- Linked state -->
-    <div v-if="linkedTask" class="task-link-picker__chip task-link-picker__chip--linked">
+    <!-- Linked state: shown when linkedTaskId is set (even if task not in store) -->
+    <div v-if="hasLinkedTask" class="task-link-picker__chip task-link-picker__chip--linked">
       <IconLink class="task-link-picker__chip-icon" width="14" height="14" />
-      <span class="task-link-picker__task-name">{{ linkedTask.title }}</span>
+      <span class="task-link-picker__task-name">{{ linkedTask ? linkedTask.title : 'Linked task' }}</span>
       <button
         type="button"
         class="task-link-picker__unlink-btn"
@@ -147,22 +150,28 @@ function optionId(index: number): string {
     <div
       v-if="isOpen"
       class="task-link-picker__dropdown diagram-floating-chrome"
-      role="listbox"
-      aria-label="Tasks"
-      :aria-activedescendant="activeIndex >= 0 ? optionId(activeIndex) : undefined"
     >
+      <!-- Combobox input: owns activedescendant and controls the listbox -->
       <Input
         ref="searchInputRef"
         v-model="query"
+        role="combobox"
+        :aria-expanded="isOpen"
+        aria-controls="task-link-picker-listbox"
+        :aria-activedescendant="activeIndex >= 0 ? optionId(activeIndex) : undefined"
+        aria-autocomplete="list"
         placeholder="Search tasks…"
         size="sm"
         autofocus
         class="task-link-picker__input"
       />
-      <ul class="task-link-picker__list">
-        <li v-if="!filteredTasks.length" class="task-link-picker__empty" role="option" aria-selected="false">
-          No tasks found
-        </li>
+      <!-- Listbox: contains only role="option" children -->
+      <ul
+        id="task-link-picker-listbox"
+        role="listbox"
+        aria-label="Tasks"
+        class="task-link-picker__list"
+      >
         <li
           v-for="(task, index) in filteredTasks"
           :id="optionId(index)"
@@ -179,6 +188,10 @@ function optionId(index: number): string {
           {{ task.title }}
         </li>
       </ul>
+      <!-- Empty message: plain element, not role="option" -->
+      <p v-if="!filteredTasks.length" class="task-link-picker__empty" aria-live="polite">
+        No tasks found
+      </p>
     </div>
   </div>
 </template>
@@ -322,5 +335,14 @@ function optionId(index: number): string {
   padding: 0.5rem 0.75rem;
   color: var(--color-text-muted);
   font-size: 0.8125rem;
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .task-link-picker__chip,
+  .task-link-picker__unlink-btn,
+  .task-link-picker__item {
+    transition: none;
+  }
 }
 </style>

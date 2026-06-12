@@ -201,4 +201,80 @@ describe('TaskLinkPicker', () => {
       expect(wrapper.findAll('.task-link-picker__item').length).toBe(0)
     })
   })
+
+  // AC6 — Combobox ARIA pattern
+  describe('combobox ARIA attributes', () => {
+    it('search input has role="combobox" and aria-autocomplete="list"', async () => {
+      const wrapper = mountPicker(null)
+      await wrapper.find('.task-link-picker__chip--unlinked').trigger('click')
+
+      const input = wrapper.find('input')
+      expect(input.attributes('role')).toBe('combobox')
+      expect(input.attributes('aria-autocomplete')).toBe('list')
+    })
+
+    it('search input has aria-expanded="true" and aria-controls pointing to the listbox', async () => {
+      const wrapper = mountPicker(null)
+      await wrapper.find('.task-link-picker__chip--unlinked').trigger('click')
+
+      const input = wrapper.find('input')
+      expect(input.attributes('aria-expanded')).toBe('true')
+      const listboxId = input.attributes('aria-controls')
+      expect(listboxId).toBeTruthy()
+      expect(wrapper.find(`#${listboxId}`).attributes('role')).toBe('listbox')
+    })
+
+    it('aria-activedescendant on input points to the active option', async () => {
+      const wrapper = mountPicker(null)
+      await wrapper.find('.task-link-picker__chip--unlinked').trigger('click')
+
+      await wrapper.find('.task-link-picker').trigger('keydown', { key: 'ArrowDown' })
+
+      const input = wrapper.find('input')
+      const activeDescendant = input.attributes('aria-activedescendant')
+      expect(activeDescendant).toBe('task-option-0')
+    })
+
+    it('listbox contains only role="option" children (no other roles inside)', async () => {
+      const wrapper = mountPicker(null)
+      await wrapper.find('.task-link-picker__chip--unlinked').trigger('click')
+
+      const listbox = wrapper.find('[role="listbox"]')
+      const children = listbox.findAll('[role]')
+      children.forEach((child) => {
+        expect(child.attributes('role')).toBe('option')
+      })
+    })
+
+    it('"No tasks found" message does not have role="option"', async () => {
+      const wrapper = mountPicker(null)
+      await wrapper.find('.task-link-picker__chip--unlinked').trigger('click')
+      await wrapper.find('input').setValue('zzznomatch')
+
+      const empty = wrapper.find('.task-link-picker__empty')
+      expect(empty.exists()).toBe(true)
+      expect(empty.attributes('role')).not.toBe('option')
+    })
+  })
+
+  // AC7 — Off-board linked task fallback
+  describe('off-board linked task', () => {
+    it('shows the linked chip with fallback label when task_id is set but not in store', () => {
+      // task id 999 does not exist in the mocked store
+      const wrapper = mountPicker(999)
+      const chip = wrapper.find('.task-link-picker__chip--linked')
+      expect(chip.exists()).toBe(true)
+      expect(chip.text()).toContain('Linked task')
+    })
+
+    it('shows the unlink button for off-board linked task', () => {
+      const wrapper = mountPicker(999)
+      expect(wrapper.find('.task-link-picker__unlink-btn').exists()).toBe(true)
+    })
+
+    it('does not show the unlinked chip when task_id is off-board', () => {
+      const wrapper = mountPicker(999)
+      expect(wrapper.find('.task-link-picker__chip--unlinked').exists()).toBe(false)
+    })
+  })
 })
