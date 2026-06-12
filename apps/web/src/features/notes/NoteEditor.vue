@@ -1,9 +1,11 @@
 <script setup lang="ts">
 
 import { ref, watch, computed } from 'vue'
-import { Input, Button, useToast } from '@tasknote/ui'
+import { useRouter } from 'vue-router'
+import { Button, useToast } from '@tasknote/ui'
 import MilkdownEditor from '@/features/editor/MilkdownEditor.vue'
 import TaskLinkPicker from './TaskLinkPicker.vue'
+import { IconPin, IconNote, IconTrash } from './icons'
 import { useNotesStore } from '@/stores/notes'
 import type { Note } from '@tasknote/shared'
 
@@ -13,8 +15,10 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   deleted: [id: number]
+  create: []
 }>()
 
+const router = useRouter()
 const notesStore = useNotesStore()
 const toast = useToast()
 
@@ -44,14 +48,12 @@ watch(
     deleteConfirm.value = false
     loading.value = true
     try {
-      
       const cached = notesStore.list.find((n) => n.id === id)
       if (cached) {
         note.value = cached
         title.value = cached.title
         bodyMd.value = cached.body_md
       } else {
-        
         await notesStore.load()
         const found = notesStore.list.find((n) => n.id === id)
         if (found) {
@@ -74,7 +76,21 @@ const isDirty = computed(() => {
   return title.value !== note.value.title || bodyMd.value !== note.value.body_md
 })
 
-function onTitleInput(val: string): void { title.value = val }
+const saveIndicatorState = computed<'saved' | 'saving' | 'unsaved'>(() => {
+  if (isSaving.value) return 'saving'
+  if (isDirty.value) return 'unsaved'
+  return 'saved'
+})
+
+const saveLabel = computed(() => {
+  if (isSaving.value) return 'Saving…'
+  if (isDirty.value) return 'Unsaved'
+  return 'Saved'
+})
+
+function onTitleInput(e: Event): void {
+  title.value = (e.target as HTMLInputElement).value
+}
 function onBodyUpdate(val: string): void { bodyMd.value = val }
 
 async function saveNote(): Promise<void> {
@@ -110,7 +126,6 @@ async function togglePin(): Promise<void> {
   const next = !note.value.pinned
   try {
     await notesStore.update(note.value.id, { pinned: next })
-    
     const updated = notesStore.list.find((n) => n.id === note.value!.id)
     if (updated) note.value = updated
   } catch {
@@ -135,6 +150,7 @@ async function confirmDelete(): Promise<void> {
   try {
     await notesStore.softDelete(id)
     emit('deleted', id)
+    router.push('/notes')
   } catch {
     toast.error('Delete failed', 'Could not delete note')
   }
@@ -147,65 +163,89 @@ async function confirmDelete(): Promise<void> {
   </div>
 
   <div v-else-if="note" class="note-editor">
-    
-    <div class="note-editor__toolbar">
-      <button
-        type="button"
-        class="note-editor__pin-btn"
-        :class="{ 'note-editor__pin-btn--active': note.pinned }"
-        :aria-label="note.pinned ? 'Unpin note' : 'Pin note'"
-        :title="note.pinned ? 'Unpin' : 'Pin'"
-        @click="togglePin"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M16 3v2l-1 1v5l3 2v2h-5v6l-1 1-1-1v-6H6v-2l3-2V6L8 5V3z"/>
-        </svg>
-        {{ note.pinned ? 'Pinned' : 'Pin' }}
-      </button>
 
-      <div class="note-editor__spacer" />
+    <!-- Header row: borderless title + right cluster -->
+    <div class="note-editor__header">
+      <input
+        :value="displayTitle"
+        type="text"
+        class="note-editor__title-input"
+        placeholder="Untitled"
+        aria-label="Note title"
+        @input="onTitleInput"
+      />
 
-      <span v-if="isDirty" class="note-editor__dirty">Unsaved</span>
+      <div class="note-editor__header-cluster">
+        <!-- Pin toggle -->
+        <button
+          type="button"
+          class="note-editor__icon-btn"
+          :class="{ 'note-editor__icon-btn--accent': note.pinned }"
+          :aria-label="note.pinned ? 'Unpin note' : 'Pin note'"
+          :aria-pressed="note.pinned"
+          :title="note.pinned ? 'Unpin' : 'Pin'"
+          @click="togglePin"
+        >
+          <IconPin width="16" height="16" aria-hidden="true" />
+        </button>
 
-      <Button
-        variant="primary"
-        size="sm"
-        :disabled="isSaving"
-        @click="saveNote"
-      >
-        {{ isSaving ? 'Saving…' : 'Save' }}
-      </Button>
+        <!-- Save-status indicator -->
+        <span
+          class="note-editor__save-indicator"
+          :class="`note-editor__save-indicator--${saveIndicatorState}`"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          <span class="note-editor__save-dot" aria-hidden="true" />
+          <span :class="{ 'note-editor__save-label--italic': saveIndicatorState === 'unsaved' }">
+            {{ saveLabel }}
+          </span>
+        </span>
 
-      <Button
-        variant="ghost"
-        size="sm"
-        :disabled="isSaving"
-        @click="discardNoteChanges"
-      >
-        Discard
-      </Button>
+        <!-- Save button -->
+        <Button
+          variant="primary"
+          size="sm"
+          :disabled="!isDirty || isSaving"
+          @click="saveNote"
+        >
+          Save
+        </Button>
 
-      <Button
-        v-if="!deleteConfirm"
-        variant="ghost"
-        size="sm"
-        @click="deleteConfirm = true"
-      >
-        Delete
-      </Button>
-      <template v-else>
-        <span class="note-editor__confirm-text">Delete this note?</span>
-        <Button variant="danger" size="sm" @click="confirmDelete">Confirm</Button>
-        <Button variant="ghost" size="sm" @click="deleteConfirm = false">Cancel</Button>
-      </template>
+        <!-- Discard button -->
+        <button
+          v-if="!deleteConfirm"
+          type="button"
+          class="note-editor__icon-btn"
+          :disabled="!isDirty"
+          aria-label="Discard changes"
+          title="Discard changes"
+          @click="discardNoteChanges"
+        >
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="none" aria-hidden="true">
+            <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+
+        <!-- Delete button / inline confirm -->
+        <template v-if="!deleteConfirm">
+          <button
+            type="button"
+            class="note-editor__icon-btn note-editor__icon-btn--danger-hover"
+            aria-label="Delete note"
+            title="Delete note"
+            @click="deleteConfirm = true"
+          >
+            <IconTrash width="16" height="16" aria-hidden="true" />
+          </button>
+        </template>
+        <template v-else>
+          <span class="note-editor__confirm-text">Delete note?</span>
+          <Button variant="ghost" size="sm" @click="deleteConfirm = false">Cancel</Button>
+          <Button variant="danger" size="sm" @click="confirmDelete">Delete</Button>
+        </template>
+      </div>
     </div>
-
-    <Input
-      :model-value="title"
-      placeholder="Title (auto from body if empty)"
-      class="note-editor__title"
-      @update:model-value="onTitleInput"
-    />
 
     <div class="note-editor__body">
       <MilkdownEditor
@@ -224,8 +264,20 @@ async function confirmDelete(): Promise<void> {
     </div>
   </div>
 
+  <!-- Empty state: no note selected -->
   <div v-else class="note-editor note-editor--empty">
-    <p>Select a note or create a new one.</p>
+    <div class="note-editor__empty-content">
+      <IconNote
+        width="40"
+        height="40"
+        class="note-editor__empty-icon"
+        aria-hidden="true"
+      />
+      <p class="note-editor__empty-prompt">Select or create a note</p>
+      <Button variant="primary" size="sm" @click="emit('create')">
+        New note
+      </Button>
+    </div>
   </div>
 </template>
 
@@ -234,8 +286,8 @@ async function confirmDelete(): Promise<void> {
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 1rem 1.25rem;
-  gap: 0.75rem;
+  padding: var(--space-4, 1rem) var(--space-5, 1.25rem);
+  gap: var(--space-3, 0.75rem);
   overflow-y: auto;
 }
 
@@ -249,58 +301,161 @@ async function confirmDelete(): Promise<void> {
   font-size: 0.875rem;
 }
 
-.note-editor__toolbar {
+/* ── Empty state ─────────────────────────────────────────────────────────── */
+
+.note-editor__empty-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3, 0.75rem);
+  text-align: center;
+}
+
+.note-editor__empty-icon {
+  color: var(--color-text-muted);
+  opacity: 0.5;
+}
+
+.note-editor__empty-prompt {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+/* ── Header row ──────────────────────────────────────────────────────────── */
+
+.note-editor__header {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-3, 0.75rem);
+  flex-shrink: 0;
+  min-height: 2.25rem;
+}
+
+.note-editor__title-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  padding: 0;
+  line-height: 1.4;
+}
+
+.note-editor__title-input::placeholder {
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
+/* ── Right cluster ───────────────────────────────────────────────────────── */
+
+.note-editor__header-cluster {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 0.5rem);
   flex-shrink: 0;
 }
 
-.note-editor__spacer {
-  flex: 1;
-}
+/* ── Icon buttons ────────────────────────────────────────────────────────── */
 
-.note-editor__pin-btn {
+.note-editor__icon-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
-  padding: 0.25rem 0.5rem;
-  font-size: 0.75rem;
-  color: var(--color-text-secondary);
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
   background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
+  border: none;
+  border-radius: var(--radius-control, 0.375rem);
+  color: var(--color-text-muted);
   cursor: pointer;
-  transition: color var(--motion-duration-fast), border-color var(--motion-duration-fast);
+  transition:
+    color var(--motion-duration-fast, 120ms),
+    background-color var(--motion-duration-fast, 120ms);
 }
 
-.note-editor__pin-btn:hover {
-  color: var(--color-accent);
-  border-color: var(--color-accent);
+.note-editor__icon-btn:hover:not(:disabled) {
+  color: var(--color-text-primary);
+  background-color: color-mix(in srgb, currentColor 8%, transparent);
 }
 
-.note-editor__pin-btn--active {
-  color: var(--color-accent);
-  border-color: var(--color-accent);
-  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+.note-editor__icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
+
+.note-editor__icon-btn--accent {
+  color: var(--color-accent);
+}
+
+.note-editor__icon-btn--accent:hover:not(:disabled) {
+  color: var(--color-accent);
+  background-color: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
+.note-editor__icon-btn--danger-hover:hover:not(:disabled) {
+  color: var(--color-status-blocked, #dc2626);
+  background-color: color-mix(in srgb, var(--color-status-blocked, #dc2626) 10%, transparent);
+}
+
+/* ── Save indicator ──────────────────────────────────────────────────────── */
+
+.note-editor__save-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 6ch;
+}
+
+.note-editor__save-indicator--saving,
+.note-editor__save-indicator--unsaved {
+  color: var(--color-accent);
+}
+
+.note-editor__save-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: currentColor;
+  flex-shrink: 0;
+}
+
+.note-editor__save-indicator--saving .note-editor__save-dot {
+  animation: note-save-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes note-save-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .note-editor__save-indicator--saving .note-editor__save-dot {
+    animation: none;
+  }
+}
+
+.note-editor__save-label--italic {
+  font-style: italic;
+}
+
+/* ── Inline delete confirm ───────────────────────────────────────────────── */
 
 .note-editor__confirm-text {
   font-size: 0.8125rem;
-  color: var(--color-status-blocked);
+  color: var(--color-status-blocked, #dc2626);
+  white-space: nowrap;
 }
 
-.note-editor__dirty {
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  font-style: italic;
-  margin-right: 0.25rem;
-}
-
-.note-editor__title {
-  font-size: 1rem;
-  flex-shrink: 0;
-}
+/* ── Body + sections ─────────────────────────────────────────────────────── */
 
 .note-editor__body {
   flex: 1;
