@@ -11,6 +11,11 @@ const toastErrorSpy = vi.hoisted(() => vi.fn())
 vi.mock('@tasknote/ui', () => ({
   useToast: () => ({ error: toastErrorSpy, success: vi.fn() }),
   Button: { template: '<button @click="$emit(\'click\')"><slot /></button>' },
+  Tooltip: {
+    name: 'Tooltip',
+    props: ['content', 'side', 'delayDuration'],
+    template: '<slot />',
+  },
 }))
 
 // ── API mock ──────────────────────────────────────────────────────────────────

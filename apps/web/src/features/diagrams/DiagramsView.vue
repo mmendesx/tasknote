@@ -7,6 +7,7 @@ import { useDiagramsStore } from '@/stores/diagrams'
 import DiagramCanvas from './DiagramCanvas.vue'
 import DiagramToolbar from './DiagramToolbar.vue'
 import DiagramStylePanel from './DiagramStylePanel.vue'
+import DiagramToolPalette from './DiagramToolPalette.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -149,6 +150,7 @@ watch(
         <DiagramStylePanel />
         <main class="diagrams-view__canvas" aria-label="Diagram canvas area">
           <DiagramCanvas :diagram-id="selectedId" />
+          <DiagramToolPalette class="diagrams-view__tool-palette" />
         </main>
       </div>
     </template>
@@ -272,6 +274,15 @@ watch(
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  position: relative;
+}
+
+.diagrams-view__tool-palette {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
 }
 
 /* ── List view ───────────────────────────────────────────────────────────── */
