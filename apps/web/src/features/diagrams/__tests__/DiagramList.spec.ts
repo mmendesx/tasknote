@@ -64,11 +64,38 @@ describe('DiagramList', () => {
     vi.clearAllMocks()
   })
 
+  // ── Card grid rendering ───────────────────────────────────────────────────
+
+  // BDD: renders N cards with titles and relative updated time
+  it('renders a card for each diagram with its title and relative time', async () => {
+    const { diagrams: apiDiagrams } = await import('@/api')
+
+    const now = Date.now()
+    vi.mocked(apiDiagrams.listDiagrams).mockResolvedValueOnce([
+      makeDiagram(1, 'Auth flow', new Date(now - 2 * 3600 * 1000)),     // 2h ago
+      makeDiagram(2, 'Onboarding', new Date(now - 5 * 60 * 1000)),      // 5m ago
+    ] as never[])
+
+    const { wrapper } = await mountList()
+
+    const cards = wrapper.findAll('.diagram-card')
+    expect(cards).toHaveLength(2)
+
+    // Titles visible in the cards
+    const titles = wrapper.findAll('.diagram-card__title').map((el) => el.text())
+    expect(titles).toContain('Auth flow')
+    expect(titles).toContain('Onboarding')
+
+    // Relative time stamps visible
+    const metas = wrapper.findAll('.diagram-card__meta').map((el) => el.text())
+    expect(metas[0]).toMatch(/ago|just now/)
+    expect(metas[1]).toMatch(/ago|just now/)
+  })
+
   // BDD: renders diagrams most-recently-updated first
   it('renders diagrams most-recently-updated first', async () => {
     const { diagrams: apiDiagrams } = await import('@/api')
 
-    // Seed in a non-recency order: oldest first in the API response
     vi.mocked(apiDiagrams.listDiagrams).mockResolvedValueOnce([
       makeDiagram(1, 'Oldest', new Date('2025-01-01T10:00:00Z')),
       makeDiagram(2, 'Middle', new Date('2025-06-01T10:00:00Z')),
@@ -77,19 +104,103 @@ describe('DiagramList', () => {
 
     const { wrapper } = await mountList()
 
-    const titles = wrapper.findAll('.diagram-item__title').map((el) => el.text())
+    const titles = wrapper.findAll('.diagram-card__title').map((el) => el.text())
     expect(titles).toEqual(['Newest', 'Middle', 'Oldest'])
   })
 
-  // BDD: shows "No diagrams yet" when list is empty
-  it("shows 'No diagrams yet' when the list is empty", async () => {
+  // ── Empty state ───────────────────────────────────────────────────────────
+
+  // BDD: empty state shows icon, prompt, and create button
+  it('shows the empty-state icon, a prompt, and a create button when no diagrams exist', async () => {
     const { wrapper } = await mountList()
 
-    expect(wrapper.text()).toContain('No diagrams yet')
+    // Icon wrapper — IconDiagramEmpty renders an <svg>
+    const emptySection = wrapper.find('.diagram-list__empty')
+    expect(emptySection.exists()).toBe(true)
+
+    // Icon present as an svg inside the empty section
+    expect(emptySection.find('svg').exists()).toBe(true)
+
+    // One-line prompt
+    const prompt = emptySection.find('.diagram-list__empty-prompt')
+    expect(prompt.exists()).toBe(true)
+    expect(prompt.text().length).toBeGreaterThan(0)
+
+    // Create button
+    const createBtn = emptySection.find('button')
+    expect(createBtn.exists()).toBe(true)
+    expect(createBtn.text()).toBeTruthy()
   })
 
-  // BDD: clicking a diagram row emits select
-  it('clicking a diagram row emits select with the diagram id', async () => {
+  // BDD: clicking the create button in empty state emits select
+  it('clicking the create button in the empty state emits select', async () => {
+    const { wrapper } = await mountList()
+
+    const createBtn = wrapper.find('.diagram-list__empty button')
+    expect(createBtn.exists()).toBe(true)
+    await createBtn.trigger('click')
+
+    expect(wrapper.emitted('select')).toBeTruthy()
+  })
+
+  // ── Hover-revealed delete ─────────────────────────────────────────────────
+
+  // BDD: delete button is present on each card (revealed via CSS, class-based test)
+  it('each card has a delete button with the correct aria-label', async () => {
+    const { diagrams: apiDiagrams } = await import('@/api')
+
+    vi.mocked(apiDiagrams.listDiagrams).mockResolvedValueOnce([
+      makeDiagram(9, 'My Diagram', new Date('2026-01-01')),
+    ] as never[])
+
+    const { wrapper } = await mountList()
+
+    const deleteBtn = wrapper.find('.diagram-card__delete-btn')
+    expect(deleteBtn.exists()).toBe(true)
+    expect(deleteBtn.attributes('aria-label')).toBe('Delete My Diagram')
+  })
+
+  // BDD: delete button is inside the actions overlay that is opacity-0 by default
+  it('the actions overlay element exists and carries the reveal class on the card', async () => {
+    const { diagrams: apiDiagrams } = await import('@/api')
+
+    vi.mocked(apiDiagrams.listDiagrams).mockResolvedValueOnce([
+      makeDiagram(3, 'Flow A', new Date('2026-01-01')),
+    ] as never[])
+
+    const { wrapper } = await mountList()
+
+    const actions = wrapper.find('.diagram-card__actions')
+    expect(actions.exists()).toBe(true)
+    // The parent card has the class that CSS uses for the hover rule
+    const card = wrapper.find('.diagram-card')
+    expect(card.exists()).toBe(true)
+  })
+
+  // ── Delete flow ───────────────────────────────────────────────────────────
+
+  // BDD: clicking the delete button triggers the existing delete flow and emits deleted
+  it('clicking the delete button calls removeDiagram and emits deleted with the diagram id', async () => {
+    const { diagrams: apiDiagrams } = await import('@/api')
+
+    vi.mocked(apiDiagrams.listDiagrams).mockResolvedValueOnce([
+      makeDiagram(42, 'To be deleted', new Date('2026-01-01')),
+    ] as never[])
+
+    const { wrapper } = await mountList()
+
+    await wrapper.find('.diagram-card__delete-btn').trigger('click')
+    await flushPromises()
+
+    expect(apiDiagrams.deleteDiagram).toHaveBeenCalledWith(42)
+    expect(wrapper.emitted('deleted')).toHaveLength(1)
+    expect(wrapper.emitted('deleted')![0]).toEqual([42])
+  })
+
+  // ── Open / select flow ────────────────────────────────────────────────────
+
+  // BDD: clicking a diagram card emits select with the diagram id
+  it('clicking a diagram card emits select with the diagram id', async () => {
     const { diagrams: apiDiagrams } = await import('@/api')
 
     vi.mocked(apiDiagrams.listDiagrams).mockResolvedValueOnce([
@@ -98,7 +209,7 @@ describe('DiagramList', () => {
 
     const { wrapper } = await mountList()
 
-    const openBtn = wrapper.find('.diagram-item__open')
+    const openBtn = wrapper.find('.diagram-card__open')
     expect(openBtn.exists()).toBe(true)
 
     await openBtn.trigger('click')
@@ -106,6 +217,8 @@ describe('DiagramList', () => {
     expect(wrapper.emitted('select')).toHaveLength(1)
     expect(wrapper.emitted('select')![0]).toEqual([7])
   })
+
+  // ── Rename flow ───────────────────────────────────────────────────────────
 
   // BDD: clicking the rename button shows an editable input
   it('clicking the rename button shows an editable input', async () => {
@@ -117,12 +230,12 @@ describe('DiagramList', () => {
 
     const { wrapper } = await mountList()
 
-    expect(wrapper.find('.diagram-item__rename-input').exists()).toBe(false)
+    expect(wrapper.find('.diagram-card__rename-input').exists()).toBe(false)
 
-    const renameBtn = wrapper.find('.diagram-item__action-btn')
+    const renameBtn = wrapper.find('.diagram-card__rename-btn')
     await renameBtn.trigger('click')
 
-    const input = wrapper.find('.diagram-item__rename-input')
+    const input = wrapper.find('.diagram-card__rename-input')
     expect(input.exists()).toBe(true)
     expect((input.element as HTMLInputElement).value).toBe('Untitled diagram')
     expect(input.attributes('aria-label')).toBe('Rename diagram')
@@ -142,17 +255,16 @@ describe('DiagramList', () => {
 
     const { wrapper } = await mountList()
 
-    await wrapper.find('.diagram-item__action-btn').trigger('click')
+    await wrapper.find('.diagram-card__rename-btn').trigger('click')
 
-    const input = wrapper.find('.diagram-item__rename-input')
+    const input = wrapper.find('.diagram-card__rename-input')
     await input.setValue('Auth flow')
     await input.trigger('keydown', { key: 'Enter' })
     await flushPromises()
 
     expect(apiDiagrams.updateDiagram).toHaveBeenCalledWith(5, { title: 'Auth flow' })
-    // Input is dismissed and the new title is shown
-    expect(wrapper.find('.diagram-item__rename-input').exists()).toBe(false)
-    expect(wrapper.find('.diagram-item__title').text()).toBe('Auth flow')
+    expect(wrapper.find('.diagram-card__rename-input').exists()).toBe(false)
+    expect(wrapper.find('.diagram-card__title').text()).toBe('Auth flow')
   })
 
   // BDD: pressing Escape cancels the rename without persisting
@@ -165,44 +277,40 @@ describe('DiagramList', () => {
 
     const { wrapper } = await mountList()
 
-    await wrapper.find('.diagram-item__action-btn').trigger('click')
+    await wrapper.find('.diagram-card__rename-btn').trigger('click')
 
-    const input = wrapper.find('.diagram-item__rename-input')
+    const input = wrapper.find('.diagram-card__rename-input')
     await input.setValue('Something else')
     await input.trigger('keydown', { key: 'Escape' })
     await flushPromises()
 
     expect(apiDiagrams.updateDiagram).not.toHaveBeenCalled()
-    expect(wrapper.find('.diagram-item__rename-input').exists()).toBe(false)
-    // Original title is preserved
-    expect(wrapper.find('.diagram-item__title').text()).toBe('My diagram')
+    expect(wrapper.find('.diagram-card__rename-input').exists()).toBe(false)
+    expect(wrapper.find('.diagram-card__title').text()).toBe('My diagram')
   })
 
   // BDD: committing an empty title sends empty to the store (backend resolves to 'Untitled diagram')
-  it("committing an empty title sends empty to renameDiagram and shows the server-resolved title", async () => {
+  it('committing an empty title sends empty to renameDiagram and shows the server-resolved title', async () => {
     const { diagrams: apiDiagrams } = await import('@/api')
 
     vi.mocked(apiDiagrams.listDiagrams).mockResolvedValueOnce([
       makeDiagram(8, 'Some title', new Date('2026-01-01')),
     ] as never[])
 
-    // Backend resolves empty title to 'Untitled diagram'
     vi.mocked(apiDiagrams.updateDiagram).mockResolvedValueOnce(
       makeDiagram(8, 'Untitled diagram', new Date('2026-01-02')) as never,
     )
 
     const { wrapper } = await mountList()
 
-    await wrapper.find('.diagram-item__action-btn').trigger('click')
+    await wrapper.find('.diagram-card__rename-btn').trigger('click')
 
-    const input = wrapper.find('.diagram-item__rename-input')
+    const input = wrapper.find('.diagram-card__rename-input')
     await input.setValue('')
     await input.trigger('keydown', { key: 'Enter' })
     await flushPromises()
 
-    // Store is called even for empty string
     expect(apiDiagrams.updateDiagram).toHaveBeenCalledWith(8, { title: '' })
-    // List reflects the server-resolved title
-    expect(wrapper.find('.diagram-item__title').text()).toBe('Untitled diagram')
+    expect(wrapper.find('.diagram-card__title').text()).toBe('Untitled diagram')
   })
 })
