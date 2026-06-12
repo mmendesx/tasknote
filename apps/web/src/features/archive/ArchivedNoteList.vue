@@ -5,6 +5,7 @@ import * as api from '@/api'
 import type { Note } from '@tasknote/shared'
 import ConfirmDeleteDialog from './ConfirmDeleteDialog.vue'
 import { IconRestore, IconTrash } from '../../features/notes/icons'
+import { deriveTitle, getPreview, formatRelativeTime } from '../../features/notes/note-presentation'
 
 const toast = useToast()
 
@@ -61,56 +62,21 @@ async function permanentDelete() {
     selectedNote.value = null
   }
 }
-
-function stripMarkdown(md: string): string {
-  return md
-    .replace(/^#{1,6}\s+/gm, '')
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/\*(.+?)\*/g, '$1')
-    .replace(/`(.+?)`/g, '$1')
-    .replace(/\[(.+?)\]\(.+?\)/g, '$1')
-    .replace(/^[>*-]\s+/gm, '')
-    .replace(/\n+/g, ' ')
-    .trim()
-}
-
-function deriveTitle(note: Note): string {
-  if (note.title) return note.title
-  const body = note.body_md ?? ''
-  const firstHeading = body.match(/^#{1,6}\s+(.+)$/m)
-  if (firstHeading?.[1]) return firstHeading[1].trim()
-  const firstLine = body.split('\n').find((l) => l.trim())
-  return firstLine ? stripMarkdown(firstLine).slice(0, 60) || 'Untitled' : 'Untitled'
-}
-
-function getPreview(note: Note): string {
-  return stripMarkdown(note.body_md ?? '').slice(0, 80)
-}
-
-function formatRelativeTime(date: Date | string | null): string {
-  if (!date) return ''
-  const now = Date.now()
-  const then = new Date(date).getTime()
-  const diffSec = Math.floor((now - then) / 1000)
-
-  if (diffSec < 60) return 'just now'
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`
-  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`
-  if (diffSec < 86400 * 30) return `${Math.floor(diffSec / 86400)}d ago`
-  if (diffSec < 86400 * 365) return `${Math.floor(diffSec / (86400 * 30))}mo ago`
-  return `${Math.floor(diffSec / (86400 * 365))}y ago`
-}
 </script>
 
 <template>
   <div>
+    <!-- Always-mounted live region: announces loading state reliably to screen readers -->
+    <span class="sr-only" aria-live="polite" aria-atomic="true">
+      {{ isLoading ? 'Loading archived notes…' : '' }}
+    </span>
+
     <!-- Loading state: skeleton rows -->
     <ul v-if="isLoading" class="arch-list" aria-label="Archived notes" aria-busy="true">
       <li v-for="i in 3" :key="i" class="arch-list__skeleton" aria-hidden="true">
         <span class="skeleton-line skeleton-line--title"></span>
         <span class="skeleton-line skeleton-line--preview"></span>
       </li>
-      <span class="sr-only" aria-live="polite">Loading archived notes…</span>
     </ul>
 
     <!-- Empty state -->

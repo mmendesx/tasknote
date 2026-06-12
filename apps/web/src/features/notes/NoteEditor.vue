@@ -8,6 +8,7 @@ import TaskLinkPicker from './TaskLinkPicker.vue'
 import { IconPin, IconNote, IconTrash } from './icons'
 import { useNotesStore } from '@/stores/notes'
 import type { Note } from '@tasknote/shared'
+import { deriveTitleFromBody } from './note-presentation'
 
 const props = defineProps<{
   noteId: number | null
@@ -28,17 +29,9 @@ const bodyMd = ref('')
 const loading = ref(false)
 const deleteConfirm = ref(false)
 
-function deriveTitleClient(md: string): string {
-  const heading = md.match(/^#{1,6}\s+(.+)$/m)
-  if (heading?.[1]) return heading[1].trim()
-  const line = md.split('\n').find((l) => l.trim())
-  return line
-    ? line.replace(/^[#*>\-]+\s*/, '').trim().slice(0, 60) || 'Untitled'
-    : 'Untitled'
-}
-
-const displayTitle = computed(() =>
-  title.value || (note.value ? deriveTitleClient(note.value.body_md) : '')
+// Derived title from body — used as placeholder when no explicit title is set
+const derivedTitle = computed(() =>
+  note.value ? deriveTitleFromBody(note.value.body_md ?? '') : ''
 )
 
 watch(
@@ -167,10 +160,10 @@ async function confirmDelete(): Promise<void> {
     <!-- Header row: borderless title + right cluster -->
     <div class="note-editor__header">
       <input
-        :value="displayTitle"
+        :value="title"
         type="text"
         class="note-editor__title-input"
-        placeholder="Untitled"
+        :placeholder="derivedTitle || 'Untitled'"
         aria-label="Note title"
         @input="onTitleInput"
       />

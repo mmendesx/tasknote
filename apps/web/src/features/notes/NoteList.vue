@@ -5,6 +5,7 @@ import { useNotesStore } from '@/stores/notes'
 import { Button } from '@tasknote/ui'
 import { IconPin, IconNote } from './icons'
 import type { Note } from '@tasknote/shared'
+import { deriveTitle, getPreview, formatRelativeTime } from './note-presentation'
 
 const props = defineProps<{
   selectedId: number | null
@@ -33,61 +34,14 @@ const sortedNotes = computed<Note[]>(() =>
     return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
   })
 )
-
-function stripMarkdown(md: string): string {
-  return md
-    .replace(/^#{1,6}\s+/gm, '')
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/\*(.+?)\*/g, '$1')
-    .replace(/`(.+?)`/g, '$1')
-    .replace(/\[(.+?)\]\(.+?\)/g, '$1')
-    .replace(/^[>*-]\s+/gm, '')
-    .replace(/\n+/g, ' ')
-    .trim()
-}
-
-function deriveTitle(note: Note): string {
-  if (note.title) return note.title
-  const body = note.body_md ?? ''
-  const firstHeading = body.match(/^#{1,6}\s+(.+)$/m)
-  if (firstHeading?.[1]) return firstHeading[1].trim()
-  const firstLine = body.split('\n').find((l) => l.trim())
-  return firstLine ? stripMarkdown(firstLine).slice(0, 60) || 'Untitled' : 'Untitled'
-}
-
-function getPreview(note: Note): string {
-  return stripMarkdown(note.body_md ?? '').slice(0, 80)
-}
-
-function formatRelativeTime(date: Date | string): string {
-  const now = Date.now()
-  const then = new Date(date).getTime()
-  const diffMs = now - then
-  const diffSec = Math.floor(diffMs / 1000)
-
-  if (diffSec < 60) return 'just now'
-  if (diffSec < 3600) {
-    const m = Math.floor(diffSec / 60)
-    return `${m}m ago`
-  }
-  if (diffSec < 86400) {
-    const h = Math.floor(diffSec / 3600)
-    return `${h}h ago`
-  }
-  if (diffSec < 86400 * 30) {
-    const d = Math.floor(diffSec / 86400)
-    return `${d}d ago`
-  }
-  if (diffSec < 86400 * 365) {
-    const mo = Math.floor(diffSec / (86400 * 30))
-    return `${mo}mo ago`
-  }
-  const y = Math.floor(diffSec / (86400 * 365))
-  return `${y}y ago`
-}
 </script>
 
 <template>
+  <!-- Always-mounted live region: announces loading state reliably to screen readers -->
+  <span class="sr-only" aria-live="polite" aria-atomic="true">
+    {{ notesStore.loading ? 'Loading notes…' : '' }}
+  </span>
+
   <ul class="note-list" aria-label="Notes">
     <!-- Loading state: CSS-only skeleton rows -->
     <template v-if="notesStore.loading">
@@ -103,7 +57,6 @@ function formatRelativeTime(date: Date | string): string {
         <span class="skeleton-line skeleton-line--title"></span>
         <span class="skeleton-line skeleton-line--preview skeleton-line--narrow"></span>
       </li>
-      <span class="sr-only" aria-live="polite">Loading notes…</span>
     </template>
 
     <!-- Empty state -->
