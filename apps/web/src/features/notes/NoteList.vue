@@ -1,8 +1,9 @@
 <script setup lang="ts">
 
 import { computed, onMounted } from 'vue'
-import { useTimeAgo } from '@vueuse/core'
 import { useNotesStore } from '@/stores/notes'
+import { Button } from '@tasknote/ui'
+import { IconPin, IconNote } from './icons'
 import type { Note } from '@tasknote/shared'
 
 const props = defineProps<{
@@ -12,6 +13,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   select: [id: number]
   deleted: [id: number]
+  create: []
 }>()
 
 const notesStore = useNotesStore()
@@ -56,11 +58,64 @@ function deriveTitle(note: Note): string {
 function getPreview(note: Note): string {
   return stripMarkdown(note.body_md ?? '').slice(0, 80)
 }
+
+function formatRelativeTime(date: Date | string): string {
+  const now = Date.now()
+  const then = new Date(date).getTime()
+  const diffMs = now - then
+  const diffSec = Math.floor(diffMs / 1000)
+
+  if (diffSec < 60) return 'just now'
+  if (diffSec < 3600) {
+    const m = Math.floor(diffSec / 60)
+    return `${m}m ago`
+  }
+  if (diffSec < 86400) {
+    const h = Math.floor(diffSec / 3600)
+    return `${h}h ago`
+  }
+  if (diffSec < 86400 * 30) {
+    const d = Math.floor(diffSec / 86400)
+    return `${d}d ago`
+  }
+  if (diffSec < 86400 * 365) {
+    const mo = Math.floor(diffSec / (86400 * 30))
+    return `${mo}mo ago`
+  }
+  const y = Math.floor(diffSec / (86400 * 365))
+  return `${y}y ago`
+}
 </script>
 
 <template>
   <ul class="note-list" aria-label="Notes">
+    <!-- Loading state: CSS-only skeleton rows -->
+    <template v-if="notesStore.loading">
+      <li class="note-list__skeleton" aria-hidden="true">
+        <span class="skeleton-line skeleton-line--title"></span>
+        <span class="skeleton-line skeleton-line--preview"></span>
+      </li>
+      <li class="note-list__skeleton" aria-hidden="true">
+        <span class="skeleton-line skeleton-line--title skeleton-line--short"></span>
+        <span class="skeleton-line skeleton-line--preview"></span>
+      </li>
+      <li class="note-list__skeleton" aria-hidden="true">
+        <span class="skeleton-line skeleton-line--title"></span>
+        <span class="skeleton-line skeleton-line--preview skeleton-line--narrow"></span>
+      </li>
+      <span class="sr-only" aria-live="polite">Loading notes…</span>
+    </template>
+
+    <!-- Empty state -->
+    <li v-else-if="!sortedNotes.length" class="note-list__empty">
+      <IconNote class="note-list__empty-icon" aria-hidden="true" width="40" height="40" />
+      <p class="note-list__empty-text">No notes yet — create your first one</p>
+      <Button variant="primary" size="sm" @click="emit('create')">New note</Button>
+    </li>
+
+    <!-- Note rows -->
     <li
+      v-else
       v-for="note in sortedNotes"
       :key="note.id"
       class="note-item"
@@ -82,14 +137,12 @@ function getPreview(note: Note): string {
             aria-label="Pinned"
             title="Pinned"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M16 3v2l-1 1v5l3 2v2h-5v6l-1 1-1-1v-6H6v-2l3-2V6L8 5V3z"/>
-            </svg>
+            <IconPin width="12" height="12" aria-hidden="true" />
           </span>
         </div>
         <p class="note-item__preview">{{ getPreview(note) }}</p>
         <time class="note-item__time" :datetime="String(note.updated_at)">
-          {{ useTimeAgo(new Date(note.updated_at)).value }}
+          {{ formatRelativeTime(note.updated_at) }}
         </time>
       </button>
 
@@ -106,25 +159,40 @@ function getPreview(note: Note): string {
         </svg>
       </button>
     </li>
-
-    <li v-if="notesStore.loading" class="note-list__empty">Loading…</li>
-    <li v-else-if="!sortedNotes.length" class="note-list__empty">No notes yet.</li>
   </ul>
 </template>
 
 <style scoped>
+/* ── Screen-reader only utility ─────────────────────────────────────────────── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── List container ─────────────────────────────────────────────────────────── */
 .note-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: var(--space-2, 0.5rem);
   overflow-y: auto;
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1, 0.25rem);
 }
 
+/* ── Note item (full-mode) — cards-lite ─────────────────────────────────────── */
 .note-item {
   position: relative;
-  border-bottom: 1px solid var(--color-border);
-  transition: background var(--motion-duration-fast);
+  border-radius: var(--radius-control, 6px);
+  transition: background var(--motion-duration-fast, 120ms) var(--motion-easing, ease);
 }
 
 .note-item:hover,
@@ -132,15 +200,23 @@ function getPreview(note: Note): string {
   background: var(--color-surface-elevated);
 }
 
-/* FR-8c: full-width button activator — reset to look like a plain list item */
+/* Selected: elevated bg + 2px accent left rail */
+.note-item--selected {
+  background: var(--color-surface-elevated);
+  box-shadow: inset 2px 0 0 var(--color-accent);
+}
+
+/* ── Open button (full-width click target) ──────────────────────────────────── */
 .note-item__open {
   display: block;
   width: 100%;
   text-align: left;
   background: transparent;
   border: none;
+  border-radius: var(--radius-control, 6px);
   cursor: pointer;
-  padding: 0.625rem 2.5rem 0.625rem 0.75rem;
+  /* Right padding leaves room for the delete button */
+  padding: 0.5rem 2.25rem 0.5rem 0.625rem;
   color: inherit;
   font: inherit;
 }
@@ -150,11 +226,7 @@ function getPreview(note: Note): string {
   outline-offset: -2px;
 }
 
-.note-item--selected {
-  background: var(--color-surface-elevated);
-  border-left: 2px solid var(--color-text-muted);
-}
-
+/* ── Row header: title + pin ────────────────────────────────────────────────── */
 .note-item__header {
   display: flex;
   align-items: center;
@@ -175,12 +247,30 @@ function getPreview(note: Note): string {
 .note-item__pin {
   color: var(--color-accent);
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
 }
 
+/* ── Preview + time ─────────────────────────────────────────────────────────── */
+.note-item__preview {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  margin: 0 0 0.1875rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-item__time {
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+}
+
+/* ── Delete button ──────────────────────────────────────────────────────────── */
 .note-item__del {
   position: absolute;
   top: 50%;
-  right: 0.5rem;
+  right: 0.375rem;
   transform: translateY(-50%);
   display: flex;
   align-items: center;
@@ -197,10 +287,13 @@ function getPreview(note: Note): string {
   flex-shrink: 0;
   opacity: 0;
   pointer-events: none;
-  transition: color var(--motion-duration-fast), opacity var(--motion-duration-fast), background-color var(--motion-duration-fast);
+  transition:
+    color var(--motion-duration-fast, 120ms),
+    opacity var(--motion-duration-fast, 120ms),
+    background-color var(--motion-duration-fast, 120ms);
 }
 
-/* Reveal on hover or keyboard focus-within (ICT-43 pattern) */
+/* Reveal on hover or keyboard focus-within */
 .note-item:hover .note-item__del,
 .note-item:focus-within .note-item__del {
   opacity: 1;
@@ -225,24 +318,78 @@ function getPreview(note: Note): string {
   outline-offset: 1px;
 }
 
-.note-item__preview {
-  font-size: 0.75rem;
-  color: var(--color-text-secondary);
-  margin: 0 0 0.25rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.note-item__time {
-  font-size: 0.6875rem;
-  color: var(--color-text-muted);
-}
-
+/* ── Empty state ────────────────────────────────────────────────────────────── */
 .note-list__empty {
-  padding: 1rem 0.75rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3, 0.75rem);
+  padding: var(--space-6, 1.5rem) var(--space-4, 1rem);
+  list-style: none;
+}
+
+.note-list__empty-icon {
+  color: var(--color-text-muted);
+  opacity: 0.5;
+}
+
+.note-list__empty-text {
   font-size: 0.8125rem;
   color: var(--color-text-muted);
   text-align: center;
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* ── Skeleton loading rows ──────────────────────────────────────────────────── */
+@keyframes shimmer {
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
+}
+
+.note-list__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.5rem 0.625rem;
+  border-radius: var(--radius-control, 6px);
+  list-style: none;
+}
+
+.skeleton-line {
+  display: block;
+  border-radius: 3px;
+  background: linear-gradient(
+    90deg,
+    var(--color-border, rgba(128, 128, 128, 0.15)) 25%,
+    var(--color-surface-elevated, rgba(128, 128, 128, 0.25)) 50%,
+    var(--color-border, rgba(128, 128, 128, 0.15)) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+.skeleton-line--title {
+  height: 0.75rem;
+  width: 70%;
+}
+
+.skeleton-line--title.skeleton-line--short {
+  width: 50%;
+}
+
+.skeleton-line--preview {
+  height: 0.625rem;
+  width: 90%;
+}
+
+.skeleton-line--preview.skeleton-line--narrow {
+  width: 60%;
 }
 </style>
