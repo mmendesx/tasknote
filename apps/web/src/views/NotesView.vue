@@ -62,6 +62,7 @@ function navigateBack(): void {
       >
         <NoteList
           :selected-id="selectedId"
+          @create="createNote"
           @select="handleSelect"
           @deleted="handleDeleted"
         />
@@ -87,6 +88,7 @@ function navigateBack(): void {
 
         <NoteEditor
           :note-id="selectedId"
+          @create="createNote"
           @deleted="handleDeleted"
         />
       </main>
