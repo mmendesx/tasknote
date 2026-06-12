@@ -1,0 +1,28 @@
+/**
+ * Floating chrome shared styles for diagram UI panels.
+ *
+ * Import this file in any diagram component that renders a floating surface
+ * (toolbar overlays, context menus, mini-maps, style panels, etc.):
+ *
+ *   <style>
+ *   @import './diagram-chrome.css';
+ *   </style>
+ *
+ * Or in a global <style> block inside a parent component.
+ *
+ * Tokens used:
+ *   --color-surface-elevated  background fill
+ *   --color-border            1px border (defined in tokens.css)
+ *   --radius-card             corner radius (0.75rem / 12px)
+ *   --motion-duration-fast    transition speed
+ *   --motion-easing           transition easing
+ */
+
+.diagram-floating-chrome {
+  background-color: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow:
+    0 1px 3px color-mix(in srgb, var(--color-bg) 60%, transparent),
+    0 4px 12px color-mix(in srgb, var(--color-bg) 40%, transparent);
+}
