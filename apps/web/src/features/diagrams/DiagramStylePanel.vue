@@ -26,9 +26,9 @@ const FILL_PALETTE = [
 ] as const
 
 const STROKE_WIDTHS = [
-  { value: 1, label: 'Thin' },
-  { value: 2, label: 'Medium' },
-  { value: 4, label: 'Thick' },
+  { value: 1, label: 'Thin', lineHeight: 1.5 },
+  { value: 2, label: 'Medium', lineHeight: 2.5 },
+  { value: 4, label: 'Thick', lineHeight: 4 },
 ] as const
 
 const FONT_SIZES = [
@@ -132,132 +132,205 @@ function applyStrokeWidth(value: number): void {
 function applyFontSize(value: number): void {
   store.applyStyle({ fontSize: value })
 }
+
+// ── Swatch display helpers ───────────────────────────────────────────────────
+
+function strokeSwatchColor(value: string): string {
+  return value === 'currentColor' ? 'var(--color-text-primary)' : value
+}
 </script>
 
 <template>
-  <div
-    v-if="isVisible"
-    class="style-panel"
-    role="group"
-    aria-label="Style panel"
-  >
-
-    <!-- Stroke / Color -->
-    <div class="style-panel__group" role="group" aria-label="Stroke color">
-      <span class="style-panel__label">Color</span>
-      <div class="style-panel__swatches">
-        <button
-          v-for="item in STROKE_PALETTE"
-          :key="item.value"
-          class="style-panel__swatch focus-ring"
-          :class="{ 'style-panel__swatch--active': activeStroke === item.value }"
-          :aria-label="item.label"
-          :aria-pressed="activeStroke === item.value"
-          @click="applyStroke(item.value)"
-        >
-          <span
-            class="style-panel__swatch-dot"
-            :style="{ background: item.value === 'currentColor' ? 'var(--color-text-primary)' : item.value }"
-            aria-hidden="true"
-          />
-        </button>
-      </div>
-    </div>
-
-    <!-- Fill (shapes only) -->
+  <Transition name="style-panel-fade">
     <div
-      v-if="hasFillElements"
-      class="style-panel__group"
+      v-if="isVisible"
+      class="style-panel diagram-floating-chrome"
       role="group"
-      aria-label="Fill color"
+      aria-label="Style panel"
     >
-      <span class="style-panel__label">Fill</span>
-      <div class="style-panel__swatches">
-        <button
-          v-for="item in FILL_PALETTE"
-          :key="String(item.value)"
-          class="style-panel__swatch focus-ring"
-          :class="{ 'style-panel__swatch--active': activeFill === item.value }"
-          :aria-label="item.label"
-          :aria-pressed="activeFill === item.value"
-          @click="applyFill(item.value)"
-        >
-          <span
-            class="style-panel__swatch-dot"
-            :class="{ 'style-panel__swatch-dot--none': item.value === null }"
-            :style="item.value !== null ? { background: item.value } : {}"
-            aria-hidden="true"
-          />
-        </button>
-      </div>
-    </div>
 
-    <!-- Stroke width (non-text elements) -->
-    <div
-      v-if="hasStrokeWidthElements"
-      class="style-panel__group"
-      role="group"
-      aria-label="Stroke width"
-    >
-      <span class="style-panel__label">Width</span>
-      <div class="style-panel__btn-group">
-        <button
-          v-for="item in STROKE_WIDTHS"
-          :key="item.value"
-          class="style-panel__btn focus-ring"
-          :class="{ 'style-panel__btn--active': activeStrokeWidth === item.value }"
-          :aria-label="item.label"
-          :aria-pressed="activeStrokeWidth === item.value"
-          @click="applyStrokeWidth(item.value)"
-        >
-          {{ item.label }}
-        </button>
+      <!-- Stroke / Color -->
+      <div
+        v-if="hasStrokeElements"
+        class="style-panel__group"
+        role="group"
+        aria-label="Stroke color"
+      >
+        <span class="style-panel__label" aria-hidden="true">Color</span>
+        <div class="style-panel__swatches">
+          <button
+            v-for="item in STROKE_PALETTE"
+            :key="item.value"
+            class="style-panel__swatch focus-ring"
+            :class="{ 'style-panel__swatch--active': activeStroke === item.value }"
+            :aria-label="item.label"
+            :aria-pressed="activeStroke === item.value"
+            @click="applyStroke(item.value)"
+          >
+            <span
+              class="style-panel__swatch-dot"
+              :style="{ background: strokeSwatchColor(item.value) }"
+              aria-hidden="true"
+            />
+          </button>
+        </div>
       </div>
-    </div>
 
-    <!-- Font size (text elements only) -->
-    <div
-      v-if="hasTextElements"
-      class="style-panel__group"
-      role="group"
-      aria-label="Font size"
-    >
-      <span class="style-panel__label">Size</span>
-      <div class="style-panel__btn-group">
-        <button
-          v-for="item in FONT_SIZES"
-          :key="item.value"
-          class="style-panel__btn focus-ring"
-          :class="{ 'style-panel__btn--active': activeFontSize === item.value }"
-          :aria-label="item.label"
-          :aria-pressed="activeFontSize === item.value"
-          @click="applyFontSize(item.value)"
-        >
-          {{ item.label }}
-        </button>
+      <!-- Fill (shapes only) -->
+      <div
+        v-if="hasFillElements"
+        class="style-panel__group"
+        role="group"
+        aria-label="Fill color"
+      >
+        <span class="style-panel__label" aria-hidden="true">Fill</span>
+        <div class="style-panel__swatches">
+          <button
+            v-for="item in FILL_PALETTE"
+            :key="String(item.value)"
+            class="style-panel__swatch focus-ring"
+            :class="{ 'style-panel__swatch--active': activeFill === item.value }"
+            :aria-label="item.label"
+            :aria-pressed="activeFill === item.value"
+            @click="applyFill(item.value)"
+          >
+            <!-- No-fill swatch: circle with diagonal slash -->
+            <span
+              v-if="item.value === null"
+              class="style-panel__swatch-dot style-panel__swatch-dot--none"
+              aria-hidden="true"
+            >
+              <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" focusable="false">
+                <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5" fill="none" />
+                <line x1="3" y1="13" x2="13" y2="3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+              </svg>
+            </span>
+            <!-- Colored fill swatch -->
+            <span
+              v-else
+              class="style-panel__swatch-dot"
+              :style="{ background: item.value }"
+              aria-hidden="true"
+            />
+          </button>
+        </div>
       </div>
-    </div>
 
-  </div>
+      <!-- Stroke width (non-text elements) -->
+      <div
+        v-if="hasStrokeWidthElements"
+        class="style-panel__group"
+        role="group"
+        aria-label="Stroke width"
+      >
+        <span class="style-panel__label" aria-hidden="true">Width</span>
+        <div class="style-panel__btn-group style-panel__btn-group--segmented">
+          <button
+            v-for="item in STROKE_WIDTHS"
+            :key="item.value"
+            class="style-panel__btn style-panel__btn--width focus-ring"
+            :class="{ 'style-panel__btn--active': activeStrokeWidth === item.value }"
+            :aria-label="item.label"
+            :aria-pressed="activeStrokeWidth === item.value"
+            @click="applyStrokeWidth(item.value)"
+          >
+            <!-- Visual line-weight preview -->
+            <span class="style-panel__line-preview" aria-hidden="true">
+              <span
+                class="style-panel__line-preview-bar"
+                :style="{ height: item.lineHeight + 'px' }"
+              />
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Font size (text elements only) -->
+      <div
+        v-if="hasTextElements"
+        class="style-panel__group"
+        role="group"
+        aria-label="Font size"
+      >
+        <span class="style-panel__label" aria-hidden="true">Size</span>
+        <div class="style-panel__btn-group style-panel__btn-group--segmented">
+          <button
+            v-for="item in FONT_SIZES"
+            :key="item.value"
+            class="style-panel__btn focus-ring"
+            :class="{ 'style-panel__btn--active': activeFontSize === item.value }"
+            :aria-label="item.label"
+            :aria-pressed="activeFontSize === item.value"
+            @click="applyFontSize(item.value)"
+          >
+            {{ item.label }}
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </Transition>
 </template>
 
-<style scoped>
-.style-panel {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  padding: 4px 12px;
-  background-color: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
-  flex-shrink: 0;
-  min-height: 40px;
+<style>
+/*
+ * Non-scoped: give the flex-column ancestor a positioning context so the panel
+ * can anchor itself absolutely within the detail area without editing DiagramsView.
+ */
+.diagrams-view__detail {
+  position: relative;
 }
+</style>
+
+<style>
+@import './diagram-chrome.css';
+</style>
+
+<style scoped>
+/* ── Floating panel ─────────────────────────────────────────────────────────── */
+
+.style-panel {
+  position: absolute;
+  top: 56px; /* clear detail-header (44px) + 12px breathing room */
+  right: 12px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  width: max-content;
+  max-width: 240px;
+  pointer-events: auto;
+}
+
+/* ── Transition: fade + slight translate ────────────────────────────────────── */
+
+.style-panel-fade-enter-active,
+.style-panel-fade-leave-active {
+  transition:
+    opacity var(--motion-duration-fast, 120ms) var(--motion-easing, ease),
+    transform var(--motion-duration-fast, 120ms) var(--motion-easing, ease);
+}
+
+.style-panel-fade-enter-from,
+.style-panel-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .style-panel-fade-enter-active,
+  .style-panel-fade-leave-active {
+    transition: none;
+  }
+}
+
+/* ── Group layout ────────────────────────────────────────────────────────────── */
 
 .style-panel__group {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 
 .style-panel__label {
@@ -266,6 +339,7 @@ function applyFontSize(value: number): void {
   white-space: nowrap;
   flex-shrink: 0;
   min-width: 3ch;
+  line-height: 1;
 }
 
 /* ── Swatch buttons ─────────────────────────────────────────────────────────── */
@@ -273,50 +347,56 @@ function applyFontSize(value: number): void {
 .style-panel__swatches {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
+  flex-wrap: wrap;
 }
 
 .style-panel__swatch {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   padding: 0;
-  border-radius: var(--radius-control);
-  border: 1.5px solid transparent;
+  border-radius: 50%;
+  border: 2px solid transparent;
   background: transparent;
   cursor: pointer;
   flex-shrink: 0;
+  outline: none;
   transition:
     border-color var(--motion-duration-fast, 120ms) var(--motion-easing, ease),
     background-color var(--motion-duration-fast, 120ms) var(--motion-easing, ease);
 }
 
 .style-panel__swatch:hover {
-  background-color: var(--color-surface-elevated);
-  border-color: var(--color-border);
+  background-color: color-mix(in srgb, var(--color-text-primary) 8%, transparent);
 }
 
+/*
+ * Active state: outer ring via box-shadow (offset ring technique).
+ * Uses accent color for the ring so it stays visible on any swatch color.
+ */
 .style-panel__swatch--active {
-  border-color: var(--color-accent);
-  background-color: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  box-shadow: 0 0 0 2px var(--color-surface-elevated), 0 0 0 4px var(--color-accent);
 }
 
 .style-panel__swatch-dot {
-  display: block;
-  width: 12px;
-  height: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   flex-shrink: 0;
+  color: var(--color-text-muted);
 }
 
 .style-panel__swatch-dot--none {
-  background: transparent !important;
-  border: 1.5px dashed var(--color-text-muted);
+  background: transparent;
 }
 
-/* ── Text / width button groups ─────────────────────────────────────────────── */
+/* ── Width / font-size segmented button groups ───────────────────────────────── */
 
 .style-panel__btn-group {
   display: flex;
@@ -324,15 +404,22 @@ function applyFontSize(value: number): void {
   gap: 2px;
 }
 
+.style-panel__btn-group--segmented {
+  gap: 0;
+  border-radius: var(--radius-control, 6px);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+}
+
 .style-panel__btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 28px;
-  height: 24px;
-  padding: 0 6px;
-  border-radius: var(--radius-control);
+  min-width: 32px;
+  height: 28px;
+  padding: 0 8px;
   border: none;
+  border-right: 1px solid var(--color-border);
   background: transparent;
   color: var(--color-text-secondary);
   font-size: var(--text-xs, 0.75rem);
@@ -340,24 +427,61 @@ function applyFontSize(value: number): void {
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
+  outline: none;
   transition:
     background-color var(--motion-duration-fast, 120ms) var(--motion-easing, ease),
     color var(--motion-duration-fast, 120ms) var(--motion-easing, ease);
 }
 
+.style-panel__btn:last-child {
+  border-right: none;
+}
+
 .style-panel__btn:hover {
-  background-color: var(--color-surface-elevated);
+  background-color: color-mix(in srgb, var(--color-text-primary) 8%, transparent);
   color: var(--color-text-primary);
 }
 
 .style-panel__btn--active {
-  background-color: color-mix(in srgb, var(--color-accent) 15%, transparent);
-  color: var(--color-accent);
+  background-color: var(--color-accent);
+  color: #fff;
 }
 
 .style-panel__btn--active:hover {
-  background-color: color-mix(in srgb, var(--color-accent) 22%, transparent);
-  color: var(--color-accent);
+  background-color: var(--color-accent);
+  color: #fff;
+}
+
+/* ── Stroke width preview ───────────────────────────────────────────────────── */
+
+.style-panel__btn--width {
+  padding: 0 10px;
+}
+
+.style-panel__line-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+}
+
+.style-panel__line-preview-bar {
+  display: block;
+  width: 100%;
+  background: currentColor;
+  border-radius: 2px;
+}
+
+/* ── Focus ring ──────────────────────────────────────────────────────────────── */
+
+.style-panel__swatch.focus-ring:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.style-panel__btn.focus-ring:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
 }
 
 @media (prefers-reduced-motion: reduce) {

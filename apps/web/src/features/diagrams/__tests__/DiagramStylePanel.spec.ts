@@ -261,4 +261,151 @@ describe('DiagramStylePanel', () => {
       expect(swatch.attributes('aria-pressed')).toBe('false')
     }
   })
+
+  // ── New cases: redesigned markup ────────────────────────────────────────────
+
+  it('matching stroke swatch has active ring class applied', async () => {
+    const { wrapper, store } = mountPanel()
+    store.elements = [{ ...makeRectangle('r1'), stroke: '#e03131' }]
+    store.selectedIds = ['r1']
+
+    await wrapper.vm.$nextTick()
+
+    const redSwatch = wrapper.find('button[aria-label="Red"]')
+    expect(redSwatch.exists()).toBe(true)
+    expect(redSwatch.classes()).toContain('style-panel__swatch--active')
+  })
+
+  it('non-matching stroke swatches do not have active ring class', async () => {
+    const { wrapper, store } = mountPanel()
+    store.elements = [{ ...makeRectangle('r1'), stroke: '#e03131' }]
+    store.selectedIds = ['r1']
+
+    await wrapper.vm.$nextTick()
+
+    const greenSwatch = wrapper.find('button[aria-label="Green"]')
+    expect(greenSwatch.exists()).toBe(true)
+    expect(greenSwatch.classes()).not.toContain('style-panel__swatch--active')
+  })
+
+  it('no swatch has active ring class on mixed-selection stroke', async () => {
+    const { wrapper, store } = mountPanel()
+    store.elements = [
+      { ...makeRectangle('r1'), stroke: '#e03131' },
+      { ...makeRectangle('r2'), stroke: '#2f9e44' },
+    ]
+    store.selectedIds = ['r1', 'r2']
+
+    await wrapper.vm.$nextTick()
+
+    const strokeGroup = wrapper.find('[aria-label="Stroke color"]')
+    const swatches = strokeGroup.findAll('.style-panel__swatch')
+    for (const swatch of swatches) {
+      expect(swatch.classes()).not.toContain('style-panel__swatch--active')
+    }
+  })
+
+  it('no fill swatch has active ring class on mixed-selection fill', async () => {
+    const { wrapper, store } = mountPanel()
+    store.elements = [
+      { ...makeRectangle('r1'), fill: '#e03131' },
+      { ...makeRectangle('r2'), fill: '#2f9e44' },
+    ]
+    store.selectedIds = ['r1', 'r2']
+
+    await wrapper.vm.$nextTick()
+
+    const fillGroup = wrapper.find('[aria-label="Fill color"]')
+    const swatches = fillGroup.findAll('.style-panel__swatch')
+    for (const swatch of swatches) {
+      expect(swatch.classes()).not.toContain('style-panel__swatch--active')
+    }
+  })
+
+  it('stroke width buttons render line-weight preview elements', async () => {
+    const { wrapper, store } = mountPanel()
+    store.elements = [makeRectangle('r1')]
+    store.selectedIds = ['r1']
+
+    await wrapper.vm.$nextTick()
+
+    const widthGroup = wrapper.find('[aria-label="Stroke width"]')
+    const buttons = widthGroup.findAll('button')
+
+    // Each width button must contain a line-preview bar
+    for (const btn of buttons) {
+      expect(btn.find('.style-panel__line-preview-bar').exists()).toBe(true)
+    }
+  })
+
+  it('Thin width button has a thinner preview bar than Thick', async () => {
+    const { wrapper, store } = mountPanel()
+    store.elements = [makeRectangle('r1')]
+    store.selectedIds = ['r1']
+
+    await wrapper.vm.$nextTick()
+
+    const thinBar = wrapper.find('button[aria-label="Thin"] .style-panel__line-preview-bar')
+    const thickBar = wrapper.find('button[aria-label="Thick"] .style-panel__line-preview-bar')
+
+    expect(thinBar.exists()).toBe(true)
+    expect(thickBar.exists()).toBe(true)
+
+    // The height style is set inline — thin should be 1.5px, thick should be 4px
+    const thinStyle = thinBar.attributes('style') ?? ''
+    const thickStyle = thickBar.attributes('style') ?? ''
+
+    expect(thinStyle).toContain('1.5px')
+    expect(thickStyle).toContain('4px')
+  })
+
+  it('active font size button has active class and aria-pressed=true', async () => {
+    const { wrapper, store } = mountPanel()
+    // makeText sets fontSize: 16 (M)
+    store.elements = [makeText('t1')]
+    store.selectedIds = ['t1']
+
+    await wrapper.vm.$nextTick()
+
+    const mBtn = wrapper.find('button[aria-label="M"]')
+    expect(mBtn.exists()).toBe(true)
+    expect(mBtn.classes()).toContain('style-panel__btn--active')
+    expect(mBtn.attributes('aria-pressed')).toBe('true')
+
+    const sBtn = wrapper.find('button[aria-label="S"]')
+    expect(sBtn.classes()).not.toContain('style-panel__btn--active')
+  })
+
+  it('no fill swatch renders an SVG diagonal-slash indicator', async () => {
+    const { wrapper, store } = mountPanel()
+    store.elements = [makeRectangle('r1')]
+    store.selectedIds = ['r1']
+
+    await wrapper.vm.$nextTick()
+
+    const noFillBtn = wrapper.find('button[aria-label="No fill"]')
+    expect(noFillBtn.exists()).toBe(true)
+    // Should contain a svg element for the diagonal slash
+    expect(noFillBtn.find('svg').exists()).toBe(true)
+  })
+
+  it('panel appears only when selection is non-empty', async () => {
+    const { wrapper, store } = mountPanel()
+    store.elements = [makeRectangle('r1')]
+
+    // Initially no selection
+    store.selectedIds = []
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[role="group"][aria-label="Style panel"]').exists()).toBe(false)
+
+    // Select an element
+    store.selectedIds = ['r1']
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[role="group"][aria-label="Style panel"]').exists()).toBe(true)
+
+    // Deselect
+    store.selectedIds = []
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[role="group"][aria-label="Style panel"]').exists()).toBe(false)
+  })
 })
