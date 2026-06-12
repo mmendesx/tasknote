@@ -733,6 +733,64 @@ describe('DiagramCanvas', () => {
     expect(apiDiagrams.updateDiagram).toHaveBeenCalledWith(1, expect.anything())
   })
 
+  // ── Fix 1: stroke-width constant (no double compensation) ────────────────
+
+  it('selection outline has stroke-width="1" at non-unity zoom (zoom 2)', async () => {
+    const { diagrams: apiDiagrams } = await import('@/api')
+    vi.mocked(apiDiagrams.getDiagram).mockResolvedValueOnce({
+      id: 1,
+      title: 'Stroke-width test',
+      scene_json: {
+        version: 1,
+        elements: [
+          {
+            id: 'rect-sw',
+            type: 'rectangle' as const,
+            x: 50, y: 50, width: 100, height: 80,
+            stroke: '#000', fill: null, strokeWidth: 2,
+          },
+        ],
+        appState: { viewport: { scrollX: 0, scrollY: 0, zoom: 2 } },
+      },
+    } as never)
+
+    const { wrapper, pinia } = await mountCanvas()
+    const state = pinia.state.value['diagrams']
+    state.tool = 'select'
+    state.loading = false
+    state.loadError = null
+    state.selectedIds = ['rect-sw']
+    await wrapper.vm.$nextTick()
+
+    const outline = wrapper.find('.diagram-selection-outline')
+    expect(outline.exists()).toBe(true)
+    // Must be constant 1, not 1/zoom (0.5 at zoom 2)
+    expect(outline.attributes('stroke-width')).toBe('1')
+  })
+
+  it('marquee has stroke-width="1" at non-unity zoom (zoom 2)', async () => {
+    const { wrapper, pinia } = await mountCanvas()
+
+    const state = pinia.state.value['diagrams']
+    state.tool = 'select'
+    state.loading = false
+    state.loadError = null
+    state.viewport = { scrollX: 0, scrollY: 0, zoom: 2 }
+    await wrapper.vm.$nextTick()
+
+    const svg = wrapper.find('svg.diagram-canvas')
+    await svg.trigger('pointerdown', { clientX: 10, clientY: 10, pointerId: 1 })
+    await svg.trigger('pointermove', { clientX: 80, clientY: 70, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    const marquee = wrapper.find('.diagram-marquee')
+    expect(marquee.exists()).toBe(true)
+    // Must be constant 1, not 1/zoom (0.5 at zoom 2)
+    expect(marquee.attributes('stroke-width')).toBe('1')
+
+    await svg.trigger('pointerup', { pointerId: 1 })
+  })
+
   // ── ICT-6: Selection chrome refinement ────────────────────────────────────
 
   it('ICT-6: selection outline is solid — no stroke-dasharray attribute', async () => {

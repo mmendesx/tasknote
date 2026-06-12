@@ -2,7 +2,6 @@
 import { computed } from 'vue'
 import { useDiagramsStore } from '@/stores/diagrams'
 import { IconZoomOut, IconZoomIn, IconUndo, IconRedo } from './icons'
-import './diagram-chrome.css'
 
 // ── Store ─────────────────────────────────────────────────────────────────────
 
@@ -188,8 +187,4 @@ function resetZoom(): void {
     transition: none;
   }
 }
-</style>
-
-<style>
-@import './diagram-chrome.css';
 </style>

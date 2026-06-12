@@ -412,7 +412,7 @@ function onCanvasDblClick(event: MouseEvent): void {
         :height="hoveredElementBbox.height + 8 / store.viewport.zoom"
         fill="none"
         stroke="var(--color-accent, #6366f1)"
-        :stroke-width="1 / store.viewport.zoom"
+        stroke-width="1"
         vector-effect="non-scaling-stroke"
         opacity="0.4"
         pointer-events="none"
@@ -428,7 +428,7 @@ function onCanvasDblClick(event: MouseEvent): void {
         :height="selectionBBox.height + 8 / store.viewport.zoom"
         fill="none"
         stroke="var(--color-accent, #6366f1)"
-        :stroke-width="1 / store.viewport.zoom"
+        stroke-width="1"
         vector-effect="non-scaling-stroke"
         pointer-events="none"
       />
@@ -465,7 +465,7 @@ function onCanvasDblClick(event: MouseEvent): void {
         :height="marqueeRect.height"
         fill="var(--color-marquee-fill, color-mix(in srgb, var(--color-accent, #6366f1) 10%, transparent))"
         stroke="var(--color-accent, #6366f1)"
-        :stroke-width="1 / store.viewport.zoom"
+        stroke-width="1"
         vector-effect="non-scaling-stroke"
         pointer-events="none"
       />

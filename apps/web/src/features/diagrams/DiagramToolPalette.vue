@@ -2,7 +2,6 @@
 import { Tooltip } from '@tasknote/ui'
 import { useDiagramsStore } from '@/stores/diagrams'
 import { TOOL_ICONS } from './icons'
-import './diagram-chrome.css'
 
 // ── Store ─────────────────────────────────────────────────────────────────────
 
@@ -33,7 +32,7 @@ function selectTool(value: ToolValue): void {
 <template>
   <div
     class="diagram-tool-palette diagram-floating-chrome"
-    role="radiogroup"
+    role="toolbar"
     aria-label="Drawing tools"
   >
     <Tooltip
@@ -45,8 +44,7 @@ function selectTool(value: ToolValue): void {
       <button
         class="diagram-tool-palette__btn focus-ring"
         :class="{ 'diagram-tool-palette__btn--active': store.tool === tool.value }"
-        role="radio"
-        :aria-checked="store.tool === tool.value"
+        :aria-pressed="store.tool === tool.value"
         :aria-label="`${tool.label} — ${tool.shortcut}`"
         @click="selectTool(tool.value)"
       >
@@ -107,8 +105,4 @@ function selectTool(value: ToolValue): void {
     transition: none;
   }
 }
-</style>
-
-<style>
-@import './diagram-chrome.css';
 </style>

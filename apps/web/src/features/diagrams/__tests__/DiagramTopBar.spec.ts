@@ -275,27 +275,6 @@ describe('DiagramsView top bar — export dropdown', () => {
     exportSvgSpy.mockRestore()
   })
 
-  it('clicking Export SVG item calls exportSvg once and passes elements + title', async () => {
-    const exportModule = await import('../exportDiagram')
-    const exportSvgSpy = vi.spyOn(exportModule, 'exportSvg').mockImplementation(() => {})
-
-    const { wrapper, pinia } = await mountDetailView()
-
-    const state = pinia.state.value['diagrams']
-    const el = makeElement()
-    state.elements = [el]
-    state.title = 'My Diagram'
-    await wrapper.vm.$nextTick()
-
-    await wrapper.find('[data-testid="dropdown-item-export-svg"]').trigger('click')
-
-    expect(exportSvgSpy).toHaveBeenCalledOnce()
-    expect(exportSvgSpy.mock.calls[0]![0]).toEqual([el])
-    expect(exportSvgSpy.mock.calls[0]![1]).toBe('My Diagram')
-
-    exportSvgSpy.mockRestore()
-  })
-
   it('Export PNG failure shows an error toast', async () => {
     const exportModule = await import('../exportDiagram')
     const exportPngSpy = vi

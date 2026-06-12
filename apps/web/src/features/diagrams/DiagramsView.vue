@@ -344,6 +344,10 @@ const exportMenuItems = computed<MenuItemDef[]>(() => [
   </div>
 </template>
 
+<style>
+@import './diagram-chrome.css';
+</style>
+
 <style scoped>
 .diagrams-view {
   height: 100%;
@@ -356,6 +360,7 @@ const exportMenuItems = computed<MenuItemDef[]>(() => [
 /* ── Detail view ─────────────────────────────────────────────────────────── */
 
 .diagrams-view__detail {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;

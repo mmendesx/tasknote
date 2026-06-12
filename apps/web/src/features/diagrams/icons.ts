@@ -14,7 +14,7 @@
  */
 
 import { defineComponent, h } from 'vue'
-import type { FunctionalComponent, SVGAttributes } from 'vue'
+import type { Component, SVGAttributes } from 'vue'
 
 // ── Shared SVG defaults ────────────────────────────────────────────────────────
 
@@ -42,8 +42,8 @@ const BASE_ATTRS = {
 function makeIcon(
   name: string,
   children: () => ReturnType<typeof h>[],
-): FunctionalComponent<SVGAttributes> {
-  const component = defineComponent({
+): Component {
+  return defineComponent({
     name,
     inheritAttrs: false,
     setup(_props, { attrs }) {
@@ -55,7 +55,6 @@ function makeIcon(
         )
     },
   })
-  return component as unknown as FunctionalComponent<SVGAttributes>
 }
 
 // ── Individual icons ──────────────────────────────────────────────────────────
@@ -258,6 +257,6 @@ export const TOOL_ICONS = {
   arrow:     IconArrow,
   text:      IconText,
   pen:       IconPen,
-} as const satisfies Record<string, FunctionalComponent<SVGAttributes>>
+} as const satisfies Record<string, Component>
 
 export type DiagramToolIconKey = keyof typeof TOOL_ICONS

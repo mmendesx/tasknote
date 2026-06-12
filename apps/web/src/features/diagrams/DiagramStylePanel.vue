@@ -45,10 +45,8 @@ const selectedElements = computed<DiagramElement[]>(() =>
   store.elements.filter((e) => store.selectedIds.includes(e.id)),
 )
 
-/** True when at least one selected element has a `stroke` (or `color`) field. */
-const hasStrokeElements = computed(() =>
-  selectedElements.value.some((e) => e.type !== 'text' || true), // all types have stroke or color
-)
+/** True when there is at least one selected element (all types carry a stroke or color field). */
+const hasStrokeElements = computed(() => selectedElements.value.length > 0)
 
 /** True when at least one selected element is a shape (rect/ellipse). */
 const hasFillElements = computed(() =>
@@ -271,20 +269,6 @@ function strokeSwatchColor(value: string): string {
     </div>
   </Transition>
 </template>
-
-<style>
-/*
- * Non-scoped: give the flex-column ancestor a positioning context so the panel
- * can anchor itself absolutely within the detail area without editing DiagramsView.
- */
-.diagrams-view__detail {
-  position: relative;
-}
-</style>
-
-<style>
-@import './diagram-chrome.css';
-</style>
 
 <style scoped>
 /* ── Floating panel ─────────────────────────────────────────────────────────── */

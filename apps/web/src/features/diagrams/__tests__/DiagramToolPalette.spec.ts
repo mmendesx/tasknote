@@ -59,21 +59,21 @@ describe('DiagramToolPalette', () => {
     }
   })
 
-  it('active tool button has aria-checked=true; all others have aria-checked=false', async () => {
+  it('active tool button has aria-pressed=true; all others have aria-pressed=false', async () => {
     const { wrapper, store } = mountPalette()
 
     // Default tool is "select"
     expect(store.tool).toBe('select')
 
     const selectBtn = wrapper.find('button[aria-label="Select — V"]')
-    expect(selectBtn.attributes('aria-checked')).toBe('true')
+    expect(selectBtn.attributes('aria-pressed')).toBe('true')
 
     // All other buttons should be false
     const otherButtons = wrapper
       .findAll('button')
       .filter((b) => b.attributes('aria-label') !== 'Select — V')
     for (const btn of otherButtons) {
-      expect(btn.attributes('aria-checked'), `${btn.attributes('aria-label')} should be unchecked`).toBe('false')
+      expect(btn.attributes('aria-pressed'), `${btn.attributes('aria-label')} should be unpressed`).toBe('false')
     }
   })
 
@@ -96,12 +96,12 @@ describe('DiagramToolPalette', () => {
     expect(store.tool).toBe('rectangle')
 
     const rectBtn = wrapper.find('button[aria-label="Rectangle — R"]')
-    expect(rectBtn.attributes('aria-checked')).toBe('true')
+    expect(rectBtn.attributes('aria-pressed')).toBe('true')
     expect(rectBtn.classes()).toContain('diagram-tool-palette__btn--active')
 
     // Select button is no longer active
     const selectBtn = wrapper.find('button[aria-label="Select — V"]')
-    expect(selectBtn.attributes('aria-checked')).toBe('false')
+    expect(selectBtn.attributes('aria-pressed')).toBe('false')
     expect(selectBtn.classes()).not.toContain('diagram-tool-palette__btn--active')
   })
 
@@ -114,19 +114,23 @@ describe('DiagramToolPalette', () => {
     await wrapper.vm.$nextTick()
 
     const rectBtn = wrapper.find('button[aria-label="Rectangle — R"]')
-    expect(rectBtn.attributes('aria-checked')).toBe('true')
+    expect(rectBtn.attributes('aria-pressed')).toBe('true')
     expect(rectBtn.classes()).toContain('diagram-tool-palette__btn--active')
   })
 
-  it('all buttons have role=radio and the container has role=radiogroup', () => {
+  it('container has role=toolbar and buttons use aria-pressed (not role=radio)', () => {
     const { wrapper } = mountPalette()
 
-    const container = wrapper.find('[role="radiogroup"]')
+    const container = wrapper.find('[role="toolbar"]')
     expect(container.exists()).toBe(true)
     expect(container.attributes('aria-label')).toBe('Drawing tools')
 
+    // No radio roles — buttons are plain buttons with aria-pressed
     const radioButtons = wrapper.findAll('button[role="radio"]')
-    expect(radioButtons).toHaveLength(8)
+    expect(radioButtons).toHaveLength(0)
+
+    const pressableButtons = wrapper.findAll('button[aria-pressed]')
+    expect(pressableButtons).toHaveLength(8)
   })
 
   it('tooltip content matches "Label — Shortcut" format for Rectangle', () => {
