@@ -7,6 +7,7 @@ import type { Diagram } from '@tasknote/shared'
 
 const props = defineProps<{
   selectedId: number | null
+  compact?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -93,94 +94,232 @@ const sortedDiagrams = computed<Diagram[]>(() =>
 </script>
 
 <template>
-  <!-- Loading state -->
-  <div v-if="diagramsStore.loading" class="diagram-list__status" aria-live="polite">
-    Loading…
-  </div>
+  <!-- ── Compact list mode (sidebar) ─────────────────────────────────────────── -->
+  <template v-if="compact">
+    <div v-if="diagramsStore.loading" class="diagram-list__status" aria-live="polite">
+      Loading…
+    </div>
 
-  <!-- Empty state -->
-  <div v-else-if="!sortedDiagrams.length" class="diagram-list__empty" aria-live="polite">
-    <IconDiagramEmpty
-      class="diagram-list__empty-icon"
-      width="48"
-      height="48"
-      aria-hidden="true"
-    />
-    <p class="diagram-list__empty-prompt">No diagrams yet — create your first one</p>
-    <Button variant="primary" size="sm" @click="emit('create')">New diagram</Button>
-  </div>
-
-  <!-- Card grid -->
-  <ul v-else class="diagram-grid" aria-label="Diagrams">
-    <li
-      v-for="diagram in sortedDiagrams"
-      :key="diagram.id"
-      class="diagram-card"
-      :class="{ 'diagram-card--selected': diagram.id === selectedId }"
-    >
-      <!-- Rename input mode -->
-      <input
-        v-if="editingId === diagram.id"
-        ref="renameInputRef"
-        v-model="editingTitle"
-        class="diagram-card__rename-input focus-ring"
-        type="text"
-        maxlength="100"
-        aria-label="Rename diagram"
-        @keydown.enter.stop="saveRename"
-        @keydown.escape.stop="cancelRename"
-        @blur="saveRename"
-      />
-
-      <!-- Normal card face -->
-      <template v-else>
-        <!-- Open button covers the entire card surface -->
+    <ul v-else-if="sortedDiagrams.length" class="diagram-list" aria-label="Diagrams">
+      <li
+        v-for="diagram in sortedDiagrams"
+        :key="diagram.id"
+        class="diagram-item"
+        :class="{ 'diagram-item--selected': diagram.id === selectedId }"
+      >
         <button
           type="button"
-          class="diagram-card__open focus-ring"
+          class="diagram-item__open focus-ring"
           :aria-label="`Open diagram: ${diagram.title || 'Untitled'}`"
           :aria-current="diagram.id === selectedId ? 'true' : undefined"
           @click="emit('select', diagram.id)"
         >
-          <span class="diagram-card__title">{{ diagram.title || 'Untitled' }}</span>
-          <span class="diagram-card__meta">{{ formatRelativeTime(diagram.updated_at) }}</span>
+          <span class="diagram-item__title">{{ diagram.title || 'Untitled' }}</span>
         </button>
 
-        <!-- Delete button — revealed on card hover/focus-within -->
-        <div class="diagram-card__actions">
+        <button
+          type="button"
+          class="diagram-item__del focus-ring"
+          :aria-label="`Delete ${diagram.title || 'Untitled'}`"
+          title="Delete diagram"
+          @click.stop="handleDelete(diagram.id)"
+        >
+          <IconTrash width="12" height="12" aria-hidden="true" />
+        </button>
+      </li>
+    </ul>
+
+    <p v-else class="diagram-list__status" aria-live="polite">No diagrams yet.</p>
+  </template>
+
+  <!-- ── Full card grid mode (main view) ─────────────────────────────────────── -->
+  <template v-else>
+    <!-- Loading state -->
+    <div v-if="diagramsStore.loading" class="diagram-list__status" aria-live="polite">
+      Loading…
+    </div>
+
+    <!-- Empty state -->
+    <div v-else-if="!sortedDiagrams.length" class="diagram-list__empty" aria-live="polite">
+      <IconDiagramEmpty
+        class="diagram-list__empty-icon"
+        width="48"
+        height="48"
+        aria-hidden="true"
+      />
+      <p class="diagram-list__empty-prompt">No diagrams yet — create your first one</p>
+      <Button variant="primary" size="sm" @click="emit('create')">New diagram</Button>
+    </div>
+
+    <!-- Card grid -->
+    <ul v-else class="diagram-grid" aria-label="Diagrams">
+      <li
+        v-for="diagram in sortedDiagrams"
+        :key="diagram.id"
+        class="diagram-card"
+        :class="{ 'diagram-card--selected': diagram.id === selectedId }"
+      >
+        <!-- Rename input mode -->
+        <input
+          v-if="editingId === diagram.id"
+          ref="renameInputRef"
+          v-model="editingTitle"
+          class="diagram-card__rename-input focus-ring"
+          type="text"
+          maxlength="100"
+          aria-label="Rename diagram"
+          @keydown.enter.stop="saveRename"
+          @keydown.escape.stop="cancelRename"
+          @blur="saveRename"
+        />
+
+        <!-- Normal card face -->
+        <template v-else>
+          <!-- Open button covers the entire card surface -->
           <button
             type="button"
-            class="diagram-card__rename-btn focus-ring"
-            :aria-label="`Rename ${diagram.title || 'Untitled'}`"
-            title="Rename diagram"
-            @click.stop="startRename(diagram)"
+            class="diagram-card__open focus-ring"
+            :aria-label="`Open diagram: ${diagram.title || 'Untitled'}`"
+            :aria-current="diagram.id === selectedId ? 'true' : undefined"
+            @click="emit('select', diagram.id)"
           >
-            <svg viewBox="0 0 20 20" width="16" height="16" fill="none" aria-hidden="true">
-              <path
-                d="M13.5 3.5l3 3L6 17H3v-3L13.5 3.5z"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
+            <span class="diagram-card__title">{{ diagram.title || 'Untitled' }}</span>
+            <span class="diagram-card__meta">{{ formatRelativeTime(diagram.updated_at) }}</span>
           </button>
-          <button
-            type="button"
-            class="diagram-card__delete-btn focus-ring"
-            :aria-label="`Delete ${diagram.title || 'Untitled'}`"
-            title="Delete diagram"
-            @click.stop="handleDelete(diagram.id)"
-          >
-            <IconTrash width="16" height="16" aria-hidden="true" />
-          </button>
-        </div>
-      </template>
-    </li>
-  </ul>
+
+          <!-- Delete button — revealed on card hover/focus-within -->
+          <div class="diagram-card__actions">
+            <button
+              type="button"
+              class="diagram-card__rename-btn focus-ring"
+              :aria-label="`Rename ${diagram.title || 'Untitled'}`"
+              title="Rename diagram"
+              @click.stop="startRename(diagram)"
+            >
+              <svg viewBox="0 0 20 20" width="16" height="16" fill="none" aria-hidden="true">
+                <path
+                  d="M13.5 3.5l3 3L6 17H3v-3L13.5 3.5z"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="diagram-card__delete-btn focus-ring"
+              :aria-label="`Delete ${diagram.title || 'Untitled'}`"
+              title="Delete diagram"
+              @click.stop="handleDelete(diagram.id)"
+            >
+              <IconTrash width="16" height="16" aria-hidden="true" />
+            </button>
+          </div>
+        </template>
+      </li>
+    </ul>
+  </template>
 </template>
 
 <style scoped>
+/* ── Compact list tiles (sidebar / compact mode) ─────────────────────────── */
+
+.diagram-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+}
+
+.diagram-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.diagram-item__open {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 3px 2rem 3px 8px;
+  color: inherit;
+  font: inherit;
+}
+
+.diagram-item__open:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+
+.diagram-item__title {
+  display: block;
+  font-size: var(--text-xs);
+  font-weight: 400;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color var(--motion-duration-fast);
+}
+
+.diagram-item:hover .diagram-item__title,
+.diagram-item--selected .diagram-item__title {
+  color: var(--color-text-primary);
+}
+
+.diagram-item__del {
+  position: absolute;
+  top: 50%;
+  right: 0.25rem;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  min-height: 20px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    color var(--motion-duration-fast),
+    opacity var(--motion-duration-fast),
+    background-color var(--motion-duration-fast);
+}
+
+.diagram-item:hover .diagram-item__del,
+.diagram-item:focus-within .diagram-item__del {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (hover: none) {
+  .diagram-item__del {
+    opacity: 0.6;
+    pointer-events: auto;
+  }
+}
+
+.diagram-item__del:hover {
+  color: var(--color-status-blocked);
+  background-color: color-mix(in srgb, var(--color-status-blocked) 12%, transparent);
+}
+
+.diagram-item__del:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
+}
+
 /* ── Grid ──────────────────────────────────────────────────────────────────── */
 
 .diagram-grid {

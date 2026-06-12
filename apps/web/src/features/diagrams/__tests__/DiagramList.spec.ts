@@ -43,7 +43,9 @@ function makeDiagram(id: number, title: string, updatedAt: Date): DiagramStub {
   }
 }
 
-async function mountList(props: { selectedId: number | null } = { selectedId: null }) {
+async function mountList(
+  props: { selectedId: number | null; compact?: boolean } = { selectedId: null },
+) {
   const pinia = createPinia()
   setActivePinia(pinia)
 
@@ -312,5 +314,109 @@ describe('DiagramList', () => {
 
     expect(apiDiagrams.updateDiagram).toHaveBeenCalledWith(8, { title: '' })
     expect(wrapper.find('.diagram-card__title').text()).toBe('Untitled diagram')
+  })
+
+  // ── Compact mode ──────────────────────────────────────────────────────────
+
+  describe('compact prop', () => {
+    // BDD: Given compact=true, When rendered with diagrams,
+    // Then rows use diagram-item classes, not card grid classes
+    it('renders diagram-item list tiles instead of diagram-card grid when compact=true', async () => {
+      const { diagrams: apiDiagrams } = await import('@/api')
+
+      vi.mocked(apiDiagrams.listDiagrams).mockResolvedValueOnce([
+        makeDiagram(1, 'Flow A', new Date('2026-01-01')),
+        makeDiagram(2, 'Flow B', new Date('2026-01-02')),
+      ] as never[])
+
+      const { wrapper } = await mountList({ selectedId: null, compact: true })
+
+      // List tile elements present
+      expect(wrapper.findAll('.diagram-item')).toHaveLength(2)
+
+      // Titles visible via diagram-item__title
+      const titles = wrapper.findAll('.diagram-item__title').map((el) => el.text())
+      expect(titles).toContain('Flow A')
+      expect(titles).toContain('Flow B')
+
+      // No card grid or updated-time meta
+      expect(wrapper.find('.diagram-grid').exists()).toBe(false)
+      expect(wrapper.find('.diagram-card').exists()).toBe(false)
+      expect(wrapper.find('.diagram-card__meta').exists()).toBe(false)
+    })
+
+    // BDD: Given compact=true and selectedId matching a diagram,
+    // Then that diagram-item carries the diagram-item--selected modifier
+    it('applies diagram-item--selected to the matching selectedId in compact mode', async () => {
+      const { diagrams: apiDiagrams } = await import('@/api')
+
+      vi.mocked(apiDiagrams.listDiagrams).mockResolvedValueOnce([
+        makeDiagram(10, 'Selected diagram', new Date('2026-01-01')),
+        makeDiagram(11, 'Other diagram', new Date('2026-01-02')),
+      ] as never[])
+
+      const { wrapper } = await mountList({ selectedId: 10, compact: true })
+
+      const items = wrapper.findAll('.diagram-item')
+      const selectedItems = items.filter((el) => el.classes('diagram-item--selected'))
+      expect(selectedItems).toHaveLength(1)
+      expect(selectedItems[0].find('.diagram-item__title').text()).toBe('Selected diagram')
+
+      // Non-selected item must not carry the modifier
+      const otherItem = items.find((el) => !el.classes('diagram-item--selected'))
+      expect(otherItem).toBeDefined()
+      expect(otherItem!.find('.diagram-item__title').text()).toBe('Other diagram')
+    })
+
+    // BDD: Given compact=true, When a tile is clicked,
+    // Then the select event is emitted with the diagram id
+    it('emits select with the diagram id when a compact tile is clicked', async () => {
+      const { diagrams: apiDiagrams } = await import('@/api')
+
+      vi.mocked(apiDiagrams.listDiagrams).mockResolvedValueOnce([
+        makeDiagram(55, 'Clickable', new Date('2026-01-01')),
+      ] as never[])
+
+      const { wrapper } = await mountList({ selectedId: null, compact: true })
+
+      await wrapper.find('.diagram-item__open').trigger('click')
+
+      expect(wrapper.emitted('select')).toHaveLength(1)
+      expect(wrapper.emitted('select')![0]).toEqual([55])
+    })
+
+    // BDD: Given compact=true, When the delete button is clicked,
+    // Then deleted is emitted with the diagram id
+    it('emits deleted with the diagram id when the compact delete button is clicked', async () => {
+      const { diagrams: apiDiagrams } = await import('@/api')
+
+      vi.mocked(apiDiagrams.listDiagrams).mockResolvedValueOnce([
+        makeDiagram(77, 'To delete', new Date('2026-01-01')),
+      ] as never[])
+
+      const { wrapper } = await mountList({ selectedId: null, compact: true })
+
+      await wrapper.find('.diagram-item__del').trigger('click')
+      await flushPromises()
+
+      expect(apiDiagrams.deleteDiagram).toHaveBeenCalledWith(77)
+      expect(wrapper.emitted('deleted')).toHaveLength(1)
+      expect(wrapper.emitted('deleted')![0]).toEqual([77])
+    })
+
+    // BDD: Given compact=false (default), diagram-card grid is still rendered
+    it('still renders the card grid when compact is false (default)', async () => {
+      const { diagrams: apiDiagrams } = await import('@/api')
+
+      vi.mocked(apiDiagrams.listDiagrams).mockResolvedValueOnce([
+        makeDiagram(3, 'Card diagram', new Date('2026-01-01')),
+      ] as never[])
+
+      const { wrapper } = await mountList({ selectedId: null, compact: false })
+
+      expect(wrapper.find('.diagram-grid').exists()).toBe(true)
+      expect(wrapper.find('.diagram-card').exists()).toBe(true)
+      expect(wrapper.find('.diagram-item').exists()).toBe(false)
+    })
   })
 })

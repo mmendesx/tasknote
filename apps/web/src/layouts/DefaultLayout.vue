@@ -529,6 +529,7 @@ const routeLabel = computed(() => {
               class="nav-notes__panel"
             >
               <DiagramList
+                compact
                 :selected-id="currentDiagramId"
                 @select="(id) => { router.push({ name: 'diagram-detail', params: { id } }); closeDrawer() }"
                 @create="createDiagram"
@@ -1179,51 +1180,6 @@ const routeLabel = computed(() => {
 
 .nav-notes__panel :deep(.diagram-list) {
   padding-left: 0;
-}
-
-.nav-notes__panel :deep(.diagram-item) {
-  padding: 3px 8px;
-  border-bottom: none;
-  border-radius: var(--radius-control);
-  position: relative;
-}
-
-.nav-notes__panel :deep(.diagram-item)::before {
-  content: '–';
-  position: absolute;
-  left: -12px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 10px;
-  color: var(--color-text-muted);
-  opacity: 0.4;
-  transition: opacity var(--motion-duration-fast);
-  pointer-events: none;
-  line-height: 1;
-}
-
-.nav-notes__panel :deep(.diagram-item:hover)::before,
-.nav-notes__panel :deep(.diagram-item--selected)::before {
-  opacity: 1;
-}
-
-.nav-notes__panel :deep(.diagram-item__title) {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  transition: color var(--motion-duration-fast);
-}
-
-.nav-notes__panel :deep(.diagram-item:hover .diagram-item__title) {
-  color: var(--color-text-primary);
-}
-
-.nav-notes__panel :deep(.diagram-item--selected .diagram-item__title) {
-  color: var(--color-text-primary);
-}
-
-.nav-notes__panel :deep(.diagram-item--selected) {
-  background: var(--color-surface-elevated);
-  border-left: none;
 }
 
 .sidebar__collapse-btn {
