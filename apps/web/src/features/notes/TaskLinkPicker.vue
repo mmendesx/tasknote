@@ -1,8 +1,10 @@
 <script setup lang="ts">
 
-import { ref, computed } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
+import { onClickOutside } from '@vueuse/core'
 import { Input } from '@tasknote/ui'
 import { useCurrentBoardStore } from '@/stores/currentBoard'
+import { IconLink, IconUnlink } from './icons'
 import type { Task } from '@tasknote/shared'
 
 const props = defineProps<{
@@ -16,6 +18,9 @@ const emit = defineEmits<{
 const boardStore = useCurrentBoardStore()
 const query = ref('')
 const isOpen = ref(false)
+const activeIndex = ref(-1)
+const rootRef = ref<HTMLElement | null>(null)
+const searchInputRef = ref<InstanceType<typeof Input> | null>(null)
 
 const allTasks = computed<Task[]>(() =>
   boardStore.board?.columns.flatMap((c) => c.tasks) ?? []
@@ -35,12 +40,24 @@ const linkedTask = computed<Task | null>(
 
 function openPicker(): void {
   query.value = ''
+  activeIndex.value = -1
   isOpen.value = true
+  nextTick(() => {
+    // Focus the search input after the dropdown renders
+    const inputEl = rootRef.value?.querySelector<HTMLInputElement>('.task-link-picker__input input, .task-link-picker__input')
+    inputEl?.focus()
+  })
+}
+
+function closePicker(): void {
+  isOpen.value = false
+  activeIndex.value = -1
 }
 
 function pickTask(task: Task): void {
   emit('select', task.id)
   isOpen.value = false
+  activeIndex.value = -1
 }
 
 function unlink(): void {
@@ -48,57 +65,116 @@ function unlink(): void {
   isOpen.value = false
 }
 
-function handleBlur(): void {
-  
-  setTimeout(() => { isOpen.value = false }, 150)
+function handleKeydown(event: KeyboardEvent): void {
+  if (!isOpen.value) return
+
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closePicker()
+    return
+  }
+
+  if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    activeIndex.value = Math.min(activeIndex.value + 1, filteredTasks.value.length - 1)
+    return
+  }
+
+  if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    activeIndex.value = Math.max(activeIndex.value - 1, -1)
+    return
+  }
+
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    const task = filteredTasks.value[activeIndex.value]
+    if (task) {
+      pickTask(task)
+    }
+    return
+  }
+}
+
+// Reset active index when search query changes
+watch(query, () => {
+  activeIndex.value = -1
+})
+
+onClickOutside(rootRef, () => {
+  closePicker()
+})
+
+function optionId(index: number): string {
+  return `task-option-${index}`
 }
 </script>
 
 <template>
-  <div class="task-link-picker">
-    <div v-if="linkedTask" class="task-link-picker__linked">
-      <span class="task-link-picker__label">Linked task:</span>
+  <div
+    ref="rootRef"
+    class="task-link-picker"
+    @keydown="handleKeydown"
+  >
+    <!-- Linked state -->
+    <div v-if="linkedTask" class="task-link-picker__chip task-link-picker__chip--linked">
+      <IconLink class="task-link-picker__chip-icon" width="14" height="14" />
       <span class="task-link-picker__task-name">{{ linkedTask.title }}</span>
       <button
         type="button"
-        class="task-link-picker__unlink"
+        class="task-link-picker__unlink-btn"
         aria-label="Unlink task"
         @click="unlink"
       >
-        Unlink
+        <IconUnlink width="14" height="14" />
       </button>
     </div>
 
-    <div v-else class="task-link-picker__trigger-wrap">
-      <button
-        v-if="!isOpen"
-        type="button"
-        class="task-link-picker__trigger"
-        @click="openPicker"
-      >
-        Link to task…
-      </button>
-    </div>
+    <!-- Unlinked state -->
+    <button
+      v-else
+      type="button"
+      class="task-link-picker__chip task-link-picker__chip--unlinked"
+      :aria-haspopup="'listbox'"
+      :aria-expanded="isOpen"
+      @click="openPicker"
+    >
+      <IconLink class="task-link-picker__chip-icon" width="14" height="14" />
+      <span>Link to task…</span>
+    </button>
 
-    <div v-if="isOpen" class="task-link-picker__dropdown">
+    <!-- Dropdown -->
+    <div
+      v-if="isOpen"
+      class="task-link-picker__dropdown diagram-floating-chrome"
+      role="listbox"
+      aria-label="Tasks"
+      :aria-activedescendant="activeIndex >= 0 ? optionId(activeIndex) : undefined"
+    >
       <Input
+        ref="searchInputRef"
         v-model="query"
         placeholder="Search tasks…"
         size="sm"
         autofocus
         class="task-link-picker__input"
-        @blur="handleBlur"
       />
-      <ul class="task-link-picker__list" role="listbox" aria-label="Tasks">
-        <li v-if="!filteredTasks.length" class="task-link-picker__empty">
+      <ul class="task-link-picker__list">
+        <li v-if="!filteredTasks.length" class="task-link-picker__empty" role="option" aria-selected="false">
           No tasks found
         </li>
         <li
-          v-for="task in filteredTasks"
+          v-for="(task, index) in filteredTasks"
+          :id="optionId(index)"
           :key="task.id"
           role="option"
-          class="task-link-picker__item"
+          :aria-selected="index === activeIndex"
+          :class="[
+            'task-link-picker__item',
+            { 'task-link-picker__item--active': index === activeIndex }
+          ]"
           @mousedown.prevent="pickTask(task)"
+          @mousemove="activeIndex = index"
         >
           {{ task.title }}
         </li>
@@ -107,71 +183,107 @@ function handleBlur(): void {
   </div>
 </template>
 
+<style>
+@import '../../styles/floating-chrome.css';
+</style>
+
 <style scoped>
 .task-link-picker {
   position: relative;
   font-size: 0.8125rem;
 }
 
-.task-link-picker__linked {
-  display: flex;
+/* ── Chip base ─────────────────────────────────────────────── */
+
+.task-link-picker__chip {
+  display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.375rem 0.5rem;
-  background: var(--color-surface-elevated);
-  border: 1px solid var(--color-border);
+  gap: var(--space-1, 0.25rem);
+  padding: 0.3125rem 0.625rem;
   border-radius: var(--radius-control);
+  font-size: 0.8125rem;
+  max-width: 100%;
+  min-width: 0;
+  cursor: pointer;
+  transition:
+    border-color var(--motion-duration-fast),
+    background var(--motion-duration-fast);
 }
 
-.task-link-picker__label {
+/* ── Unlinked chip ─────────────────────────────────────────── */
+
+.task-link-picker__chip--unlinked {
   color: var(--color-text-muted);
-  font-size: 0.75rem;
+  background: transparent;
+  border: 1px dashed var(--color-border);
+  width: 100%;
+  text-align: left;
+}
+
+.task-link-picker__chip--unlinked:hover {
+  border-color: var(--color-text-muted);
+  color: var(--color-text-primary);
+}
+
+/* ── Linked chip ───────────────────────────────────────────── */
+
+.task-link-picker__chip--linked {
+  color: var(--color-text-primary);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  width: 100%;
+}
+
+.task-link-picker__chip-icon {
+  flex-shrink: 0;
+  color: var(--color-accent);
 }
 
 .task-link-picker__task-name {
   flex: 1;
-  color: var(--color-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.task-link-picker__unlink {
-  padding: 0.125rem 0.5rem;
-  font-size: 0.75rem;
-  color: var(--color-status-blocked);
+/* Unlink button — hidden by default, revealed on chip hover */
+.task-link-picker__unlink-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
   background: transparent;
   border: none;
-  cursor: pointer;
   border-radius: var(--radius-control);
-  transition: background var(--motion-duration-fast);
-}
-
-.task-link-picker__unlink:hover {
-  background: color-mix(in srgb, var(--color-status-blocked) 10%, transparent);
-}
-
-.task-link-picker__trigger {
-  font-size: 0.8125rem;
-  color: var(--color-accent);
-  background: transparent;
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-control);
-  padding: 0.3125rem 0.625rem;
+  color: var(--color-text-muted);
   cursor: pointer;
-  width: 100%;
-  text-align: left;
-  transition: border-color var(--motion-duration-fast);
+  opacity: 0;
+  transition:
+    opacity var(--motion-duration-fast),
+    color var(--motion-duration-fast),
+    background var(--motion-duration-fast);
 }
 
-.task-link-picker__trigger:hover {
-  border-color: var(--color-text-muted);
+.task-link-picker__chip--linked:hover .task-link-picker__unlink-btn {
+  opacity: 1;
 }
+
+.task-link-picker__unlink-btn:hover {
+  color: var(--color-status-blocked, #ef4444);
+  background: color-mix(in srgb, var(--color-status-blocked, #ef4444) 10%, transparent);
+}
+
+/* ── Dropdown ──────────────────────────────────────────────── */
 
 .task-link-picker__dropdown {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
-  background: var(--color-surface-elevated);
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 50;
   overflow: hidden;
 }
 
@@ -185,7 +297,7 @@ function handleBlur(): void {
 .task-link-picker__list {
   list-style: none;
   margin: 0;
-  padding: 0.25rem 0;
+  padding: var(--space-1, 0.25rem) 0;
   max-height: 12rem;
   overflow-y: auto;
 }
@@ -201,8 +313,9 @@ function handleBlur(): void {
   transition: background var(--motion-duration-fast);
 }
 
-.task-link-picker__item:hover {
-  background: var(--color-surface-elevated);
+.task-link-picker__item:hover,
+.task-link-picker__item--active {
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface-elevated));
 }
 
 .task-link-picker__empty {
