@@ -2,13 +2,14 @@
 
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Button, useToast } from '@tasknote/ui'
+import { Button, DropdownMenu, useToast } from '@tasknote/ui'
+import type { MenuItemDef } from '@tasknote/ui'
 import { useDiagramsStore } from '@/stores/diagrams'
 import DiagramCanvas from './DiagramCanvas.vue'
-import DiagramToolbar from './DiagramToolbar.vue'
 import DiagramStylePanel from './DiagramStylePanel.vue'
 import DiagramToolPalette from './DiagramToolPalette.vue'
 import DiagramZoomCluster from './DiagramZoomCluster.vue'
+import { exportSvg, exportPng } from './exportDiagram'
 
 const router = useRouter()
 const route = useRoute()
@@ -90,6 +91,73 @@ watch(
     }
   },
 )
+
+// ── Save indicator ────────────────────────────────────────────────────────────
+
+const saveLabel = computed(() => {
+  if (diagramsStore.saveError) return 'Save failed — retrying'
+  if (diagramsStore.saving) return 'Saving…'
+  if (!diagramsStore.dirty) return 'Saved'
+  return 'Unsaved'
+})
+
+const saveIndicatorState = computed<'saved' | 'saving' | 'failed'>(() => {
+  if (diagramsStore.saveError) return 'failed'
+  if (diagramsStore.saving) return 'saving'
+  return 'saved'
+})
+
+// ── Export ────────────────────────────────────────────────────────────────────
+
+const hasElements = computed(() => diagramsStore.elements.length > 0)
+
+function resolveCanvasColor(): string {
+  try {
+    return getComputedStyle(document.body).color || '#1f2937'
+  } catch {
+    return '#1f2937'
+  }
+}
+
+function resolveCanvasBg(): string {
+  try {
+    return getComputedStyle(document.body).backgroundColor || '#ffffff'
+  } catch {
+    return '#ffffff'
+  }
+}
+
+function handleExportSvg(): void {
+  exportSvg(diagramsStore.elements, diagramsStore.title ?? 'diagram', resolveCanvasColor())
+}
+
+async function handleExportPng(): Promise<void> {
+  try {
+    await exportPng(
+      diagramsStore.elements,
+      diagramsStore.title ?? 'diagram',
+      resolveCanvasColor(),
+      resolveCanvasBg(),
+    )
+  } catch {
+    toast.error('PNG export failed', 'Could not rasterize the diagram. Try again.')
+  }
+}
+
+const exportMenuItems = computed<MenuItemDef[]>(() => [
+  {
+    type: 'item',
+    label: 'Export SVG',
+    disabled: !hasElements.value,
+    onSelect: handleExportSvg,
+  },
+  {
+    type: 'item',
+    label: 'Export PNG',
+    disabled: !hasElements.value,
+    onSelect: handleExportPng,
+  },
+])
 </script>
 
 <template>
@@ -110,7 +178,46 @@ watch(
     <template v-if="selectedId !== null">
       <div class="diagrams-view__detail">
         <div class="diagrams-view__detail-header">
-          <DiagramToolbar />
+
+          <!-- Top-bar right side: save indicator + export dropdown -->
+          <div class="diagrams-view__topbar-right">
+            <!-- Save status indicator -->
+            <span
+              class="diagrams-view__save-indicator"
+              :class="`diagrams-view__save-indicator--${saveIndicatorState}`"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              <span class="diagrams-view__save-dot" aria-hidden="true" />
+              {{ saveLabel }}
+            </span>
+
+            <!-- Export dropdown -->
+            <DropdownMenu
+              :items="exportMenuItems"
+              align="end"
+              side="bottom"
+            >
+              <template #trigger>
+                <button
+                  class="diagrams-view__btn diagrams-view__btn--export focus-ring"
+                  :disabled="!hasElements"
+                  aria-label="Export diagram"
+                  aria-haspopup="menu"
+                >
+                  <svg viewBox="0 0 16 16" width="14" height="14" fill="none" aria-hidden="true">
+                    <path d="M8 11V3M5 8l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M3 13h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  </svg>
+                  Export
+                  <svg viewBox="0 0 10 6" width="10" height="6" fill="none" aria-hidden="true" class="diagrams-view__chevron">
+                    <path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+              </template>
+            </DropdownMenu>
+          </div>
+
           <div class="diagrams-view__delete-zone">
 
             <template v-if="isPendingDelete">
@@ -258,9 +365,77 @@ watch(
 .diagrams-view__detail-header {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   flex-shrink: 0;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-surface);
+  padding: 0 8px;
+  min-height: 44px;
+  gap: 8px;
+}
+
+.diagrams-view__topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* ── Save indicator ──────────────────────────────────────────────────────── */
+
+.diagrams-view__save-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 6ch;
+}
+
+.diagrams-view__save-indicator--saving {
+  color: var(--color-accent);
+}
+
+.diagrams-view__save-indicator--failed {
+  color: var(--color-status-blocked, #dc2626);
+}
+
+.diagrams-view__save-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: currentColor;
+  flex-shrink: 0;
+}
+
+.diagrams-view__save-indicator--saving .diagrams-view__save-dot {
+  animation: diagrams-save-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes diagrams-save-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .diagrams-view__save-indicator--saving .diagrams-view__save-dot {
+    animation: none;
+  }
+}
+
+/* ── Export button ────────────────────────────────────────────────────────── */
+
+.diagrams-view__btn--export {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.diagrams-view__chevron {
+  opacity: 0.6;
+  flex-shrink: 0;
 }
 
 .diagrams-view__delete-zone {

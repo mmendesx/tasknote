@@ -16,6 +16,11 @@ vi.mock('@tasknote/ui', () => ({
     props: ['content', 'side', 'delayDuration'],
     template: '<slot />',
   },
+  DropdownMenu: {
+    name: 'DropdownMenu',
+    props: ['items', 'align', 'side'],
+    template: '<div><slot name="trigger" /></div>',
+  },
 }))
 
 // ── API mock ──────────────────────────────────────────────────────────────────
@@ -68,7 +73,9 @@ async function mountView({ path = '/diagrams' }: MountOptions = {}) {
       stubs: {
         teleport: true,
         DiagramCanvas: { template: '<div data-testid="diagram-canvas" />' },
-        DiagramToolbar: { template: '<div data-testid="diagram-toolbar" />' },
+        DiagramStylePanel: { template: '<div />' },
+        DiagramToolPalette: { template: '<div />' },
+        DiagramZoomCluster: { template: '<div />' },
       },
     },
   })
