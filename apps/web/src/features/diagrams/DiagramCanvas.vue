@@ -100,6 +100,47 @@ onUnmounted(() => {
   void store.flushSave()
 })
 
+// ── Hover tracking (Select tool only; suppressed while dragging/marquee) ──────
+
+const hoveredElementId = ref<string | null>(null)
+
+/** True whenever a pointer gesture is in flight — hover suppressed to avoid flicker. */
+const isInteracting = computed(
+  () => !!moveState.value || !!marqueeRect.value || isPanning.value,
+)
+
+function onHoverPointerMove(event: PointerEvent): void {
+  // Only track hover under the Select tool, not during active gestures
+  if (store.tool !== 'select' || isInteracting.value) {
+    if (hoveredElementId.value !== null) hoveredElementId.value = null
+    return
+  }
+  const target = event.target as Element | null
+  const hit = target?.closest('[data-element-id]')
+  const id = hit?.getAttribute('data-element-id') ?? null
+  hoveredElementId.value = id
+}
+
+function onHoverPointerLeave(_event: PointerEvent): void {
+  hoveredElementId.value = null
+}
+
+/** Wrapper that feeds both the pointer state machine and hover tracking. */
+function onPointerMoveWithHover(event: PointerEvent): void {
+  onCanvasPointerMove(event)
+  onHoverPointerMove(event)
+}
+
+/** BBox of the currently hovered element, for rendering the hover outline. */
+const hoveredElementBbox = computed(() => {
+  if (!hoveredElementId.value || store.tool !== 'select' || isInteracting.value) return null
+  // Skip if hovered element is already selected (selection outline takes over)
+  if (store.selectedIds.includes(hoveredElementId.value)) return null
+  const el = store.elements.find((e) => e.id === hoveredElementId.value)
+  if (!el) return null
+  return computeElementBbox(el)
+})
+
 // ── Computed for template ─────────────────────────────────────────────────────
 
 const elements = computed(() => store.elements)
@@ -281,9 +322,9 @@ function onCanvasDblClick(event: MouseEvent): void {
     :style="{ cursor: canvasCursor }"
     @mousedown="onCanvasMouseDown"
     @pointerdown="onCanvasPointerDown"
-    @pointermove="onCanvasPointerMove"
+    @pointermove="onPointerMoveWithHover"
     @pointerup="onCanvasPointerUp"
-    @pointerleave="onCanvasPointerLeave"
+    @pointerleave="(e: PointerEvent) => { onCanvasPointerLeave(); onHoverPointerLeave(e) }"
     @pointercancel="onCanvasPointerCancel"
     @dblclick="onCanvasDblClick"
     @wheel.prevent="onCanvasWheel"
@@ -313,18 +354,33 @@ function onCanvasDblClick(event: MouseEvent): void {
         :element="el"
       />
 
-      <!-- Selection outline -->
+      <!-- Hover outline: light accent border under Select tool, not shown on selected elements -->
+      <rect
+        v-if="hoveredElementBbox"
+        class="diagram-hover-outline"
+        :x="hoveredElementBbox.x - 4 / store.viewport.zoom"
+        :y="hoveredElementBbox.y - 4 / store.viewport.zoom"
+        :width="hoveredElementBbox.width + 8 / store.viewport.zoom"
+        :height="hoveredElementBbox.height + 8 / store.viewport.zoom"
+        fill="none"
+        stroke="var(--color-accent, #6366f1)"
+        :stroke-width="1 / store.viewport.zoom"
+        vector-effect="non-scaling-stroke"
+        opacity="0.4"
+        pointer-events="none"
+      />
+
+      <!-- Selection outline: solid 1px accent, 4px screen-space padding -->
       <rect
         v-if="selectionBBox"
         class="diagram-selection-outline"
-        :x="selectionBBox.x - 4"
-        :y="selectionBBox.y - 4"
-        :width="selectionBBox.width + 8"
-        :height="selectionBBox.height + 8"
+        :x="selectionBBox.x - 4 / store.viewport.zoom"
+        :y="selectionBBox.y - 4 / store.viewport.zoom"
+        :width="selectionBBox.width + 8 / store.viewport.zoom"
+        :height="selectionBBox.height + 8 / store.viewport.zoom"
         fill="none"
         stroke="var(--color-accent, #6366f1)"
-        stroke-width="1.5"
-        stroke-dasharray="5 3"
+        :stroke-width="1 / store.viewport.zoom"
         vector-effect="non-scaling-stroke"
         pointer-events="none"
       />
@@ -351,7 +407,7 @@ function onCanvasDblClick(event: MouseEvent): void {
         }"
       />
 
-      <!-- Marquee selection rectangle (dashed outline while dragging) -->
+      <!-- Marquee: accent-tinted translucent fill + solid 1px accent border -->
       <rect
         v-if="marqueeRect"
         class="diagram-marquee"
@@ -359,13 +415,11 @@ function onCanvasDblClick(event: MouseEvent): void {
         :y="marqueeRect.y"
         :width="marqueeRect.width"
         :height="marqueeRect.height"
-        fill="none"
+        fill="var(--color-marquee-fill, color-mix(in srgb, var(--color-accent, #6366f1) 10%, transparent))"
         stroke="var(--color-accent, #6366f1)"
-        stroke-width="1"
-        stroke-dasharray="4 3"
+        :stroke-width="1 / store.viewport.zoom"
         vector-effect="non-scaling-stroke"
         pointer-events="none"
-        opacity="0.7"
       />
 
       <!-- In-progress draft preview -->
@@ -453,6 +507,10 @@ function onCanvasDblClick(event: MouseEvent): void {
   .diagram-spinner {
     animation: none;
   }
+}
+
+.diagram-hover-outline {
+  pointer-events: none;
 }
 
 .diagram-selection-outline {

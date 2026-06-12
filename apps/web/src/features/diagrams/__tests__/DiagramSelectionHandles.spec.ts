@@ -243,3 +243,68 @@ describe('DiagramSelectionHandles — 12 screen-px hit areas', () => {
     })
   })
 })
+
+// ── ICT-6: Selection chrome refinement ───────────────────────────────────────
+
+describe('DiagramSelectionHandles — ICT-6 chrome refinement', () => {
+  describe('square handles (shape elements)', () => {
+    it('visible shape handles use surface fill token (not hardcoded white)', () => {
+      const wrapper = mountShapeHandles(1)
+      const visibleRects = wrapper.findAll('.diagram-handle-visible')
+      expect(visibleRects.length).toBeGreaterThan(0)
+      for (const el of visibleRects) {
+        // Must use CSS token, not plain 'white'
+        const fill = el.attributes('fill') ?? ''
+        expect(fill).toContain('--color-surface')
+      }
+    })
+
+    it('visible shape handles have accent stroke', () => {
+      const wrapper = mountShapeHandles(1)
+      const visibleRects = wrapper.findAll('.diagram-handle-visible')
+      expect(visibleRects.length).toBeGreaterThan(0)
+      for (const el of visibleRects) {
+        const stroke = el.attributes('stroke') ?? ''
+        expect(stroke).toContain('--color-accent')
+      }
+    })
+
+    it('visible shape handles have drop-shadow filter applied', () => {
+      const wrapper = mountShapeHandles(1)
+      const visibleRects = wrapper.findAll('.diagram-handle-visible')
+      expect(visibleRects.length).toBeGreaterThan(0)
+      for (const el of visibleRects) {
+        const filter = el.attributes('filter') ?? ''
+        expect(filter).toContain('diagram-handle-shadow')
+      }
+    })
+
+    it('drop-shadow filter definition is rendered in defs', () => {
+      const wrapper = mountShapeHandles(1)
+      const filterEl = wrapper.find('filter#diagram-handle-shadow')
+      expect(filterEl.exists()).toBe(true)
+    })
+  })
+
+  describe('endpoint handles (line/arrow elements)', () => {
+    it('visible endpoint handles use surface fill token', () => {
+      const wrapper = mountEndpointHandles(1)
+      const visibleCircles = wrapper.findAll('.diagram-handle-visible')
+      expect(visibleCircles.length).toBeGreaterThan(0)
+      for (const el of visibleCircles) {
+        const fill = el.attributes('fill') ?? ''
+        expect(fill).toContain('--color-surface')
+      }
+    })
+
+    it('visible endpoint handles have drop-shadow filter applied', () => {
+      const wrapper = mountEndpointHandles(1)
+      const visibleCircles = wrapper.findAll('.diagram-handle-visible')
+      expect(visibleCircles.length).toBeGreaterThan(0)
+      for (const el of visibleCircles) {
+        const filter = el.attributes('filter') ?? ''
+        expect(filter).toContain('diagram-handle-shadow')
+      }
+    })
+  })
+})

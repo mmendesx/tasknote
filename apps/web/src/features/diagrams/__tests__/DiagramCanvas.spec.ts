@@ -732,4 +732,160 @@ describe('DiagramCanvas', () => {
     expect(apiDiagrams.updateDiagram).toHaveBeenCalledTimes(1)
     expect(apiDiagrams.updateDiagram).toHaveBeenCalledWith(1, expect.anything())
   })
+
+  // ── ICT-6: Selection chrome refinement ────────────────────────────────────
+
+  it('ICT-6: selection outline is solid — no stroke-dasharray attribute', async () => {
+    const { diagrams: apiDiagrams } = await import('@/api')
+    vi.mocked(apiDiagrams.getDiagram).mockResolvedValueOnce({
+      id: 1,
+      title: 'Outline test',
+      scene_json: {
+        version: 1,
+        elements: [
+          {
+            id: 'rect-outline',
+            type: 'rectangle' as const,
+            x: 50, y: 50, width: 100, height: 80,
+            stroke: '#000', fill: null, strokeWidth: 2,
+          },
+        ],
+        appState: { viewport: { scrollX: 0, scrollY: 0, zoom: 1 } },
+      },
+    } as never)
+
+    const { wrapper, pinia } = await mountCanvas()
+    const state = pinia.state.value['diagrams']
+    state.tool = 'select'
+    state.loading = false
+    state.loadError = null
+    state.selectedIds = ['rect-outline']
+    await wrapper.vm.$nextTick()
+
+    const outline = wrapper.find('.diagram-selection-outline')
+    expect(outline.exists()).toBe(true)
+    // Must be solid — no dasharray
+    expect(outline.attributes('stroke-dasharray')).toBeUndefined()
+    // Must have accent stroke
+    const stroke = outline.attributes('stroke') ?? ''
+    expect(stroke).toContain('--color-accent')
+  })
+
+  it('ICT-6: marquee has accent-tinted fill and solid border — no stroke-dasharray', async () => {
+    const { wrapper, pinia } = await mountCanvas()
+
+    const state = pinia.state.value['diagrams']
+    state.tool = 'select'
+    state.loading = false
+    state.loadError = null
+    await wrapper.vm.$nextTick()
+
+    const svg = wrapper.find('svg.diagram-canvas')
+
+    // Trigger a marquee drag on empty canvas
+    await svg.trigger('pointerdown', { clientX: 10, clientY: 10, pointerId: 1 })
+    await svg.trigger('pointermove', { clientX: 80, clientY: 70, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    const marquee = wrapper.find('.diagram-marquee')
+    expect(marquee.exists()).toBe(true)
+
+    // Solid border — no dasharray
+    expect(marquee.attributes('stroke-dasharray')).toBeUndefined()
+
+    // Must have a fill (accent-tinted, not 'none')
+    const fill = marquee.attributes('fill') ?? ''
+    expect(fill).not.toBe('none')
+    expect(fill.length).toBeGreaterThan(0)
+
+    // Must have accent stroke
+    const stroke = marquee.attributes('stroke') ?? ''
+    expect(stroke).toContain('--color-accent')
+
+    // Clean up marquee
+    await svg.trigger('pointerup', { pointerId: 1 })
+  })
+
+  it('ICT-6: hover outline appears on pointermove over element under select tool', async () => {
+    const { diagrams: apiDiagrams } = await import('@/api')
+    vi.mocked(apiDiagrams.getDiagram).mockResolvedValueOnce({
+      id: 1,
+      title: 'Hover test',
+      scene_json: {
+        version: 1,
+        elements: [
+          {
+            id: 'rect-hover',
+            type: 'rectangle' as const,
+            x: 0, y: 0, width: 100, height: 80,
+            stroke: '#000', fill: null, strokeWidth: 2,
+          },
+        ],
+        appState: { viewport: { scrollX: 0, scrollY: 0, zoom: 1 } },
+      },
+    } as never)
+
+    const { wrapper, pinia } = await mountCanvas()
+    const state = pinia.state.value['diagrams']
+    state.tool = 'select'
+    state.loading = false
+    state.loadError = null
+    state.selectedIds = []
+    await wrapper.vm.$nextTick()
+
+    // No hover outline initially
+    expect(wrapper.find('.diagram-hover-outline').exists()).toBe(false)
+
+    // Trigger pointermove from the element node — it bubbles to the SVG canvas handler.
+    // vue-test-utils sets the event target to the element, which is what onHoverPointerMove reads.
+    const elementNode = wrapper.find('[data-element-id="rect-hover"]')
+    expect(elementNode.exists()).toBe(true)
+
+    await elementNode.trigger('pointermove', { clientX: 50, clientY: 40, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    const hoverOutline = wrapper.find('.diagram-hover-outline')
+    expect(hoverOutline.exists()).toBe(true)
+    // Hover outline must have accent stroke at lower opacity
+    const stroke = hoverOutline.attributes('stroke') ?? ''
+    expect(stroke).toContain('--color-accent')
+    const opacity = Number(hoverOutline.attributes('opacity') ?? '1')
+    expect(opacity).toBeLessThan(1)
+  })
+
+  it('ICT-6: hover outline does not appear under draw tools (rectangle tool)', async () => {
+    const { diagrams: apiDiagrams } = await import('@/api')
+    vi.mocked(apiDiagrams.getDiagram).mockResolvedValueOnce({
+      id: 1,
+      title: 'Hover draw tool test',
+      scene_json: {
+        version: 1,
+        elements: [
+          {
+            id: 'rect-no-hover',
+            type: 'rectangle' as const,
+            x: 0, y: 0, width: 100, height: 80,
+            stroke: '#000', fill: null, strokeWidth: 2,
+          },
+        ],
+        appState: { viewport: { scrollX: 0, scrollY: 0, zoom: 1 } },
+      },
+    } as never)
+
+    const { wrapper, pinia } = await mountCanvas()
+    const state = pinia.state.value['diagrams']
+    state.tool = 'rectangle'
+    state.loading = false
+    state.loadError = null
+    await wrapper.vm.$nextTick()
+
+    const elementNode = wrapper.find('[data-element-id="rect-no-hover"]')
+
+    // Trigger pointermove from the element node — bubbles to SVG canvas handler
+    await elementNode.trigger('pointermove', { clientX: 50, clientY: 40, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    // No hover outline under draw tools
+    expect(wrapper.find('.diagram-hover-outline').exists()).toBe(false)
+  })
 })

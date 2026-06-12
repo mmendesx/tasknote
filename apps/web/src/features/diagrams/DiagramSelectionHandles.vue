@@ -71,6 +71,12 @@ function isPenElement(el: DiagramElement | null): boolean {
 <template>
   <!-- Component-level pointer-events: none; individual handles restore pointer-events: all -->
   <g class="diagram-selection-handles" pointer-events="none">
+    <!-- Drop-shadow filter for visible handles (cheap feDropShadow) -->
+    <defs>
+      <filter id="diagram-handle-shadow" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+        <feDropShadow dx="0" dy="0.5" stdDeviation="0.5" flood-opacity="0.25" />
+      </filter>
+    </defs>
     <!-- Endpoint handles for line/arrow elements -->
     <template v-if="showEndpointHandles && element && isLinearElement(element)">
       <template v-for="idx in [0, 1]" :key="`ep-${idx}`">
@@ -91,15 +97,16 @@ function isPenElement(el: DiagramElement | null): boolean {
             pointer-events="all"
             class="diagram-handle-hit"
           />
-          <!-- Visible circle — 8 screen px -->
+          <!-- Visible circle — 8 screen px diameter, accent border, surface fill, shadow -->
           <circle
             :cx="(element as any).points[idx][0]"
             :cy="(element as any).points[idx][1]"
             :r="HANDLE_HALF_SCREEN / zoom"
-            fill="white"
+            fill="var(--color-surface, #ffffff)"
             stroke="var(--color-accent, #6366f1)"
-            :stroke-width="1.5 / zoom"
+            :stroke-width="1 / zoom"
             vector-effect="non-scaling-stroke"
+            filter="url(#diagram-handle-shadow)"
             pointer-events="none"
             class="diagram-handle-visible"
           />
@@ -131,17 +138,18 @@ function isPenElement(el: DiagramElement | null): boolean {
               pointer-events="all"
               class="diagram-handle-hit"
             />
-            <!-- Visible rect — 8 screen px -->
+            <!-- Visible square — 8 screen px, accent border, surface fill, shadow -->
             <rect
               :x="handle.cx - HANDLE_HALF_SCREEN / zoom"
               :y="handle.cy - HANDLE_HALF_SCREEN / zoom"
               :width="HANDLE_SCREEN_PX / zoom"
               :height="HANDLE_SCREEN_PX / zoom"
-              fill="white"
+              fill="var(--color-surface, #ffffff)"
               stroke="var(--color-accent, #6366f1)"
-              :stroke-width="1.5 / zoom"
+              :stroke-width="1 / zoom"
               vector-effect="non-scaling-stroke"
               rx="1"
+              filter="url(#diagram-handle-shadow)"
               pointer-events="none"
               class="diagram-handle-visible"
             />
