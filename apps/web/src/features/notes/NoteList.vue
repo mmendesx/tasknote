@@ -392,4 +392,18 @@ function formatRelativeTime(date: Date | string): string {
 .skeleton-line--preview.skeleton-line--narrow {
   width: 60%;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line {
+    animation: none;
+  }
+
+  .note-item {
+    transition: none;
+  }
+
+  .note-item__del {
+    transition: none;
+  }
+}
 </style>
