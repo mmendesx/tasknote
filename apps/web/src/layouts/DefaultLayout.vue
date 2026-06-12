@@ -1123,18 +1123,21 @@ const routeLabel = computed(() => {
   background: transparent;
 }
 
-.nav-notes__panel :deep(.note-list) {
+.nav-notes__panel :deep(.note-list),
+.nav-notes__panel :deep(.diagram-list) {
   padding-left: 0;
 }
 
-.nav-notes__panel :deep(.note-item) {
+.nav-notes__panel :deep(.note-item),
+.nav-notes__panel :deep(.diagram-item) {
   padding: 3px 8px;
   border-bottom: none;
   border-radius: var(--radius-control);
   position: relative;
 }
 
-.nav-notes__panel :deep(.note-item)::before {
+.nav-notes__panel :deep(.note-item)::before,
+.nav-notes__panel :deep(.diagram-item)::before {
   content: '–';
   position: absolute;
   left: -12px;
@@ -1149,25 +1152,28 @@ const routeLabel = computed(() => {
 }
 
 .nav-notes__panel :deep(.note-item:hover)::before,
-.nav-notes__panel :deep(.note-item--selected)::before {
+.nav-notes__panel :deep(.note-item--selected)::before,
+.nav-notes__panel :deep(.diagram-item:hover)::before,
+.nav-notes__panel :deep(.diagram-item--selected)::before {
   opacity: 1;
 }
 
-.nav-notes__panel :deep(.note-item__title) {
+.nav-notes__panel :deep(.note-item__title),
+.nav-notes__panel :deep(.diagram-item__title) {
   font-size: var(--text-xs);
   color: var(--color-text-muted);
   transition: color var(--motion-duration-fast);
 }
 
-.nav-notes__panel :deep(.note-item:hover .note-item__title) {
+.nav-notes__panel :deep(.note-item:hover .note-item__title),
+.nav-notes__panel :deep(.note-item--selected .note-item__title),
+.nav-notes__panel :deep(.diagram-item:hover .diagram-item__title),
+.nav-notes__panel :deep(.diagram-item--selected .diagram-item__title) {
   color: var(--color-text-primary);
 }
 
-.nav-notes__panel :deep(.note-item--selected .note-item__title) {
-  color: var(--color-text-primary);
-}
-
-.nav-notes__panel :deep(.note-item--selected) {
+.nav-notes__panel :deep(.note-item--selected),
+.nav-notes__panel :deep(.diagram-item--selected) {
   background: var(--color-surface-elevated);
   border-left: none;
 }
@@ -1176,10 +1182,6 @@ const routeLabel = computed(() => {
 .nav-notes__panel :deep(.note-item__time),
 .nav-notes__panel :deep(.note-item__pin) {
   display: none;
-}
-
-.nav-notes__panel :deep(.diagram-list) {
-  padding-left: 0;
 }
 
 .sidebar__collapse-btn {

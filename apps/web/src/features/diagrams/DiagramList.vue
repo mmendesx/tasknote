@@ -232,10 +232,23 @@ const sortedDiagrams = computed<Diagram[]>(() =>
   overflow-y: auto;
 }
 
+/* Mirrors NoteList base styles so the sidebar treats both lists identically */
 .diagram-item {
   position: relative;
   display: flex;
   align-items: center;
+  border-bottom: 1px solid var(--color-border);
+  transition: background var(--motion-duration-fast);
+}
+
+.diagram-item:hover,
+.diagram-item:focus-within {
+  background: var(--color-surface-elevated);
+}
+
+.diagram-item--selected {
+  background: var(--color-surface-elevated);
+  border-left: 2px solid var(--color-text-muted);
 }
 
 .diagram-item__open {
@@ -246,7 +259,7 @@ const sortedDiagrams = computed<Diagram[]>(() =>
   background: transparent;
   border: none;
   cursor: pointer;
-  padding: 3px 2rem 3px 8px;
+  padding: 0.625rem 2.5rem 0.625rem 0.75rem;
   color: inherit;
   font: inherit;
 }
@@ -258,30 +271,26 @@ const sortedDiagrams = computed<Diagram[]>(() =>
 
 .diagram-item__title {
   display: block;
-  font-size: var(--text-xs);
-  font-weight: 400;
-  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   transition: color var(--motion-duration-fast);
 }
 
-.diagram-item:hover .diagram-item__title,
-.diagram-item--selected .diagram-item__title {
-  color: var(--color-text-primary);
-}
-
 .diagram-item__del {
   position: absolute;
   top: 50%;
-  right: 0.25rem;
+  right: 0.5rem;
   transform: translateY(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 20px;
-  min-height: 20px;
+  /* 24×24 minimum touch target, same as NoteList */
+  min-width: 24px;
+  min-height: 24px;
   border-radius: 4px;
   border: none;
   background: transparent;
