@@ -853,7 +853,96 @@ describe('DiagramCanvas', () => {
     expect(opacity).toBeLessThan(1)
   })
 
-  it('ICT-6: hover outline does not appear under draw tools (rectangle tool)', async () => {
+  // ── ICT-7: Dot-grid canvas background ────────────────────────────────────────
+
+  it('ICT-7: dot-grid pattern and rect are rendered on the canvas', async () => {
+    const { wrapper } = await mountCanvas()
+
+    // The <pattern> definition must exist
+    const pattern = wrapper.find('pattern#diagram-dot-grid')
+    expect(pattern.exists()).toBe(true)
+
+    // The grid rect must be present and filled with the pattern
+    const gridRect = wrapper.find('rect.diagram-dot-grid')
+    expect(gridRect.exists()).toBe(true)
+    expect(gridRect.attributes('fill')).toBe('url(#diagram-dot-grid)')
+
+    // Must never intercept pointer events
+    expect(gridRect.attributes('pointer-events')).toBe('none')
+  })
+
+  it('ICT-7: dot-grid rect is hidden below 40% zoom', async () => {
+    const { wrapper, pinia } = await mountCanvas()
+
+    const state = pinia.state.value['diagrams']
+    state.loading = false
+    state.loadError = null
+
+    // At 39% zoom the grid must not render
+    state.viewport = { scrollX: 0, scrollY: 0, zoom: 0.39 }
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('rect.diagram-dot-grid').exists()).toBe(false)
+  })
+
+  it('ICT-7: dot-grid rect is visible at 100% zoom', async () => {
+    const { wrapper, pinia } = await mountCanvas()
+
+    const state = pinia.state.value['diagrams']
+    state.loading = false
+    state.loadError = null
+    state.viewport = { scrollX: 0, scrollY: 0, zoom: 1 }
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('rect.diagram-dot-grid').exists()).toBe(true)
+  })
+
+  it('ICT-7: dot-grid rect is visible at exactly 40% zoom (boundary)', async () => {
+    const { wrapper, pinia } = await mountCanvas()
+
+    const state = pinia.state.value['diagrams']
+    state.loading = false
+    state.loadError = null
+    state.viewport = { scrollX: 0, scrollY: 0, zoom: 0.4 }
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('rect.diagram-dot-grid').exists()).toBe(true)
+  })
+
+  it('ICT-7: patternTransform reflects viewport offset and zoom', async () => {
+    const { wrapper, pinia } = await mountCanvas()
+
+    const state = pinia.state.value['diagrams']
+    state.loading = false
+    state.loadError = null
+    state.viewport = { scrollX: 50, scrollY: 30, zoom: 2 }
+    await wrapper.vm.$nextTick()
+
+    const pattern = wrapper.find('pattern#diagram-dot-grid')
+    expect(pattern.exists()).toBe(true)
+
+    // patternTransform = translate(scrollX*zoom, scrollY*zoom) scale(zoom)
+    // = translate(100, 60) scale(2)
+    const pt = pattern.attributes('patterntransform') ?? pattern.attributes('patternTransform') ?? ''
+    expect(pt).toContain('translate(100,60)')
+    expect(pt).toContain('scale(2)')
+  })
+
+  it('ICT-7: dot-grid pattern contains a circle dot element', async () => {
+    const { wrapper } = await mountCanvas()
+
+    const pattern = wrapper.find('pattern#diagram-dot-grid')
+    expect(pattern.exists()).toBe(true)
+
+    const dot = pattern.find('circle')
+    expect(dot.exists()).toBe(true)
+    // Dot should be small
+    const r = Number(dot.attributes('r') ?? '0')
+    expect(r).toBeGreaterThan(0)
+    expect(r).toBeLessThanOrEqual(3)
+  })
+
+  it('ICT-7: hover outline does not appear under draw tools (rectangle tool)', async () => {
     const { diagrams: apiDiagrams } = await import('@/api')
     vi.mocked(apiDiagrams.getDiagram).mockResolvedValueOnce({
       id: 1,

@@ -145,6 +145,24 @@ const hoveredElementBbox = computed(() => {
 
 const elements = computed(() => store.elements)
 
+// ── Dot-grid background ───────────────────────────────────────────────────────
+
+/**
+ * patternTransform for the dot-grid pattern.
+ *
+ * The pattern is defined in a 24×24 userSpaceOnUse coordinate system.
+ * Applying the same translate+scale as the viewport transform keeps dots
+ * locked to scene space while the <rect> itself stays screen-space —
+ * meaning only SVG attribute updates fire on pan/zoom, never DOM node churn.
+ */
+const dotGridPatternTransform = computed(() => {
+  const { scrollX, scrollY, zoom } = store.viewport
+  return `translate(${scrollX * zoom},${scrollY * zoom}) scale(${zoom})`
+})
+
+/** Hide the grid below 40% zoom — dots become illegibly dense. */
+const dotGridVisible = computed(() => store.viewport.zoom >= 0.4)
+
 const viewportTransform = computed(() => {
   const { scrollX, scrollY, zoom } = store.viewport
   // scene→screen: screen = (scene + scroll) * zoom
@@ -330,6 +348,24 @@ function onCanvasDblClick(event: MouseEvent): void {
     @wheel.prevent="onCanvasWheel"
   >
     <defs>
+      <!-- Dot-grid pattern: 24×24 scene-space cell, single 1.5px dot at centre -->
+      <pattern
+        id="diagram-dot-grid"
+        x="0"
+        y="0"
+        width="24"
+        height="24"
+        patternUnits="userSpaceOnUse"
+        :patternTransform="dotGridPatternTransform"
+      >
+        <circle
+          cx="12"
+          cy="12"
+          r="1.5"
+          fill="color-mix(in srgb, var(--color-text-muted, #9ca3af) 25%, transparent)"
+        />
+      </pattern>
+
       <marker
         id="diagram-arrowhead"
         markerWidth="10"
@@ -341,6 +377,18 @@ function onCanvasDblClick(event: MouseEvent): void {
         <polygon points="0 0, 10 3.5, 0 7" fill="context-stroke" />
       </marker>
     </defs>
+
+    <!-- Dot-grid background: screen-space rect, pattern shifts via patternTransform -->
+    <rect
+      v-if="dotGridVisible"
+      class="diagram-dot-grid"
+      x="0"
+      y="0"
+      width="100%"
+      height="100%"
+      fill="url(#diagram-dot-grid)"
+      pointer-events="none"
+    />
 
     <g
       :transform="viewportTransform"
@@ -507,6 +555,10 @@ function onCanvasDblClick(event: MouseEvent): void {
   .diagram-spinner {
     animation: none;
   }
+}
+
+.diagram-dot-grid {
+  pointer-events: none;
 }
 
 .diagram-hover-outline {
