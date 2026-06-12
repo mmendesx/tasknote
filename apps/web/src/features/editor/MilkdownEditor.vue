@@ -163,7 +163,7 @@ const EditorInner = defineComponent({
       h(Teleport, { to: 'body' },
         toolbarVisible.value && !innerProps.readOnly
           ? [h('div', {
-              class: 'milkdown-toolbar',
+              class: 'milkdown-toolbar diagram-floating-chrome',
               style: {
                 position: 'fixed',
                 left:    `${toolbarX.value}px`,
@@ -222,6 +222,8 @@ const EditorInner = defineComponent({
 </template>
 
 <style>
+@import '../../styles/floating-chrome.css';
+
 .milkdown {
   --nord0: var(--color-surface);
   --nord1: var(--color-surface-elevated);
@@ -239,9 +241,6 @@ const EditorInner = defineComponent({
   align-items: center;
   gap: 2px;
   padding: 4px 6px;
-  background: var(--color-text-primary, #1a1a1a);
-  border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
   pointer-events: auto;
   white-space: nowrap;
 }
@@ -253,49 +252,44 @@ const EditorInner = defineComponent({
   min-width: 28px;
   height: 28px;
   padding: 0 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-control, 4px);
   background: transparent;
-  color: var(--color-bg, #fff);
-  font-size: 13px;
+  color: var(--color-text-primary);
+  font-size: 20px;
+  line-height: 1;
   cursor: pointer;
-  transition: background 0.1s;
+  transition: background var(--motion-duration-fast, 0.1s);
   border: none;
 }
 
 .milkdown-toolbar__btn:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
 }
 
 .milkdown-toolbar__btn--active {
-  background: var(--color-accent, #6c6ef5);
-  color: #fff;
+  color: var(--color-accent);
 }
 
 .milkdown-toolbar__btn code {
   font-family: var(--font-mono, monospace);
-  font-size: 11px;
+  font-size: 14px;
 }
 </style>
 
 <style scoped>
 .milkdown-host {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
-  background: var(--color-surface);
+  background: transparent;
   padding: 0.5rem 0.75rem;
-  min-height: 8rem;
+  min-height: 100%;
+  flex: 1;
   cursor: text;
-  transition: border-color var(--motion-duration-fast);
 }
 
 .milkdown-host:focus-within {
   outline: none;
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 30%, transparent);
 }
 
 .milkdown-readonly {
-  background: var(--color-surface-elevated);
   cursor: default;
 }
 
@@ -305,6 +299,8 @@ const EditorInner = defineComponent({
   color: var(--color-text-primary);
   line-height: 1.6;
   cursor: text;
+  max-width: 72ch;
+  margin-inline: auto;
 }
 
 .milkdown-host :deep(.ProseMirror) {
