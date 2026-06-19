@@ -8,6 +8,7 @@ vi.mock('@/api', () => ({
     commitTask: vi.fn(),
     uncommitTask: vi.fn(),
     completeTask: vi.fn(),
+    uncompleteTask: vi.fn(),
     deleteTask: vi.fn(),
   },
   boards: {
@@ -185,6 +186,38 @@ describe('useTodayStore — toggleDone', () => {
     await store.toggleDone(7)
 
     expect(api.tasks.completeTask).toHaveBeenCalledWith(7)
+  })
+})
+
+describe('useTodayStore — restore (undo)', () => {
+  let store: ReturnType<typeof useTodayStore>
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    store = useTodayStore()
+    vi.resetAllMocks()
+  })
+
+  it('reopens then re-commits the task and reloads the list', async () => {
+    vi.mocked(api.tasks.uncompleteTask).mockResolvedValueOnce({} as never)
+    vi.mocked(api.tasks.commitTask).mockResolvedValueOnce({} as never)
+    const refreshed = [makeTodayTask(9, 0, 'Restored')]
+    vi.mocked(api.tasks.listToday).mockResolvedValueOnce(refreshed)
+
+    await store.restore(9, '2026-05-28')
+
+    expect(api.tasks.uncompleteTask).toHaveBeenCalledWith(9)
+    expect(api.tasks.commitTask).toHaveBeenCalledWith(9, '2026-05-28')
+    expect(api.tasks.listToday).toHaveBeenCalledWith('2026-05-28')
+    expect(store.list.map((t) => t.id)).toEqual([9])
+  })
+
+  it('sets error and rethrows when reopening fails', async () => {
+    vi.mocked(api.tasks.uncompleteTask).mockRejectedValueOnce(new Error('reopen failed'))
+
+    await expect(store.restore(9, '2026-05-28')).rejects.toThrow('reopen failed')
+    expect(store.error).toBe('reopen failed')
+    expect(api.tasks.commitTask).not.toHaveBeenCalled()
   })
 })
 

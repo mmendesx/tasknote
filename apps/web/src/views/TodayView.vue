@@ -4,6 +4,9 @@ import { useTodayStore, localDateString } from '@/stores/today'
 import { useBoardsStore } from '@/stores/boards'
 import * as api from '@/api'
 import TaskDrawer from '@/features/board/TaskDrawer.vue'
+import TodayRow from '@/features/today/TodayRow.vue'
+import { Button } from '@tasknote/ui'
+import { IconUndo, IconSun, IconRetry } from '@/features/today/icons'
 import type { BoardWithColumns } from '@tasknote/shared'
 
 const todayStore = useTodayStore()
@@ -11,9 +14,52 @@ const boardsStore = useBoardsStore()
 
 const today = localDateString()
 
+// Human-readable header date, e.g. "Friday, June 19". Built from the local date
+// parts so it matches `today` exactly (no timezone drift from ISO parsing).
+const headerDate = computed(() => {
+  const [y, m, d] = today.split('-').map(Number)
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  }).format(new Date(y, m - 1, d))
+})
+
+const carriedCount = computed(
+  () => todayStore.list.filter((t) => t.carried_days > 0).length,
+)
+
+// Count summary — doubles as the page's polite live region.
+const countSummary = computed(() => {
+  const n = todayStore.list.length
+  if (n === 0) return 'Nothing committed yet'
+  const base = `${n} task${n === 1 ? '' : 's'}`
+  return carriedCount.value > 0 ? `${base} · ${carriedCount.value} carried over` : base
+})
+
+// Presentational grouping — preserves API order (server sorts committed_on ASC,
+// so carried tasks precede fresh ones). Never re-sorts; splitting on
+// carried_days is safe given that server guarantee.
+const carriedTasks = computed(() => todayStore.list.filter((t) => t.carried_days > 0))
+const freshTasks = computed(() => todayStore.list.filter((t) => t.carried_days === 0))
+const showGroups = computed(
+  () => carriedTasks.value.length > 0 && freshTasks.value.length > 0,
+)
+
+// ── Task drawer ───────────────────────────────────────────────────────────────
 const drawerOpen = ref(false)
 const drawerTaskId = ref<number | null>(null)
 
+function openTask(id: number): void {
+  drawerTaskId.value = id
+  drawerOpen.value = true
+}
+function closeDrawer(): void {
+  drawerOpen.value = false
+  drawerTaskId.value = null
+}
+
+// ── Default board / quick-add target ──────────────────────────────────────────
 const defaultBoard = ref<BoardWithColumns | null>(null)
 const defaultColumnId = computed<number | null>(() => {
   const cols = defaultBoard.value?.columns ?? []
@@ -36,20 +82,17 @@ onMounted(async () => {
   }
 })
 
-function openTask(id: number): void {
-  drawerTaskId.value = id
-  drawerOpen.value = true
-}
-
-function closeDrawer(): void {
-  drawerOpen.value = false
-  drawerTaskId.value = null
-}
-
+// ── Quick-add (single, deduplicated) ──────────────────────────────────────────
 const quickAddTitle = ref('')
 const isQuickAdding = ref(false)
 const quickAddError = ref<string | null>(null)
-const completingIds = ref<Set<number>>(new Set())
+
+const canQuickAdd = computed(
+  () =>
+    !isQuickAdding.value &&
+    Boolean(quickAddTitle.value.trim()) &&
+    Boolean(defaultColumnId.value),
+)
 
 async function submitQuickAdd(): Promise<void> {
   const trimmed = quickAddTitle.value.trim()
@@ -58,7 +101,7 @@ async function submitQuickAdd(): Promise<void> {
     return
   }
   if (!defaultColumnId.value) {
-    quickAddError.value = 'Create a board first to add today\'s tasks.'
+    quickAddError.value = "Create a board first to add today's tasks."
     return
   }
 
@@ -90,211 +133,215 @@ function handleQuickAddKeydown(e: KeyboardEvent): void {
   }
 }
 
-async function handleUncommit(id: number): Promise<void> {
+// ── Row actions + announcements ───────────────────────────────────────────────
+const completingIds = ref<Set<number>>(new Set())
+const announcement = ref('')
+// Last completed task, kept so the Undo affordance can restore it.
+const undoTarget = ref<{ id: number; title: string } | null>(null)
+
+async function handleUncommit(id: number, title: string): Promise<void> {
   try {
     await todayStore.uncommit(id)
+    undoTarget.value = null
+    announcement.value = `'${title}' removed from today`
   } catch {
-    // error state surfaced via store.error
+    // error surfaced via store.error
   }
 }
 
-async function handleToggleDone(id: number): Promise<void> {
+async function handleToggleDone(id: number, title: string): Promise<void> {
   completingIds.value = new Set(completingIds.value).add(id)
   try {
-    // toggleDone marks the task complete and removes it from the today list
     await todayStore.toggleDone(id)
+    undoTarget.value = { id, title }
+    announcement.value = `'${title}' marked done`
   } catch {
-    // error state surfaced via store.error
+    // error surfaced via store.error
   } finally {
     const next = new Set(completingIds.value)
     next.delete(id)
     completingIds.value = next
   }
 }
+
+const isUndoing = ref(false)
+async function handleUndo(): Promise<void> {
+  const target = undoTarget.value
+  if (!target || isUndoing.value) return
+  isUndoing.value = true
+  try {
+    await todayStore.restore(target.id, today)
+    announcement.value = `'${target.title}' restored to today`
+    undoTarget.value = null
+  } catch {
+    // error surfaced via store.error
+  } finally {
+    isUndoing.value = false
+  }
+}
+
+function retryLoad(): void {
+  todayStore.loadToday(today)
+}
 </script>
 
 <template>
   <div class="today-view">
-    <div class="today-view__header">
-      <p class="today-view__date">{{ today }}</p>
+    <!-- Header -->
+    <header class="today-view__header">
+      <h1 class="today-view__title">Today</h1>
+      <p class="today-view__date">{{ headerDate }}</p>
+      <p class="today-view__count" aria-live="polite">{{ countSummary }}</p>
+    </header>
+
+    <!-- Quick-add: single control, reused across empty + populated states -->
+    <div class="today-view__add-row">
+      <label for="today-quick-add" class="sr-only">Add a task for today</label>
+      <input
+        id="today-quick-add"
+        v-model="quickAddTitle"
+        type="text"
+        class="today-view__quick-input"
+        placeholder="Add a task for today…"
+        :disabled="isQuickAdding || !defaultColumnId"
+        :aria-invalid="quickAddError !== null || undefined"
+        :aria-describedby="
+          quickAddError
+            ? 'today-quick-add-error'
+            : !defaultColumnId
+              ? 'today-quick-add-hint'
+              : undefined
+        "
+        @keydown="handleQuickAddKeydown"
+      />
+      <Button
+        variant="primary"
+        size="sm"
+        class="today-view__quick-btn"
+        :disabled="!canQuickAdd"
+        :loading="isQuickAdding"
+        @click="submitQuickAdd"
+      >
+        Add
+      </Button>
+      <p
+        v-if="quickAddError"
+        id="today-quick-add-error"
+        role="alert"
+        class="today-view__quick-error"
+      >
+        {{ quickAddError }}
+      </p>
+      <p
+        v-else-if="!defaultColumnId"
+        id="today-quick-add-hint"
+        class="today-view__hint"
+      >
+        Create a board first to add today's tasks.
+      </p>
     </div>
 
-    <div v-if="todayStore.loading" class="today-view__state" aria-live="polite">
-      Loading…
+    <!-- Live region for completion/removal/undo announcements -->
+    <span class="sr-only" aria-live="polite" aria-atomic="true">{{ announcement }}</span>
+
+    <!-- Undo affordance after a completion -->
+    <div v-if="undoTarget" class="today-view__undo" role="status">
+      <span class="today-view__undo-text">Marked '{{ undoTarget.title }}' done.</span>
+      <button
+        type="button"
+        class="today-view__undo-btn"
+        :disabled="isUndoing"
+        @click="handleUndo"
+      >
+        <IconUndo width="14" height="14" aria-hidden="true" />
+        {{ isUndoing ? 'Undoing…' : 'Undo' }}
+      </button>
     </div>
 
-    <template v-else-if="todayStore.list.length === 0">
-      <div class="today-view__empty" role="status">
-        <svg
-          class="today-view__empty-icon"
-          viewBox="0 0 48 48"
-          fill="none"
-          aria-hidden="true"
-          width="48"
-          height="48"
+    <!-- Loading: skeleton rows -->
+    <template v-if="todayStore.loading">
+      <span class="sr-only" aria-live="polite" aria-atomic="true">Loading today's tasks…</span>
+      <ul class="today-list" aria-hidden="true">
+        <li
+          v-for="n in 3"
+          :key="n"
+          class="today-skeleton"
         >
-          <circle cx="24" cy="24" r="10" stroke="currentColor" stroke-width="1.5" />
-          <path
-            d="M24 4v4M24 40v4M4 24h4M40 24h4M9.17 9.17l2.83 2.83M36 36l2.83 2.83M9.17 38.83l2.83-2.83M36 12l2.83-2.83"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-          />
-        </svg>
-        <p class="today-view__empty-message">
-          Nothing committed for today &mdash; add something from standup.
-        </p>
-        <div class="today-view__quick-add">
-          <label for="today-quick-add" class="sr-only">Add a task for today</label>
-          <input
-            id="today-quick-add"
-            v-model="quickAddTitle"
-            type="text"
-            class="today-view__quick-input"
-            placeholder="Add a task for today…"
-            :disabled="isQuickAdding || !defaultColumnId"
-            :aria-invalid="quickAddError !== null"
-            :aria-describedby="quickAddError ? 'today-quick-add-error' : 'today-quick-add-hint'"
-            @keydown="handleQuickAddKeydown"
-          />
-          <button
-            type="button"
-            class="today-view__quick-btn"
-            :disabled="isQuickAdding || !quickAddTitle.trim() || !defaultColumnId"
-            @click="submitQuickAdd"
-          >
-            {{ isQuickAdding ? 'Adding…' : 'Add' }}
-          </button>
-          <p
-            v-if="quickAddError"
-            id="today-quick-add-error"
-            role="alert"
-            class="today-view__quick-error"
-          >
-            {{ quickAddError }}
-          </p>
-          <p
-            v-else-if="!defaultColumnId"
-            id="today-quick-add-hint"
-            class="today-view__empty-hint"
-          >
-            Create a board first to add today's tasks.
-          </p>
-        </div>
-      </div>
+          <span
+            class="skeleton-line skeleton-line--title"
+            :class="{ 'skeleton-line--short': n === 2 }"
+          ></span>
+          <span class="skeleton-line skeleton-line--meta"></span>
+        </li>
+      </ul>
     </template>
 
-    <template v-else>
-      <div class="today-view__add-row">
-        <label for="today-bottom-add" class="sr-only">Add a task for today</label>
-        <input
-          id="today-bottom-add"
-          v-model="quickAddTitle"
-          type="text"
-          class="today-view__quick-input"
-          placeholder="Add a task for today…"
-          :disabled="isQuickAdding || !defaultColumnId"
-          :aria-invalid="quickAddError !== null"
-          :aria-describedby="quickAddError ? 'today-bottom-add-error' : (!defaultColumnId ? 'today-bottom-add-hint' : undefined)"
-          @keydown="handleQuickAddKeydown"
-        />
-        <button
-          type="button"
-          class="today-view__quick-btn"
-          :disabled="isQuickAdding || !quickAddTitle.trim() || !defaultColumnId"
-          @click="submitQuickAdd"
-        >
-          {{ isQuickAdding ? 'Adding…' : 'Add' }}
-        </button>
-        <p
-          v-if="quickAddError"
-          id="today-bottom-add-error"
-          role="alert"
-          class="today-view__quick-error"
-        >
-          {{ quickAddError }}
-        </p>
-        <p
-          v-else-if="!defaultColumnId"
-          id="today-bottom-add-hint"
-          class="today-view__empty-hint"
-        >
-          Create a board first to add today's tasks.
-        </p>
-      </div>
+    <!-- Error: inline panel + retry -->
+    <div v-else-if="todayStore.error" class="today-view__error" role="alert">
+      <p class="today-view__error-text">{{ todayStore.error }}</p>
+      <Button variant="secondary" size="sm" @click="retryLoad">
+        <IconRetry width="14" height="14" aria-hidden="true" />
+        Retry
+      </Button>
+    </div>
 
-      <ul class="today-list" role="list" aria-label="Today's tasks">
-        <li
+    <!-- Empty -->
+    <div
+      v-else-if="todayStore.list.length === 0"
+      class="today-view__empty"
+      role="status"
+    >
+      <IconSun class="today-view__empty-icon" width="44" height="44" aria-hidden="true" />
+      <p class="today-view__empty-message">
+        Nothing committed for today — add something from standup.
+      </p>
+    </div>
+
+    <!-- Populated -->
+    <template v-else>
+      <!-- Grouped: carried-over then today (presentational only, no re-sort) -->
+      <template v-if="showGroups">
+        <section class="today-group" aria-labelledby="today-group-carried">
+          <h2 id="today-group-carried" class="today-group__heading">Carried over</h2>
+          <ul class="today-list" role="list" aria-label="Carried-over tasks">
+            <TodayRow
+              v-for="task in carriedTasks"
+              :key="task.id"
+              :task="task"
+              :completing="completingIds.has(task.id)"
+              @open="openTask"
+              @done="handleToggleDone"
+              @remove="handleUncommit"
+            />
+          </ul>
+        </section>
+        <section class="today-group" aria-labelledby="today-group-fresh">
+          <h2 id="today-group-fresh" class="today-group__heading">Today</h2>
+          <ul class="today-list" role="list" aria-label="Today's tasks">
+            <TodayRow
+              v-for="task in freshTasks"
+              :key="task.id"
+              :task="task"
+              :completing="completingIds.has(task.id)"
+              @open="openTask"
+              @done="handleToggleDone"
+              @remove="handleUncommit"
+            />
+          </ul>
+        </section>
+      </template>
+
+      <!-- Flat -->
+      <ul v-else class="today-list" role="list" aria-label="Today's tasks">
+        <TodayRow
           v-for="task in todayStore.list"
           :key="task.id"
-          class="today-row"
-        >
-          <button
-            type="button"
-            class="today-row__body"
-            :aria-label="`Open task: ${task.title}`"
-            @click="openTask(task.id)"
-          >
-            <span class="today-row__title">{{ task.title }}</span>
-            <span class="today-row__meta">
-              <span
-                v-if="task.carried_days > 0"
-                class="today-row__carried"
-                :aria-label="`Carried ${task.carried_days} day${task.carried_days === 1 ? '' : 's'}`"
-              >
-                carried {{ task.carried_days }}d
-              </span>
-              <span
-                v-if="task.due_date"
-                class="today-row__due"
-              >
-                {{ String(task.due_date).slice(0, 10) }}
-              </span>
-              <span
-                class="today-row__priority"
-                :data-priority="task.priority"
-              >
-                {{ task.priority }}
-              </span>
-            </span>
-          </button>
-
-          <button
-            type="button"
-            class="today-row__done"
-            :aria-label="`Mark '${task.title}' as done`"
-            :disabled="completingIds.has(task.id)"
-            @click="handleToggleDone(task.id)"
-          >
-            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" aria-hidden="true">
-              <path
-                d="M3 8.5l3.5 3.5L13 5"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-            {{ completingIds.has(task.id) ? 'Done…' : 'Done' }}
-          </button>
-
-          <button
-            type="button"
-            class="today-row__uncommit-btn"
-            :aria-label="`Remove '${task.title}' from today`"
-            title="Remove from today"
-            @click="handleUncommit(task.id)"
-          >
-            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" aria-hidden="true">
-              <path
-                d="M3 8h10"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linecap="round"
-              />
-            </svg>
-          </button>
-        </li>
+          :task="task"
+          :completing="completingIds.has(task.id)"
+          @open="openTask"
+          @done="handleToggleDone"
+          @remove="handleUncommit"
+        />
       </ul>
     </template>
 
@@ -316,26 +363,149 @@ async function handleToggleDone(id: number): Promise<void> {
   gap: 16px;
 }
 
+/* ── Header ──────────────────────────────────────────────────────────────────── */
 .today-view__header {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.today-view__title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  line-height: var(--leading-heading);
+  margin: 0;
 }
 
 .today-view__date {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.today-view__count {
   font-size: var(--text-xs);
   color: var(--color-text-muted);
-  margin: 0;
+  margin: 2px 0 0;
   font-variant-numeric: tabular-nums;
 }
 
-.today-view__state {
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  padding: 48px 0;
-  text-align: center;
+/* ── Quick-add ───────────────────────────────────────────────────────────────── */
+.today-view__add-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
+.today-view__quick-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  transition: border-color var(--motion-duration-fast) var(--motion-easing);
+}
+
+.today-view__quick-input:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 20%, transparent);
+}
+
+.today-view__quick-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.today-view__quick-btn {
+  flex-shrink: 0;
+}
+
+.today-view__quick-error {
+  width: 100%;
+  font-size: var(--text-xs);
+  color: var(--color-status-blocked);
+  margin: 0;
+}
+
+.today-view__hint {
+  width: 100%;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+/* ── Undo affordance ─────────────────────────────────────────────────────────── */
+.today-view__undo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-control);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.today-view__undo-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.today-view__undo-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: var(--radius-control);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-accent);
+  background: transparent;
+  border: 1px solid var(--color-accent);
+  cursor: pointer;
+  transition:
+    color var(--motion-duration-fast),
+    background-color var(--motion-duration-fast);
+}
+
+.today-view__undo-btn:hover {
+  color: var(--color-bg);
+  background: var(--color-accent);
+}
+
+.today-view__undo-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* ── Error panel ─────────────────────────────────────────────────────────────── */
+.today-view__error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--color-status-blocked) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-status-blocked) 30%, transparent);
+}
+
+.today-view__error-text {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-sm);
+  color: var(--color-status-blocked);
+  margin: 0;
+}
+
+/* ── Empty ───────────────────────────────────────────────────────────────────── */
 .today-view__empty {
   display: flex;
   flex-direction: column;
@@ -357,80 +527,28 @@ async function handleToggleDone(id: number): Promise<void> {
   max-width: 360px;
 }
 
-.today-view__empty-hint {
-  font-size: var(--text-sm);
+/* ── Groups ──────────────────────────────────────────────────────────────────── */
+.today-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.today-group + .today-group {
+  margin-top: 8px;
+}
+
+.today-group__heading {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--color-text-muted);
   margin: 0;
+  padding: 0 8px;
 }
 
-.today-view__quick-add {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  max-width: 480px;
-  flex-wrap: wrap;
-}
-
-.today-view__add-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding-top: 8px;
-  border-top: 1px solid var(--color-border);
-}
-
-.today-view__quick-input {
-  flex: 1;
-  min-width: 0;
-  padding: 8px 10px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-  font-size: var(--text-sm);
-  transition: border-color var(--motion-duration-fast);
-}
-
-.today-view__quick-input:focus {
-  outline: none;
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 20%, transparent);
-}
-
-.today-view__quick-input:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.today-view__quick-btn {
-  padding: 8px 14px;
-  border-radius: var(--radius-control);
-  background: var(--color-accent);
-  color: #fff;
-  font-size: var(--text-sm);
-  font-weight: 500;
-  border: none;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: opacity var(--motion-duration-fast);
-}
-
-.today-view__quick-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.today-view__quick-error {
-  width: 100%;
-  font-size: var(--text-xs);
-  color: var(--color-status-blocked);
-  margin: 0;
-}
-
-/* List */
-
+/* ── List ────────────────────────────────────────────────────────────────────── */
 .today-list {
   list-style: none;
   margin: 0;
@@ -440,153 +558,53 @@ async function handleToggleDone(id: number): Promise<void> {
   gap: 2px;
 }
 
-.today-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 8px;
-  border-radius: var(--radius-control);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  transition:
-    border-color var(--motion-duration-fast) var(--motion-easing),
-    background-color var(--motion-duration-fast) var(--motion-easing);
-}
-
-.today-row:hover {
-  border-color: var(--color-text-muted);
-  background: var(--color-surface-elevated);
-}
-
-.today-row__done {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  flex-shrink: 0;
-  height: 28px;
-  padding: 0 12px;
-  border-radius: var(--radius-control);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--color-status-done, #4ade80);
-  background: transparent;
-  border: 1px solid var(--color-status-done, #4ade80);
-  cursor: pointer;
-  transition:
-    color var(--motion-duration-fast),
-    background-color var(--motion-duration-fast),
-    border-color var(--motion-duration-fast),
-    opacity var(--motion-duration-fast);
-}
-
-.today-row__done:hover {
-  color: var(--color-bg);
-  background: var(--color-status-done, #4ade80);
-}
-
-.today-row__done:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-
-.today-row__body {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  align-items: flex-start;
-  text-align: left;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  color: inherit;
-  font: inherit;
-}
-
-.today-row__title {
-  font-size: var(--text-sm);
-  font-weight: 500;
-  color: var(--color-text-primary);
-  word-break: break-word;
-  line-height: var(--leading-body);
-}
-
-.today-row__meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.today-row__carried {
-  display: inline-flex;
-  align-items: center;
-  font-size: var(--text-xs);
-  font-weight: 500;
-  color: var(--color-status-doing);
-  background: color-mix(in srgb, var(--color-status-doing) 12%, transparent);
-  border-radius: 999px;
-  padding: 1px 7px;
-}
-
-.today-row__due {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-}
-
-.today-row__priority {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  text-transform: capitalize;
-}
-
-.today-row__priority[data-priority='high'] {
-  color: var(--color-status-blocked);
-}
-
-.today-row__priority[data-priority='urgent'] {
-  color: var(--color-accent);
-}
-
-.today-row__uncommit-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-control);
-  color: var(--color-text-muted);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  opacity: 0;
-  pointer-events: none;
-  transition:
-    opacity var(--motion-duration-fast),
-    color var(--motion-duration-fast);
-}
-
-.today-row:hover .today-row__uncommit-btn,
-.today-row:focus-within .today-row__uncommit-btn {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.today-row__uncommit-btn:hover {
-  color: var(--color-text-primary);
-}
-
-@media (hover: none) {
-  .today-row__uncommit-btn {
-    opacity: 0.4;
-    pointer-events: auto;
+/* ── Skeleton ────────────────────────────────────────────────────────────────── */
+@keyframes today-shimmer {
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
   }
 }
 
+.today-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 8px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--color-border);
+}
+
+.skeleton-line {
+  display: block;
+  border-radius: 3px;
+  background: linear-gradient(
+    90deg,
+    var(--color-border) 25%,
+    var(--color-surface-elevated) 50%,
+    var(--color-border) 75%
+  );
+  background-size: 200% 100%;
+  animation: today-shimmer 1.5s ease-in-out infinite;
+}
+
+.skeleton-line--title {
+  height: 0.75rem;
+  width: 60%;
+}
+
+.skeleton-line--title.skeleton-line--short {
+  width: 40%;
+}
+
+.skeleton-line--meta {
+  height: 0.625rem;
+  width: 35%;
+}
+
+/* ── Utilities ───────────────────────────────────────────────────────────────── */
 .sr-only {
   position: absolute;
   width: 1px;
@@ -597,5 +615,16 @@ async function handleToggleDone(id: number): Promise<void> {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border-width: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line {
+    animation: none;
+  }
+  .today-row,
+  .today-view__quick-input,
+  .today-view__undo-btn {
+    transition: none;
+  }
 }
 </style>

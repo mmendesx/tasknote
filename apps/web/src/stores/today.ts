@@ -57,5 +57,21 @@ export const useTodayStore = defineStore('today', () => {
     }
   }
 
-  return { list, loading, error, loadToday, commit, uncommit, toggleDone }
+  /**
+   * Undo a completion: reopen the task and re-commit it to `today`, then reload
+   * so it reappears in correct API order. Composes existing endpoints
+   * (uncompleteTask + commitTask) — no new backend surface.
+   */
+  async function restore(id: number, today: string): Promise<void> {
+    try {
+      await api.tasks.uncompleteTask(id)
+      await api.tasks.commitTask(id, today)
+      await loadToday(today)
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to restore task'
+      throw err
+    }
+  }
+
+  return { list, loading, error, loadToday, commit, uncommit, toggleDone, restore }
 })
