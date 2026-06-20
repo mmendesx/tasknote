@@ -83,6 +83,11 @@ onMounted(async () => {
   }
   // Warm the column cache so each row's "move to column" menu is ready. Each
   // Today task may live on a different board, so we need every board's columns.
+  // Invalidate first so a board/column edit made elsewhere this session is
+  // reflected (the store instance persists across route changes).
+  // ponytail: re-warm per mount; cheap for a personal kanban. If board/task
+  // counts grow, invalidate from column CRUD instead of refetching all.
+  boardsStore.invalidateColumns()
   boardsStore.ensureColumns().catch(() => {
     // status menu will simply be empty if columns can't load
   })

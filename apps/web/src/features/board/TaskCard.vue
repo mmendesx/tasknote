@@ -177,12 +177,13 @@ function handleOpen() {
             v-for="tag in visibleTags"
             :key="tag.id"
             class="task-card__tag"
-            :style="{
-              color: tag.color,
-              borderColor: tag.color + '55',
-              backgroundColor: tag.color + '1A',
-            }"
+            :style="{ borderColor: tag.color + '66' }"
           >
+            <span
+              class="task-card__tag-dot"
+              :style="{ backgroundColor: tag.color }"
+              aria-hidden="true"
+            />
             {{ tag.name }}
           </span>
           <span
@@ -347,23 +348,36 @@ function handleOpen() {
 }
 
 .task-card__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: var(--text-xs);
   font-weight: 500;
   line-height: 1.4;
+  /* Name uses a theme text color, not the (arbitrary, user-chosen) tag color,
+     so it stays legible on any tag color / theme. The tag color tints the
+     border and the leading dot only. */
+  color: var(--color-text-secondary);
   padding: 0 6px;
   border-radius: 999px;
   border: 1px solid;
-  max-width: 12ch;
+  max-width: 14ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   flex-shrink: 0;
 }
 
+.task-card__tag-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 .task-card__tag--overflow {
   color: var(--color-text-muted);
   border-color: var(--color-border);
-  background-color: transparent;
 }
 
 .task-card__done-mark {
