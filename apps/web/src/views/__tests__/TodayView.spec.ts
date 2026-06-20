@@ -21,6 +21,7 @@ vi.mock('@/api', () => ({
   tasks: {
     createTask: vi.fn(),
     listToday: vi.fn(),
+    moveTask: vi.fn(),
   },
   boards: {
     getBoard: vi.fn(),
@@ -38,6 +39,8 @@ vi.mock('@/features/board/TaskDrawer.vue', () => ({
 
 // Stub @tasknote/ui Button as a passthrough native button so class / disabled /
 // click behave like the real control for selector-based assertions.
+// DropdownMenu is stubbed to render its trigger slot plus a button per item so
+// item onSelect handlers are clickable in tests.
 vi.mock('@tasknote/ui', () => ({
   Button: {
     name: 'Button',
@@ -46,6 +49,22 @@ vi.mock('@tasknote/ui', () => ({
     emits: ['click'],
     template:
       '<button :class="$attrs.class" :disabled="disabled || loading" @click="$emit(\'click\', $event)"><slot /></button>',
+  },
+  DropdownMenu: {
+    name: 'DropdownMenu',
+    props: ['items', 'side', 'align'],
+    template: `
+      <div class="dropdown-stub">
+        <slot name="trigger" />
+        <button
+          v-for="(it, i) in items"
+          :key="i"
+          class="dropdown-stub__item"
+          :disabled="it.disabled"
+          @click="it.onSelect && it.onSelect()"
+        >{{ it.label }}</button>
+      </div>
+    `,
   },
 }))
 
@@ -118,6 +137,9 @@ function mountTodayView(tasks: TodayTask[] = [], loading = false) {
     create: vi.fn(),
     update: vi.fn(),
     remove: vi.fn(),
+    ensureColumns: vi.fn().mockResolvedValue(undefined),
+    columnsForColumnId: vi.fn().mockReturnValue([]),
+    invalidateColumns: vi.fn(),
   } as unknown as ReturnType<typeof useBoardsStore>)
 
   return mount(TodayView, { global: { plugins: [pinia] } })
@@ -225,7 +247,10 @@ describe('TodayView — error state', () => {
       list: [],
       defaultBoardId: null,
       load: vi.fn().mockResolvedValue(undefined),
-    } as unknown as ReturnType<typeof useBoardsStore>)
+      ensureColumns: vi.fn().mockResolvedValue(undefined),
+    columnsForColumnId: vi.fn().mockReturnValue([]),
+    invalidateColumns: vi.fn(),
+  } as unknown as ReturnType<typeof useBoardsStore>)
     return mount(TodayView, { global: { plugins: [pinia] } })
   }
 
@@ -393,7 +418,10 @@ describe('TodayView — row actions', () => {
       list: [],
       defaultBoardId: null,
       load: vi.fn().mockResolvedValue(undefined),
-    } as unknown as ReturnType<typeof useBoardsStore>)
+      ensureColumns: vi.fn().mockResolvedValue(undefined),
+    columnsForColumnId: vi.fn().mockReturnValue([]),
+    invalidateColumns: vi.fn(),
+  } as unknown as ReturnType<typeof useBoardsStore>)
     const wrapper = mount(TodayView, { global: { plugins: [pinia] } })
 
     await wrapper.find('.today-row__uncommit-btn').trigger('click')
@@ -419,7 +447,10 @@ describe('TodayView — row actions', () => {
       list: [],
       defaultBoardId: null,
       load: vi.fn().mockResolvedValue(undefined),
-    } as unknown as ReturnType<typeof useBoardsStore>)
+      ensureColumns: vi.fn().mockResolvedValue(undefined),
+    columnsForColumnId: vi.fn().mockReturnValue([]),
+    invalidateColumns: vi.fn(),
+  } as unknown as ReturnType<typeof useBoardsStore>)
     const wrapper = mount(TodayView, { global: { plugins: [pinia] } })
 
     await wrapper.find('.today-row__done').trigger('click')
@@ -445,7 +476,10 @@ describe('TodayView — row actions', () => {
       list: [],
       defaultBoardId: null,
       load: vi.fn().mockResolvedValue(undefined),
-    } as unknown as ReturnType<typeof useBoardsStore>)
+      ensureColumns: vi.fn().mockResolvedValue(undefined),
+    columnsForColumnId: vi.fn().mockReturnValue([]),
+    invalidateColumns: vi.fn(),
+  } as unknown as ReturnType<typeof useBoardsStore>)
     const wrapper = mount(TodayView, { global: { plugins: [pinia] } })
 
     await wrapper.find('.today-row__done').trigger('click')
@@ -457,6 +491,89 @@ describe('TodayView — row actions', () => {
     await undo.trigger('click')
     await flushPromises()
     expect(restore).toHaveBeenCalledWith(7, localDateString())
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Status mover (move to column)
+// ---------------------------------------------------------------------------
+
+describe('TodayView — change status (move to column)', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+  })
+
+  function mountWithColumns() {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+
+    const loadToday = vi.fn().mockResolvedValue(undefined)
+    vi.mocked(useTodayStore).mockReturnValue(
+      makeStore({
+        list: [makeTodayTask(1, 0, 'Move Me', { column_id: 100 })],
+        loadToday,
+      }) as unknown as ReturnType<typeof useTodayStore>,
+    )
+
+    // Task lives on a board whose columns are 100 (current) and 101 (target).
+    const columns = [
+      { id: 100, board_id: 9, name: 'Todo', is_done: false, position: 0, tasks: [] },
+      { id: 101, board_id: 9, name: 'Doing', is_done: false, position: 1, tasks: [] },
+    ]
+    vi.mocked(useBoardsStore).mockReturnValue({
+      list: [{ id: 9, name: 'B' }],
+      loading: false,
+      error: null,
+      defaultBoardId: 9,
+      load: vi.fn().mockResolvedValue(undefined),
+      create: vi.fn(),
+      update: vi.fn(),
+      remove: vi.fn(),
+      ensureColumns: vi.fn().mockResolvedValue(undefined),
+      columnsForColumnId: vi.fn().mockReturnValue(columns),
+      invalidateColumns: vi.fn(),
+    } as unknown as ReturnType<typeof useBoardsStore>)
+
+    vi.mocked(api.boards.getBoard).mockResolvedValue({
+      id: 9,
+      name: 'B',
+      columns,
+    } as any)
+
+    return { wrapper: mount(TodayView, { global: { plugins: [pinia] } }), loadToday }
+  }
+
+  it('renders a status trigger and moves the task to the chosen column', async () => {
+    vi.mocked(api.tasks.moveTask).mockResolvedValue({} as any)
+    const { wrapper, loadToday } = mountWithColumns()
+    await flushPromises()
+
+    expect(wrapper.find('.today-row__status-btn').exists()).toBe(true)
+
+    // Dropdown stub renders one button per column; click "Doing" (id 101).
+    const items = wrapper.findAll('.dropdown-stub__item')
+    const doing = items.find((b) => b.text() === 'Doing')
+    expect(doing).toBeTruthy()
+
+    await doing!.trigger('click')
+    await flushPromises()
+
+    expect(vi.mocked(api.tasks.moveTask)).toHaveBeenCalledWith({
+      task_id: 1,
+      column_id: 101,
+      position: 0,
+    })
+    // Reloads after the move (mount + move = 2).
+    expect(loadToday).toHaveBeenCalledTimes(2)
+  })
+
+  it('disables the current column in the status menu', async () => {
+    const { wrapper } = mountWithColumns()
+    await flushPromises()
+
+    const items = wrapper.findAll('.dropdown-stub__item')
+    const current = items.find((b) => b.text() === 'Todo')
+    expect((current!.element as HTMLButtonElement).disabled).toBe(true)
   })
 })
 
@@ -482,6 +599,9 @@ function mountTodayViewWithBoard(tasks: TodayTask[] = []) {
     create: vi.fn(),
     update: vi.fn(),
     remove: vi.fn(),
+    ensureColumns: vi.fn().mockResolvedValue(undefined),
+    columnsForColumnId: vi.fn().mockReturnValue([]),
+    invalidateColumns: vi.fn(),
   } as unknown as ReturnType<typeof useBoardsStore>)
 
   vi.mocked(api.boards.getBoard).mockResolvedValue({
@@ -586,6 +706,9 @@ function mountTodayViewNoBoard(tasks: TodayTask[] = []) {
     create: vi.fn(),
     update: vi.fn(),
     remove: vi.fn(),
+    ensureColumns: vi.fn().mockResolvedValue(undefined),
+    columnsForColumnId: vi.fn().mockReturnValue([]),
+    invalidateColumns: vi.fn(),
   } as unknown as ReturnType<typeof useBoardsStore>)
 
   vi.mocked(api.boards.getBoard).mockResolvedValue(undefined as any)
@@ -660,6 +783,9 @@ function mountTodayViewWithReactiveStore(initialTasks: TodayTask[] = []) {
     create: vi.fn(),
     update: vi.fn(),
     remove: vi.fn(),
+    ensureColumns: vi.fn().mockResolvedValue(undefined),
+    columnsForColumnId: vi.fn().mockReturnValue([]),
+    invalidateColumns: vi.fn(),
   } as unknown as ReturnType<typeof useBoardsStore>)
 
   vi.mocked(api.boards.getBoard).mockResolvedValue({

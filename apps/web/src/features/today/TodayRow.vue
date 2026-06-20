@@ -8,22 +8,42 @@ import {
   carriedAriaLabel,
 } from './task-presentation'
 import { IconCheck, IconMinus } from './icons'
+import { DropdownMenu } from '@tasknote/ui'
+import type { MenuItemDef } from '@tasknote/ui'
 import type { TodayTask } from '@/api/tasks'
+import type { ColumnWithTasks } from '@tasknote/shared'
 
-const props = defineProps<{
-  task: TodayTask
-  completing?: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    task: TodayTask
+    completing?: boolean
+    columns?: ColumnWithTasks[]
+  }>(),
+  { columns: () => [] },
+)
 
 const emit = defineEmits<{
   open: [id: number]
   done: [id: number, title: string]
   remove: [id: number, title: string]
+  move: [id: number, columnId: number, title: string]
 }>()
 
 const today = localDateString()
 const due = computed(() => formatDueDate(props.task.due_date, today))
 const priority = computed(() => getPriorityMeta(props.task.priority))
+
+// Status menu: one entry per column in the task's own board. The current
+// column is shown disabled; "done" columns get a trailing marker so the user
+// knows moving there completes the task.
+const moveItems = computed<MenuItemDef[]>(() =>
+  props.columns.map((col) => ({
+    type: 'item' as const,
+    label: col.is_done ? `${col.name} ✓` : col.name,
+    disabled: col.id === props.task.column_id,
+    onSelect: () => emit('move', props.task.id, col.id, props.task.title),
+  })),
+)
 </script>
 
 <template>
@@ -59,6 +79,29 @@ const priority = computed(() => getPriorityMeta(props.task.priority))
         </span>
       </span>
     </button>
+
+    <div v-if="moveItems.length" class="today-row__status" @click.stop>
+      <DropdownMenu :items="moveItems" side="bottom" align="end">
+        <template #trigger>
+          <button
+            type="button"
+            class="today-row__status-btn"
+            :aria-label="`Change status of '${task.title}'`"
+            title="Change status (move to column)"
+          >
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" aria-hidden="true">
+              <path
+                d="M2 8h12M10 5l3 3-3 3"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+        </template>
+      </DropdownMenu>
+    </div>
 
     <button
       type="button"
@@ -165,6 +208,41 @@ const priority = computed(() => getPriorityMeta(props.task.priority))
   flex-shrink: 0;
 }
 
+.today-row__status {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.today-row__status-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-control);
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  transition:
+    color var(--motion-duration-fast),
+    border-color var(--motion-duration-fast),
+    background-color var(--motion-duration-fast);
+}
+
+.today-row__status-btn:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-border);
+  background: var(--color-surface-elevated);
+}
+
+.today-row__status-btn:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
+}
+
 .today-row__done {
   display: inline-flex;
   align-items: center;
@@ -236,7 +314,8 @@ const priority = computed(() => getPriorityMeta(props.task.priority))
 @media (prefers-reduced-motion: reduce) {
   .today-row,
   .today-row__done,
-  .today-row__uncommit-btn {
+  .today-row__uncommit-btn,
+  .today-row__status-btn {
     transition: none;
   }
 }

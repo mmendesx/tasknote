@@ -1,13 +1,63 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import * as api from '@/api'
-import type { Board } from '@tasknote/shared'
+import type { Board, ColumnWithTasks } from '@tasknote/shared'
 import type { CreateBoardDto, UpdateBoardDto } from '@tasknote/shared'
 
 export const useBoardsStore = defineStore('boards', () => {
   const list = ref<Board[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
+
+  // Lazy cache of every board's columns, indexed by board id, plus a reverse
+  // column-id → board-id index. Powers cross-board lookups (e.g. the Today
+  // page's "move to column" control, where a task may live on any board).
+  // ponytail: fetches each board once; if board count ever grows large,
+  // add board_id to the task payload and drop this fan-out.
+  const columnsByBoard = ref<Record<number, ColumnWithTasks[]>>({})
+  const columnToBoard = ref<Record<number, number>>({})
+  let columnsLoaded = false
+  let columnsPromise: Promise<void> | null = null
+
+  /** Load (once) all boards' columns into the cache. Idempotent + deduped. */
+  async function ensureColumns(): Promise<void> {
+    if (columnsLoaded) return
+    if (columnsPromise) return columnsPromise
+    columnsPromise = (async () => {
+      if (list.value.length === 0) await load()
+      const results = await Promise.all(
+        list.value.map((b) => api.boards.getBoard(b.id).catch(() => null)),
+      )
+      const byBoard: Record<number, ColumnWithTasks[]> = {}
+      const toBoard: Record<number, number> = {}
+      for (const board of results) {
+        if (!board) continue
+        byBoard[board.id] = board.columns
+        for (const col of board.columns) toBoard[col.id] = board.id
+      }
+      columnsByBoard.value = byBoard
+      columnToBoard.value = toBoard
+      columnsLoaded = true
+    })()
+    try {
+      await columnsPromise
+    } finally {
+      columnsPromise = null
+    }
+  }
+
+  /** Sibling columns of the board that owns `columnId` (empty if unknown). */
+  function columnsForColumnId(columnId: number): ColumnWithTasks[] {
+    const boardId = columnToBoard.value[columnId]
+    return boardId != null ? (columnsByBoard.value[boardId] ?? []) : []
+  }
+
+  /** Drop the column cache so the next ensureColumns refetches (after moves). */
+  function invalidateColumns(): void {
+    columnsLoaded = false
+    columnsByBoard.value = {}
+    columnToBoard.value = {}
+  }
 
   const defaultBoardId = computed<number | null>(() => {
     if (!list.value?.length) return null
@@ -82,5 +132,18 @@ export const useBoardsStore = defineStore('boards', () => {
     }
   }
 
-  return { list, loading, error, defaultBoardId, load, create, update, remove }
+  return {
+    list,
+    loading,
+    error,
+    defaultBoardId,
+    load,
+    create,
+    update,
+    remove,
+    columnsByBoard,
+    ensureColumns,
+    columnsForColumnId,
+    invalidateColumns,
+  }
 })

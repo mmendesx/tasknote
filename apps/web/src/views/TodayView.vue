@@ -7,7 +7,8 @@ import TaskDrawer from '@/features/board/TaskDrawer.vue'
 import TodayRow from '@/features/today/TodayRow.vue'
 import { Button } from '@tasknote/ui'
 import { IconUndo, IconSun, IconRetry } from '@/features/today/icons'
-import type { BoardWithColumns } from '@tasknote/shared'
+import type { BoardWithColumns, ColumnWithTasks } from '@tasknote/shared'
+import type { TodayTask } from '@/api/tasks'
 
 const todayStore = useTodayStore()
 const boardsStore = useBoardsStore()
@@ -80,7 +81,30 @@ onMounted(async () => {
       // no default board — quick-add will be disabled
     }
   }
+  // Warm the column cache so each row's "move to column" menu is ready. Each
+  // Today task may live on a different board, so we need every board's columns.
+  boardsStore.ensureColumns().catch(() => {
+    // status menu will simply be empty if columns can't load
+  })
 })
+
+// Columns belonging to the task's OWN board (never the default board's) — moving
+// a task into another board's column would relocate it (server doesn't guard).
+function columnsForTask(task: TodayTask): ColumnWithTasks[] {
+  return boardsStore.columnsForColumnId(task.column_id)
+}
+
+async function handleMove(taskId: number, columnId: number, title: string): Promise<void> {
+  try {
+    await api.tasks.moveTask({ task_id: taskId, column_id: columnId, position: 0 })
+    // A move into a board's done column completes the task server-side, so it
+    // may drop off Today — reload to reflect the new status either way.
+    await todayStore.loadToday(today)
+    announcement.value = `'${title}' moved`
+  } catch (err) {
+    todayStore.error = err instanceof Error ? err.message : 'Failed to move task'
+  }
+}
 
 // ── Quick-add (single, deduplicated) ──────────────────────────────────────────
 const quickAddTitle = ref('')
@@ -299,9 +323,11 @@ function retryLoad(): void {
               :key="task.id"
               :task="task"
               :completing="completingIds.has(task.id)"
+              :columns="columnsForTask(task)"
               @open="openTask"
               @done="handleToggleDone"
               @remove="handleToggleDone"
+              @move="handleMove"
             />
           </ul>
         </section>
@@ -313,9 +339,11 @@ function retryLoad(): void {
               :key="task.id"
               :task="task"
               :completing="completingIds.has(task.id)"
+              :columns="columnsForTask(task)"
               @open="openTask"
               @done="handleToggleDone"
               @remove="handleToggleDone"
+              @move="handleMove"
             />
           </ul>
         </section>
@@ -328,9 +356,11 @@ function retryLoad(): void {
           :key="task.id"
           :task="task"
           :completing="completingIds.has(task.id)"
+          :columns="columnsForTask(task)"
           @open="openTask"
           @done="handleToggleDone"
           @remove="handleToggleDone"
+          @move="handleMove"
         />
       </ul>
     </template>

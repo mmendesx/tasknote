@@ -51,6 +51,11 @@ The quick-add input/button use `@tasknote/ui` `Input` and `Button` (primary), el
 ### FR-9: Undo after Done (approved extra)
 After a task is marked done, the user is offered a transient **Undo** affordance (surfaced via the live-region/toast or an inline control) that restores the task to Today. This requires a new `useTodayStore` action that re-commits / un-completes the task and returns it to the list. Undo is keyboard-reachable and announced.
 
+### FR-11: Change status from a Today row (move to column)
+Each Today row has a "Change status" control (a `DropdownMenu`) that lists the columns of **the task's own board** and moves the task to the chosen column via `moveTask({task_id, column_id, position:0})`. The current column is shown disabled; columns flagged `is_done` are marked (✓) since moving to one completes the task (the server sets `completed_at` for `is_done` columns and clears it when leaving one). After a move the Today list reloads (the task may drop off Today if it became done), and the change is announced.
+
+**Cross-board correctness (hard):** a task in Today may belong to any board, and the server's `moveTask` does **not** validate that the target column belongs to the task's board — passing another board's column id would relocate the task. The mover therefore must source columns from the task's own board only. Since the task payload carries `column_id` but not `board_id`, the boards store lazily loads every board's columns once into a `column_id → board columns` cache (`ensureColumns` / `columnsForColumnId`); warmed on Today mount.
+
 ### FR-10: Carried-vs-fresh visual grouping (approved extra)
 The list is visually grouped into "Carried over" and "Today" sections via presentational subheaders, **without changing the underlying API order**. Grouping is purely visual; it must not re-sort or drop rows, and the existing "preserves carried-first API ordering" guarantee holds.
 

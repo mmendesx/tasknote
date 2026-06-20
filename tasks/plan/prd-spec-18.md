@@ -137,6 +137,26 @@ Full UI/UX redesign of the Today page (`apps/web/src/views/TodayView.vue`): real
 #### Scenario: Undo is keyboard reachable
   Then the Undo affordance is focusable and operable by keyboard and is announced
 
+### Feature: Change status from a Today row (move to column)
+
+#### Scenario: Move a task to another column on its board
+  Given a Today task "Move Me" on a board with columns Todo (current) and Doing
+  When the user opens the row's status menu and selects "Doing"
+  Then moveTask is called with that task id, the Doing column id, and position 0
+  And the Today list is reloaded
+
+#### Scenario: Current column is not selectable
+  Given a Today task in the Todo column
+  Then the status menu shows Todo disabled
+
+#### Scenario: Columns come from the task's own board
+  Given a Today task whose column belongs to board B (not the default board)
+  Then the status menu lists board B's columns (never the default board's), so the task is not relocated to another board
+
+#### Scenario: Moving to a done column completes and drops it off Today
+  Given a Today task moved to a column flagged is_done
+  Then the server marks it completed and the reloaded Today list no longer contains it
+
 ### Feature: Carried-vs-fresh grouping (extra)
 
 #### Scenario: Visual groups without reordering
@@ -197,6 +217,12 @@ Full UI/UX redesign of the Today page (`apps/web/src/views/TodayView.vue`): real
 - **What**: Add a `useTodayStore` restore action that composes existing client APIs — `uncompleteTask(id)` (`DELETE /tasks/{id}/complete`) then `commitTask(id, today)` — to reopen the task and return it to Today. **No backend work** (endpoints confirmed in `api/tasks.ts:44-58`). Surface a transient, keyboard-reachable, announced Undo affordance after Done. When wiring, verify reopen lands the task back in its prior column, not a Done column.
 - **Where**: `apps/web/src/stores/today.ts`, `apps/web/src/views/TodayView.vue`, store/view tests
 - **Validated by**: Undo restores a completed task; Undo is keyboard reachable
+- **Estimate**: M
+
+### ICT-11: Change-status (move-to-column) control on Today rows
+- **What**: Add a lazy column cache to the boards store (`ensureColumns`, `columnsForColumnId`, `invalidateColumns`) fetching every board's columns once and indexing by column id. Add a `DropdownMenu` "Change status" control to `TodayRow.vue` listing the task's own-board columns (current disabled, `is_done` marked ✓), emitting `move`; `TodayView.handleMove` calls `moveTask` then reloads + announces. Warm the cache on Today mount.
+- **Where**: `apps/web/src/stores/boards.ts`, `apps/web/src/features/today/TodayRow.vue`, `apps/web/src/views/TodayView.vue`, + tests (`stores/__tests__/boards.columns.spec.ts`, `views/__tests__/TodayView.spec.ts`)
+- **Validated by**: Move a task to another column on its board; Current column is not selectable; Columns come from the task's own board; Moving to a done column completes and drops it off Today
 - **Estimate**: M
 
 ### ICT-9: Carried-vs-fresh visual grouping (extra)
