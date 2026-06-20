@@ -220,7 +220,7 @@ describe('ICT-50 — tags container role=group', () => {
     return wrapper
   }
 
-  it('SCN-3: renders .task-card__tags with role=group and correct aria-label when tags exist', async () => {
+  it('renders the tag NAME as visible text for each tag (not a colored dot)', async () => {
     const tagsList = [
       { id: 1, name: 'urgent', color: '#f00' },
       { id: 2, name: 'frontend', color: '#00f' },
@@ -236,29 +236,36 @@ describe('ICT-50 — tags container role=group', () => {
       },
     })
 
-    // Hydrate the tags store
     const storeState = pinia.state.value['tags']
     if (storeState) {
       storeState.list = tagsList
     }
     await wrapper.vm.$nextTick()
 
-    const tagsEl = wrapper.find('.task-card__tags')
-    expect(tagsEl.exists()).toBe(true)
-    expect(tagsEl.attributes('role')).toBe('group')
-    expect(tagsEl.attributes('aria-label')).toBe('Tags: urgent, frontend')
+    // Old colored dots are gone.
+    expect(wrapper.find('.tag-dot').exists()).toBe(false)
+
+    const chips = wrapper.findAll('.task-card__tag')
+    expect(chips).toHaveLength(2)
+    expect(chips[0].text()).toBe('urgent')
+    expect(chips[1].text()).toBe('frontend')
   })
 
-  it('SCN-3: tag dot spans have aria-hidden="true"', async () => {
-    const tagsList = [{ id: 1, name: 'urgent', color: '#f00' }]
+  it('caps visible chips at 2 and shows a +N overflow chip with the overflow names', async () => {
+    const tagsList = [
+      { id: 1, name: 'urgent', color: '#f00' },
+      { id: 2, name: 'frontend', color: '#00f' },
+      { id: 3, name: 'backend', color: '#0f0' },
+      { id: 4, name: 'design', color: '#ff0' },
+    ]
     const pinia = createPinia()
     setActivePinia(pinia)
 
     const wrapper = mount(TaskCard, {
       global: { plugins: [pinia] },
       props: {
-        task: makeTask({ tag_ids: [1] }),
-        tagColors: { 1: '#f00' },
+        task: makeTask({ tag_ids: [1, 2, 3, 4] }),
+        tagColors: { 1: '#f00', 2: '#00f', 3: '#0f0', 4: '#ff0' },
       },
     })
 
@@ -268,11 +275,16 @@ describe('ICT-50 — tags container role=group', () => {
     }
     await wrapper.vm.$nextTick()
 
-    const dots = wrapper.findAll('.tag-dot')
-    expect(dots.length).toBeGreaterThan(0)
-    dots.forEach((dot) => {
-      expect(dot.attributes('aria-hidden')).toBe('true')
-    })
+    const named = wrapper.findAll('.task-card__tag:not(.task-card__tag--overflow)')
+    expect(named).toHaveLength(2)
+    expect(named.map((c) => c.text())).toEqual(['urgent', 'frontend'])
+
+    const overflow = wrapper.find('.task-card__tag--overflow')
+    expect(overflow.exists()).toBe(true)
+    expect(overflow.text()).toBe('+2')
+    // Overflow names are exposed for screen readers since they aren't shown.
+    expect(overflow.attributes('aria-label')).toContain('backend')
+    expect(overflow.attributes('aria-label')).toContain('design')
   })
 
   it('SCN-4: does not render tags container when tag_ids is empty', async () => {

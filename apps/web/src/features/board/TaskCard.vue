@@ -46,21 +46,32 @@ const dueDateLabel = computed(() => {
   return { text: formatDueDate(props.task.due_date), overdue: false }
 })
 
-const tagDots = computed(() => {
-  const ids = props.task.tag_ids?.slice(0, 3) ?? []
-  return ids.map((id) => ({ color: props.tagColors?.[id] ?? 'var(--color-text-muted)', id }))
-})
+const TAG_CHIP_LIMIT = 2
 
-// FR-11: accessible label for the tags container
-const tagNames = computed(() =>
-  (props.task.tag_ids ?? []).map((id) => {
-    const tag = tagsStore.list.find((t) => t.id === id)
-    return tag?.name ?? ''
-  }).filter(Boolean)
+// All of the task's tags resolved to { id, name, color }, skipping unknowns.
+const allTags = computed(() =>
+  (props.task.tag_ids ?? [])
+    .map((id) => {
+      const tag = tagsStore.list.find((t) => t.id === id)
+      if (!tag) return null
+      return {
+        id,
+        name: tag.name,
+        color: props.tagColors?.[id] ?? tag.color ?? 'var(--color-text-muted)',
+      }
+    })
+    .filter((t): t is { id: number; name: string; color: string } => t !== null),
 )
 
-const tagsLabel = computed(() =>
-  tagNames.value.length > 0 ? `Tags: ${tagNames.value.join(', ')}` : undefined
+const tagNames = computed(() => allTags.value.map((t) => t.name))
+
+// Visible chips (cap) + a count/label for the overflow "+N" chip.
+const visibleTags = computed(() => allTags.value.slice(0, TAG_CHIP_LIMIT))
+const overflowTags = computed(() => allTags.value.slice(TAG_CHIP_LIMIT))
+const overflowLabel = computed(() =>
+  overflowTags.value.length
+    ? `${overflowTags.value.length} more: ${overflowTags.value.map((t) => t.name).join(', ')}`
+    : undefined,
 )
 
 // ICT-66: committed-on marker
@@ -159,21 +170,29 @@ function handleOpen() {
         </span>
       </div>
 
-      <!-- FR-11: tag container aria-label includes tag names; dots are aria-hidden -->
-      <div v-if="tagDots.length > 0 || task.completed_at || committedMarker" class="task-card__footer">
-        <div
-          v-if="tagNames.length"
-          class="task-card__tags"
-          role="group"
-          :aria-label="tagsLabel"
-        >
+      <!-- Tags rendered as named chips, tinted by tag color (cap + overflow) -->
+      <div v-if="allTags.length > 0 || task.completed_at || committedMarker" class="task-card__footer">
+        <div v-if="allTags.length" class="task-card__tags">
           <span
-            v-for="dot in tagDots"
-            :key="dot.id"
-            class="tag-dot"
-            :style="{ backgroundColor: dot.color }"
-            aria-hidden="true"
-          />
+            v-for="tag in visibleTags"
+            :key="tag.id"
+            class="task-card__tag"
+            :style="{
+              color: tag.color,
+              borderColor: tag.color + '55',
+              backgroundColor: tag.color + '1A',
+            }"
+          >
+            {{ tag.name }}
+          </span>
+          <span
+            v-if="overflowTags.length"
+            class="task-card__tag task-card__tag--overflow"
+            :aria-label="overflowLabel"
+            :title="overflowLabel"
+          >
+            +{{ overflowTags.length }}
+          </span>
         </div>
         <span
           v-if="task.completed_at"
@@ -322,14 +341,29 @@ function handleOpen() {
 .task-card__tags {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
-.tag-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+.task-card__tag {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 1.4;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid;
+  max-width: 12ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   flex-shrink: 0;
+}
+
+.task-card__tag--overflow {
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
+  background-color: transparent;
 }
 
 .task-card__done-mark {
