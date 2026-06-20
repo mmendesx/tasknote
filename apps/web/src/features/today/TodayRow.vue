@@ -74,8 +74,9 @@ const priority = computed(() => getPriorityMeta(props.task.priority))
     <button
       type="button"
       class="today-row__uncommit-btn"
-      :aria-label="`Remove '${task.title}' from today`"
-      title="Remove from today"
+      :aria-label="`Remove '${task.title}' from today and mark it done`"
+      title="Remove from today (marks done)"
+      :disabled="completing"
       @click="emit('remove', task.id, task.title)"
     >
       <IconMinus width="14" height="14" aria-hidden="true" />

@@ -139,16 +139,6 @@ const announcement = ref('')
 // Last completed task, kept so the Undo affordance can restore it.
 const undoTarget = ref<{ id: number; title: string } | null>(null)
 
-async function handleUncommit(id: number, title: string): Promise<void> {
-  try {
-    await todayStore.uncommit(id)
-    undoTarget.value = null
-    announcement.value = `'${title}' removed from today`
-  } catch {
-    // error surfaced via store.error
-  }
-}
-
 async function handleToggleDone(id: number, title: string): Promise<void> {
   completingIds.value = new Set(completingIds.value).add(id)
   try {
@@ -311,7 +301,7 @@ function retryLoad(): void {
               :completing="completingIds.has(task.id)"
               @open="openTask"
               @done="handleToggleDone"
-              @remove="handleUncommit"
+              @remove="handleToggleDone"
             />
           </ul>
         </section>
@@ -325,7 +315,7 @@ function retryLoad(): void {
               :completing="completingIds.has(task.id)"
               @open="openTask"
               @done="handleToggleDone"
-              @remove="handleUncommit"
+              @remove="handleToggleDone"
             />
           </ul>
         </section>
@@ -340,7 +330,7 @@ function retryLoad(): void {
           :completing="completingIds.has(task.id)"
           @open="openTask"
           @done="handleToggleDone"
-          @remove="handleUncommit"
+          @remove="handleToggleDone"
         />
       </ul>
     </template>

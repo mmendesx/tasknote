@@ -369,10 +369,41 @@ describe('TodayView — row actions', () => {
     expect(doneBtn.text()).toContain('Done')
   })
 
-  it('uncommit button has accessible aria-label', () => {
+  it('remove button has accessible aria-label conveying it marks the task done', () => {
     const wrapper = mountTodayView([makeTodayTask(1, 0, 'My Task')])
     const btn = wrapper.find('.today-row__uncommit-btn')
-    expect(btn.attributes('aria-label')).toContain("Remove 'My Task' from today")
+    expect(btn.attributes('aria-label')).toBe(
+      "Remove 'My Task' from today and mark it done",
+    )
+  })
+
+  it('clicking remove (−) completes the task on the board (calls toggleDone)', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const toggleDone = vi.fn().mockResolvedValue(undefined)
+    const uncommit = vi.fn().mockResolvedValue(undefined)
+    vi.mocked(useTodayStore).mockReturnValue(
+      makeStore({
+        list: [makeTodayTask(3, 0, 'My Task')],
+        toggleDone,
+        uncommit,
+      }) as unknown as ReturnType<typeof useTodayStore>,
+    )
+    vi.mocked(useBoardsStore).mockReturnValue({
+      list: [],
+      defaultBoardId: null,
+      load: vi.fn().mockResolvedValue(undefined),
+    } as unknown as ReturnType<typeof useBoardsStore>)
+    const wrapper = mount(TodayView, { global: { plugins: [pinia] } })
+
+    await wrapper.find('.today-row__uncommit-btn').trigger('click')
+    await flushPromises()
+
+    // Remove now completes on the board, and does NOT merely uncommit.
+    expect(toggleDone).toHaveBeenCalledWith(3)
+    expect(uncommit).not.toHaveBeenCalled()
+    // Undo affordance is offered, same as the Done pill.
+    expect(wrapper.find('.today-view__undo-btn').exists()).toBe(true)
   })
 
   it('clicking Done calls toggleDone and announces it', async () => {

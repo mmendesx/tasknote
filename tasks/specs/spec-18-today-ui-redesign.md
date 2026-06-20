@@ -39,7 +39,7 @@ Each task renders as a row with:
 - **Due date** formatted via a short formatter (not raw ISO slice). When the due date is before today it renders an **overdue** variant ("Overdue") styled with `--color-status-blocked`; a due date equal to today reads "Due today". The formatter lives in a reusable `task-presentation` module.
 - **Priority** rendered with its configured label and color from `priorityConfig` (e.g. "High" in the blocked color), not the raw lowercase enum string.
 - **Done** action — marks the task complete and removes it from Today (existing `toggleDone`), with `aria-label` "Mark '<title>' as done", disabled while in flight.
-- **Remove from today** action — uncommits the task (existing `uncommit`), with `aria-label` "Remove '<title>' from today"; revealed on row hover/focus-within, with an always-visible fallback under `@media (hover: none)`.
+- **Remove from today** action (−) — also **completes the task on the board** (same `toggleDone` path): removing a task from Today marks it done, per product decision. `aria-label` "Remove '<title>' from today and mark it done"; revealed on row hover/focus-within with an always-visible fallback under `@media (hover: none)`; disabled while in flight; offers Undo (FR-9) like Done. The prior "uncommit but keep open on the board" capability is intentionally removed from the Today UI (the `uncommit` store action remains for potential other callers).
 The list renders the API order verbatim — **no client-side re-sort**.
 
 ### FR-7: Completion / removal announcements

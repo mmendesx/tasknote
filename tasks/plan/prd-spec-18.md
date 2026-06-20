@@ -108,9 +108,9 @@ Full UI/UX redesign of the Today page (`apps/web/src/views/TodayView.vue`): real
 
 #### Scenario: Done and Remove actions are labeled and functional
   Given a task titled "My Task"
-  Then the Done control has aria-label "Mark 'My Task' as done" and the Remove control has aria-label "Remove 'My Task' from today"
+  Then the Done control has aria-label "Mark 'My Task' as done" and the Remove (−) control has aria-label "Remove 'My Task' from today and mark it done"
   When Done is clicked, toggleDone(id) is called and the control is disabled while in flight
-  When Remove is clicked, uncommit(id) is called
+  When Remove (−) is clicked, toggleDone(id) is called (it completes the task on the board, not a bare uncommit) and an Undo affordance is offered
 
 #### Scenario: API order preserved (no client re-sort)
   Given the API returns tasks in order [carried 5d, carried 2d, fresh]
