@@ -84,6 +84,56 @@ function mountInSvg(element: DiagramElement, zoom = 1) {
   return wrapper
 }
 
+// ── ICT-5: centered labels inside rectangle and ellipse shapes ───────────────
+
+describe('DiagramElementView — shape labels', () => {
+  it('rectangle without label renders no label <text>', () => {
+    const wrapper = mountInSvg(makeRect())
+    // Only the standalone text elements for shape labels — not the type:text element
+    const texts = wrapper.findAll('text')
+    expect(texts.length).toBe(0)
+  })
+
+  it('rectangle with label "Start" renders a centered <text> containing "Start"', () => {
+    const el = { ...makeRect(), label: 'Start' }
+    const wrapper = mountInSvg(el as DiagramElement)
+    const text = wrapper.find('text')
+    expect(text.exists()).toBe(true)
+    expect(text.text()).toBe('Start')
+    expect(text.attributes('text-anchor')).toBe('middle')
+    // center: x=10+100/2=60, y=10+80/2=50
+    expect(text.attributes('x')).toBe('60')
+    expect(text.attributes('y')).toBe('50')
+  })
+
+  it('ellipse with label "Decision" renders centered text', () => {
+    const el = { ...makeEllipse(), label: 'Decision' }
+    const wrapper = mountInSvg(el as DiagramElement)
+    const text = wrapper.find('text')
+    expect(text.exists()).toBe(true)
+    expect(text.text()).toBe('Decision')
+    expect(text.attributes('text-anchor')).toBe('middle')
+    // center: x=20+60/2=50, y=20+40/2=40
+    expect(text.attributes('x')).toBe('50')
+    expect(text.attributes('y')).toBe('40')
+  })
+
+  it('rectangle with whitespace-only label renders no <text>', () => {
+    const el = { ...makeRect(), label: '   ' }
+    const wrapper = mountInSvg(el as DiagramElement)
+    const texts = wrapper.findAll('text')
+    expect(texts.length).toBe(0)
+  })
+
+  it('label <text> has pointer-events="none" so it does not block shape hit-testing', () => {
+    const el = { ...makeRect(), label: 'Start' }
+    const wrapper = mountInSvg(el as DiagramElement)
+    const text = wrapper.find('text')
+    expect(text.exists()).toBe(true)
+    expect(text.attributes('pointer-events')).toBe('none')
+  })
+})
+
 // ── ICT-5: zoom-compensated hit targets ──────────────────────────────────────
 //
 // Mechanism (perf): hit-target stroke width comes from the CSS variable

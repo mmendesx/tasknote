@@ -19,6 +19,14 @@ function pointsToAttr(points: [number, number][]): string {
 <template>
   <!-- rectangle -->
   <template v-if="element.type === 'rectangle'">
+    <clipPath :id="`label-clip-${element.id}`">
+      <rect
+        :x="(element as RectEl).x"
+        :y="(element as RectEl).y"
+        :width="(element as RectEl).width"
+        :height="(element as RectEl).height"
+      />
+    </clipPath>
     <rect
       :data-element-id="element.id"
       :x="(element as RectEl).x"
@@ -41,10 +49,30 @@ function pointsToAttr(points: [number, number][]): string {
       fill="transparent"
       class="diagram-hit-target"
     />
+    <!-- centered label — only when label is non-empty/non-whitespace -->
+    <text
+      v-if="(element as RectEl).label?.trim()"
+      :x="(element as RectEl).x + (element as RectEl).width / 2"
+      :y="(element as RectEl).y + (element as RectEl).height / 2"
+      text-anchor="middle"
+      dominant-baseline="central"
+      font-size="14"
+      :fill="(element as RectEl).stroke"
+      :clip-path="`url(#label-clip-${element.id})`"
+      pointer-events="none"
+    >{{ (element as RectEl).label }}</text>
   </template>
 
   <!-- ellipse -->
   <template v-else-if="element.type === 'ellipse'">
+    <clipPath :id="`label-clip-${element.id}`">
+      <ellipse
+        :cx="(element as EllEl).x + (element as EllEl).width / 2"
+        :cy="(element as EllEl).y + (element as EllEl).height / 2"
+        :rx="(element as EllEl).width / 2"
+        :ry="(element as EllEl).height / 2"
+      />
+    </clipPath>
     <ellipse
       :data-element-id="element.id"
       :cx="(element as EllEl).x + (element as EllEl).width / 2"
@@ -67,6 +95,18 @@ function pointsToAttr(points: [number, number][]): string {
       fill="transparent"
       class="diagram-hit-target"
     />
+    <!-- centered label — only when label is non-empty/non-whitespace -->
+    <text
+      v-if="(element as EllEl).label?.trim()"
+      :x="(element as EllEl).x + (element as EllEl).width / 2"
+      :y="(element as EllEl).y + (element as EllEl).height / 2"
+      text-anchor="middle"
+      dominant-baseline="central"
+      font-size="14"
+      :fill="(element as EllEl).stroke"
+      :clip-path="`url(#label-clip-${element.id})`"
+      pointer-events="none"
+    >{{ (element as EllEl).label }}</text>
   </template>
 
   <!-- line -->
