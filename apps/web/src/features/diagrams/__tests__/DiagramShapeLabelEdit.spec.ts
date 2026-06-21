@@ -229,6 +229,50 @@ describe('DiagramShapeLabelEdit', () => {
     expect(pinia.state.value['diagrams'].selectedIds).toContain('rect-1')
   })
 
+  // Regression guard (bug 3): double-clicking a shape must NOT select every
+  // element on the canvas. (The reported symptom was "double-click selects all
+  // as if CTRL+A." This pins the app-selection reading: only the double-clicked
+  // shape may end up selected — never all of them.)
+  it('regression: double-click does not select all elements', async () => {
+    const a = makeRectElement({ id: 'rect-1', label: 'A' })
+    const b = makeRectElement({ id: 'rect-2', x: 400, label: 'B' })
+    const c = makeEllipseElement({ id: 'ellipse-1', x: 400, y: 300, label: 'C' })
+
+    const { diagrams: apiDiagrams } = await import('@/api')
+    vi.mocked(apiDiagrams.getDiagram).mockResolvedValueOnce({
+      id: 1,
+      title: 'multi',
+      scene_json: {
+        version: 1,
+        elements: [a, b, c],
+        appState: { viewport: { scrollX: 0, scrollY: 0, zoom: 1 } },
+      },
+    } as never)
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(DiagramCanvas, {
+      global: { plugins: [pinia] },
+      props: { diagramId: 1 },
+      attachTo: document.body,
+    })
+    _mountedWrappers.push(wrapper)
+    await flushPromises()
+    const storeState = pinia.state.value['diagrams']
+    storeState.loading = false
+    storeState.loadError = null
+    storeState.tool = 'select'
+    await wrapper.vm.$nextTick()
+
+    dblClickElement(wrapper, 'rect-1')
+    await wrapper.vm.$nextTick()
+
+    const selected = pinia.state.value['diagrams'].selectedIds as string[]
+    // Must NOT be all three (that would be the CTRL+A symptom).
+    expect(selected.length).toBeLessThan(3)
+    expect(selected).not.toContain('rect-2')
+    expect(selected).not.toContain('ellipse-1')
+  })
+
   // Regression guard: the shape stays VISIBLE while its label is edited.
   // (editingElId previously hid the element for any text-kind edit, including
   // label mode, so a rectangle vanished while you typed its label.)
