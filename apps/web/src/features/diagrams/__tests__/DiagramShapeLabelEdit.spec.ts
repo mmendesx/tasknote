@@ -229,6 +229,47 @@ describe('DiagramShapeLabelEdit', () => {
     expect(pinia.state.value['diagrams'].selectedIds).toContain('rect-1')
   })
 
+  // Regression guard: the shape stays VISIBLE while its label is edited.
+  // (editingElId previously hid the element for any text-kind edit, including
+  // label mode, so a rectangle vanished while you typed its label.)
+  it('regression: shape view stays visible while editing its label', async () => {
+    const rectEl = makeRectElement({ id: 'rect-1', label: 'Start' })
+    const { wrapper } = await mountCanvasWithElement(rectEl)
+
+    dblClickElement(wrapper, 'rect-1')
+    await wrapper.vm.$nextTick()
+
+    // Input is open (we are in label-edit mode)…
+    expect(wrapper.find('input.diagram-text-input').exists()).toBe(true)
+    // …and the shape itself must NOT be hidden via v-show (display:none).
+    const node = wrapper.find('[data-element-id="rect-1"]')
+    expect(node.exists()).toBe(true)
+    expect((node.element as HTMLElement).style.display).not.toBe('none')
+  })
+
+  // Counterpart: a TEXT element IS hidden while edited (input replaces it).
+  it('regression: text element view is hidden while editing it', async () => {
+    const textEl: DiagramElement = {
+      id: 'text-1',
+      type: 'text',
+      x: 50,
+      y: 80,
+      text: 'editing',
+      fontSize: 16,
+      color: 'currentColor',
+    } as DiagramElement
+
+    const { wrapper } = await mountCanvasWithElement(textEl)
+
+    dblClickElement(wrapper, 'text-1')
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('input.diagram-text-input').exists()).toBe(true)
+    const node = wrapper.find('[data-element-id="text-1"]')
+    expect(node.exists()).toBe(true)
+    expect((node.element as HTMLElement).style.display).toBe('none')
+  })
+
   // Regression guard: existing text-element behavior preserved
   it('regression: double-click text element, clear it, commit deletes the text element', async () => {
     const textEl: DiagramElement = {
