@@ -270,9 +270,14 @@ describe('buildExportSvg', () => {
     expect(svg).toContain('marker-end="url(#')
   })
 
-  it('arrow polyline points are axis-aligned (consecutive points share x or y)', () => {
+  it('arrow with stored waypoints exports axis-aligned polyline through them', () => {
     const elements: DiagramElement[] = [
-      makeArrow({ stroke: '#ff0000', points: [[0, 0], [200, 40]], startBinding: { elementId: 'A' } }),
+      makeArrow({
+        stroke: '#ff0000',
+        points: [[0, 0], [200, 40]],
+        waypoints: [[100, 0], [100, 40]],
+        startBinding: { elementId: 'A' },
+      }),
     ]
     const svg = buildExportSvg(elements, { resolvedColor: '#000000' })
 
@@ -285,7 +290,7 @@ describe('buildExportSvg', () => {
     expect(pts[0]).toEqual([0, 0])
     expect(pts[pts.length - 1]).toEqual([200, 40])
 
-    // Every consecutive pair must share x or y
+    // Every consecutive pair must share x or y (waypoints form elbow)
     for (let i = 1; i < pts.length; i++) {
       const [px, py] = pts[i - 1]
       const [cx, cy] = pts[i]
@@ -350,6 +355,41 @@ describe('buildExportSvg', () => {
     // Strip the SVG open-tag (which contains "xmlns") to avoid false positives
     const body = svg.replace(/<svg[^>]*>/, '')
     expect(body).not.toContain('<line')
+  })
+
+  // ── ICT-5: export from stored route ─────────────────────────────────────────
+
+  it('arrow with waypoints exports polyline through stored route with marker-end', () => {
+    // BDD: an exported arrow with waypoints [[265,80],[265,305]] →
+    // <polyline points="234,80 265,80 265,305 296,305" marker-end="url(#...)"/>
+    const elements: DiagramElement[] = [
+      makeArrow({
+        stroke: '#0055ff',
+        points: [[234, 80], [296, 305]],
+        waypoints: [[265, 80], [265, 305]],
+      }),
+    ]
+    const svg = buildExportSvg(elements, { resolvedColor: '#000000' })
+
+    const match = svg.match(/<polyline[^>]*points="([^"]+)"/)
+    expect(match).not.toBeNull()
+    expect(match![1]).toBe('234,80 265,80 265,305 296,305')
+    expect(svg).toContain('marker-end="url(#')
+  })
+
+  it('unbound line without waypoints exports as 2-point polyline', () => {
+    const line: DiagramElement = {
+      id: 'l-unbound',
+      type: 'line',
+      points: [[10, 20], [90, 80]],
+      stroke: '#333333',
+      strokeWidth: 2,
+    }
+    const svg = buildExportSvg([line], { resolvedColor: '#000000' })
+
+    const match = svg.match(/<polyline[^>]*points="([^"]+)"/)
+    expect(match).not.toBeNull()
+    expect(match![1]).toBe('10,20 90,80')
   })
 
   it('per-color arrowhead marker defs are still present for arrows (regression)', () => {

@@ -1,7 +1,6 @@
 import type { DiagramElement } from '@tasknote/shared'
 import { computeElementBbox, unionBboxes } from './useSelection'
 import type { SelectionBBox } from './useSelection'
-import { orthogonalRoute } from './orthogonalRoute'
 
 // ── XML escape ────────────────────────────────────────────────────────────────
 
@@ -35,10 +34,9 @@ function pointsToAttr(points: [number, number][]): string {
   return points.map(([x, y]) => `${x},${y}`).join(' ')
 }
 
-/** Bound connectors route orthogonally; a fully unbound line/arrow stays direct. */
+/** Serialize the stored connector route: start, any stored waypoints, end. */
 function connectorRoute(el: Extract<DiagramElement, { type: 'line' | 'arrow' }>): [number, number][] {
-  const isBound = el.startBinding != null || el.endBinding != null
-  return (isBound ? orthogonalRoute(el.points[0], el.points[1]) : el.points) as [number, number][]
+  return [el.points[0], ...(el.waypoints ?? []), el.points[1]] as [number, number][]
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
