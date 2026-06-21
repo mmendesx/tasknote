@@ -16,7 +16,7 @@ import { buildMovePatch } from './useSelection'
 import type { useSelection } from './useSelection'
 import type { useMarquee } from './useMarquee'
 import type { useResize } from './useResize'
-import { resolveShapeIdAtPoint, elementCenter, findElementById } from './connectors'
+import { findShapeAtScenePoint, elementCenter, findElementById } from './connectors'
 import { facingSideAnchor } from './orthogonalRoute'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -193,7 +193,7 @@ export function useCanvasPointer(
       previewShape.value = { type: tool, x: pt.x, y: pt.y, width: 0, height: 0 }
     } else if (tool === 'line' || tool === 'arrow') {
       const startShapeId = tool === 'arrow'
-        ? resolveShapeIdAtPoint(event.clientX, event.clientY, store.elements)
+        ? findShapeAtScenePoint(pt, store.elements)
         : null
       drawState.value = { kind: 'linear', tool, ax: pt.x, ay: pt.y, startShapeId }
       previewLinear.value = { type: tool, ax: pt.x, ay: pt.y, bx: pt.x, by: pt.y }
@@ -227,7 +227,7 @@ export function useCanvasPointer(
     }
 
     const startId = state.startShapeId ?? null
-    const endId = resolveShapeIdAtPoint(event.clientX, event.clientY, store.elements)
+    const endId = findShapeAtScenePoint(rawEnd, store.elements)
     return resolveArrowEndpoints(state, rawEnd, startId, endId)
   }
 
