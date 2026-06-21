@@ -113,12 +113,22 @@ export function buildExportSvg(elements: DiagramElement[], opts: ExportSvgOpts):
       const stroke = resolveColor(el.stroke, resolvedColor)
       const fill = el.fill ? resolveColor(el.fill, resolvedColor) : 'none'
       bodyParts.push(`<rect x="${el.x}" y="${el.y}" width="${el.width}" height="${el.height}" stroke="${escapeXml(stroke)}" fill="${escapeXml(fill)}" stroke-width="${el.strokeWidth}"/>`)
+      const label = el.label?.trim()
+      if (label) {
+        const lx = el.x + el.width / 2
+        const ly = el.y + el.height / 2
+        bodyParts.push(`<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="central" font-size="14" fill="${escapeXml(stroke)}" pointer-events="none">${escapeXml(label)}</text>`)
+      }
     } else if (el.type === 'ellipse') {
       const stroke = resolveColor(el.stroke, resolvedColor)
       const fill = el.fill ? resolveColor(el.fill, resolvedColor) : 'none'
       const cx2 = el.x + el.width / 2
       const cy2 = el.y + el.height / 2
       bodyParts.push(`<ellipse cx="${cx2}" cy="${cy2}" rx="${el.width / 2}" ry="${el.height / 2}" stroke="${escapeXml(stroke)}" fill="${escapeXml(fill)}" stroke-width="${el.strokeWidth}"/>`)
+      const label = el.label?.trim()
+      if (label) {
+        bodyParts.push(`<text x="${cx2}" y="${cy2}" text-anchor="middle" dominant-baseline="central" font-size="14" fill="${escapeXml(stroke)}" pointer-events="none">${escapeXml(label)}</text>`)
+      }
     } else if (el.type === 'line') {
       const stroke = resolveColor(el.stroke, resolvedColor)
       const [[x1, y1], [x2, y2]] = el.points

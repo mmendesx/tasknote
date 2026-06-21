@@ -207,6 +207,82 @@ describe('buildExportSvg', () => {
     expect(svg).toContain('<svg')
     expect(svg).toContain('</svg>')
   })
+
+  // ── Rectangle / ellipse label export ────────────────────────────────────────
+
+  it('rectangle with label emits centered <text> with the label content', () => {
+    const el = makeRect({ x: 100, y: 50, width: 200, height: 100, stroke: '#333333', label: 'Start' } as any)
+    const svg = buildExportSvg([el], { resolvedColor: '#000000' })
+
+    // Text content
+    expect(svg).toContain('>Start<')
+    // Centered at bbox midpoint: x=100+200/2=200, y=50+100/2=100
+    expect(svg).toContain('x="200"')
+    expect(svg).toContain('y="100"')
+    expect(svg).toContain('text-anchor="middle"')
+    expect(svg).toContain('dominant-baseline="central"')
+    // Fill matches stroke color
+    expect(svg).toContain('fill="#333333"')
+  })
+
+  it('ellipse with label emits centered <text> with the label content', () => {
+    const el: DiagramElement = {
+      id: 'e1',
+      type: 'ellipse',
+      x: 0,
+      y: 0,
+      width: 160,
+      height: 80,
+      stroke: '#0055ff',
+      fill: null,
+      strokeWidth: 2,
+      label: 'Decision',
+    } as any
+    const svg = buildExportSvg([el], { resolvedColor: '#000000' })
+
+    expect(svg).toContain('>Decision<')
+    // Center: x=80, y=40
+    expect(svg).toContain('x="80"')
+    expect(svg).toContain('y="40"')
+    expect(svg).toContain('text-anchor="middle"')
+    expect(svg).toContain('dominant-baseline="central"')
+    expect(svg).toContain('fill="#0055ff"')
+  })
+
+  it('rectangle with no label emits no extra <text> element', () => {
+    const el = makeRect({ x: 0, y: 0, width: 100, height: 60 })
+    const svg = buildExportSvg([el], { resolvedColor: '#000000' })
+
+    // The only allowed <text> would come from a text-type element, which is absent here
+    expect(svg).not.toContain('<text')
+  })
+
+  it('rectangle with whitespace-only label emits no <text> element', () => {
+    const el = makeRect({ label: '   ' } as any)
+    const svg = buildExportSvg([el], { resolvedColor: '#000000' })
+
+    expect(svg).not.toContain('<text')
+  })
+
+  it('label containing < and & is XML-escaped in the export', () => {
+    const el = makeRect({ label: 'a<b & c' } as any)
+    const svg = buildExportSvg([el], { resolvedColor: '#000000' })
+
+    expect(svg).toContain('a&lt;b &amp; c')
+    expect(svg).not.toMatch(/>a<b/)
+  })
+
+  it('rectangle label uses resolved color when stroke is currentColor', () => {
+    const el = makeRect({ stroke: 'currentColor', label: 'Node' } as any)
+    const svg = buildExportSvg([el], { resolvedColor: '#aabbcc' })
+
+    // No raw currentColor should remain in the output
+    expect(svg).not.toContain('currentColor')
+    // The rect's stroke attribute should be resolved
+    expect(svg).toContain('stroke="#aabbcc"')
+    // The label <text> fill should also use the resolved color
+    expect(svg).toContain('fill="#aabbcc"')
+  })
 })
 
 // ── exportPng ─────────────────────────────────────────────────────────────────
