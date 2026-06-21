@@ -14,7 +14,7 @@ vi.mock('@/api', () => ({
 import { useDiagramsStore } from '@/stores/diagrams'
 import * as api from '@/api'
 import type { Diagram, DiagramElement, DiagramViewport } from '@tasknote/shared'
-import { autoWaypoints, facingSide } from '@/features/diagrams/orthogonalRoute'
+import { autoWaypoints, facingSide, facingSideAnchor } from '@/features/diagrams/orthogonalRoute'
 import { elementCenter } from '@/features/diagrams/connectors'
 
 // makeRectangle width=100, height=50 → center = (x+50, y+25)
@@ -1952,5 +1952,172 @@ describe('reanchorBoundConnectorsInPlace — waypoints (ICT-3)', () => {
       const isAxisAligned = Math.abs(x1 - x2) < EPSILON || Math.abs(y1 - y2) < EPSILON
       expect(isAxisAligned, `segment ${i} → ${i + 1} is not axis-aligned: [${x1},${y1}] → [${x2},${y2}]`).toBe(true)
     }
+  })
+})
+
+// ─── ICT-8: Load-time normalization for legacy scenes ────────────────────────
+
+describe('loadDiagram — legacy connector normalization (ICT-8)', () => {
+  let store: ReturnType<typeof useDiagramsStore>
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    store = useDiagramsStore()
+    vi.resetAllMocks()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('legacy both-bound arrow (no waypoints/routeMode) gets waypoints and routeMode auto after load', async () => {
+    // R: x=50, y=75, w=100, h=50 → center (100,100)
+    // S: x=300, y=75, w=100, h=50 → center (350,100)
+    // Centers differ only in X (purely horizontal) — facingSide will pick right/left.
+    const R = makeRectangleAt('R', 50, 75)
+    const S = makeRectangleAt('S', 300, 75)
+    // Legacy arrow: points at spec-20 center positions, NO waypoints, NO routeMode.
+    const legacyArrow: DiagramElement = {
+      id: 'arrow-legacy',
+      type: 'arrow',
+      points: [[100, 100], [350, 100]],
+      stroke: '#000000',
+      strokeWidth: 1,
+      startBinding: { elementId: 'R' },
+      endBinding: { elementId: 'S' },
+    } as DiagramElement
+    const diagram = makeDiagram(1, 'Legacy', [R, S, legacyArrow])
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
+
+    await store.loadDiagram(1)
+
+    const loaded = store.elements.find((e) => e.id === 'arrow-legacy')
+    expect(loaded).toBeDefined()
+    expect(loaded?.type).toBe('arrow')
+    if (loaded?.type !== 'arrow') return
+
+    // Derive the expected values using the same geometry the helper uses.
+    const rCenter = elementCenter(R)
+    const sCenter = elementCenter(S)
+    const startToward: [number, number] = [sCenter.x, sCenter.y]
+    const endToward: [number, number] = [rCenter.x, rCenter.y]
+    const expectedStart = facingSideAnchor(R, startToward)
+    const expectedEnd = facingSideAnchor(S, endToward)
+    const expectedStartSide = facingSide(R, startToward)
+    const expectedEndSide = facingSide(S, endToward)
+    const expectedWaypoints = autoWaypoints(expectedStart, expectedStartSide, expectedEnd, expectedEndSide)
+
+    expect(loaded.points[0]).toEqual(expectedStart)
+    expect(loaded.points[1]).toEqual(expectedEnd)
+    expect((loaded as any).waypoints).toEqual(expectedWaypoints)
+    expect((loaded as any).routeMode).toBe('auto')
+  })
+
+  it('manual connector (routeMode manual, waypoints present) is left untouched by load', async () => {
+    const R = makeRectangleAt('R', 50, 75)
+    const S = makeRectangleAt('S', 300, 75)
+    const manualWaypoints: [number, number][] = [[200, 50]]
+    const manualArrow: DiagramElement = {
+      id: 'arrow-manual',
+      type: 'arrow',
+      points: [[154, 100], [296, 100]],
+      stroke: '#000000',
+      strokeWidth: 1,
+      startBinding: { elementId: 'R' },
+      endBinding: { elementId: 'S' },
+      waypoints: manualWaypoints,
+      routeMode: 'manual',
+    } as unknown as DiagramElement
+    const diagram = makeDiagram(1, 'Manual', [R, S, manualArrow])
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
+
+    await store.loadDiagram(1)
+
+    const loaded = store.elements.find((e) => e.id === 'arrow-manual')
+    expect(loaded).toBeDefined()
+    if (loaded?.type !== 'arrow') return
+    expect(loaded.points[0]).toEqual([154, 100])
+    expect(loaded.points[1]).toEqual([296, 100])
+    expect((loaded as any).waypoints).toEqual(manualWaypoints)
+    expect((loaded as any).routeMode).toBe('manual')
+  })
+
+  it('connector already auto with waypoints:[] is left untouched by load', async () => {
+    const R = makeRectangleAt('R', 50, 75)
+    const S = makeRectangleAt('S', 300, 75)
+    const autoArrow: DiagramElement = {
+      id: 'arrow-auto',
+      type: 'arrow',
+      points: [[154, 100], [296, 100]],
+      stroke: '#000000',
+      strokeWidth: 1,
+      startBinding: { elementId: 'R' },
+      endBinding: { elementId: 'S' },
+      waypoints: [],
+      routeMode: 'auto',
+    } as unknown as DiagramElement
+    const diagram = makeDiagram(1, 'Auto', [R, S, autoArrow])
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
+
+    await store.loadDiagram(1)
+
+    const loaded = store.elements.find((e) => e.id === 'arrow-auto')
+    expect(loaded).toBeDefined()
+    if (loaded?.type !== 'arrow') return
+    expect(loaded.points[0]).toEqual([154, 100])
+    expect(loaded.points[1]).toEqual([296, 100])
+    expect((loaded as any).waypoints).toEqual([])
+    expect((loaded as any).routeMode).toBe('auto')
+  })
+
+  it('legacy one-bound arrow gets waypoints:[] and routeMode auto, points unchanged', async () => {
+    const R = makeRectangleAt('R', 50, 75)
+    const oneBoundArrow: DiagramElement = {
+      id: 'arrow-one-bound',
+      type: 'arrow',
+      points: [[154, 100], [400, 200]],
+      stroke: '#000000',
+      strokeWidth: 1,
+      startBinding: { elementId: 'R' },
+      endBinding: null,
+    } as DiagramElement
+    const diagram = makeDiagram(1, 'OneBound', [R, oneBoundArrow])
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
+
+    await store.loadDiagram(1)
+
+    const loaded = store.elements.find((e) => e.id === 'arrow-one-bound')
+    expect(loaded).toBeDefined()
+    if (loaded?.type !== 'arrow') return
+    // Points are NOT recomputed for one-bound connectors.
+    expect(loaded.points[0]).toEqual([154, 100])
+    expect(loaded.points[1]).toEqual([400, 200])
+    expect((loaded as any).waypoints).toEqual([])
+    expect((loaded as any).routeMode).toBe('auto')
+  })
+
+  it('legacy unbound arrow gets waypoints:[] and routeMode auto, points unchanged', async () => {
+    const freeArrow: DiagramElement = {
+      id: 'arrow-free',
+      type: 'arrow',
+      points: [[0, 0], [100, 100]],
+      stroke: '#000000',
+      strokeWidth: 1,
+      startBinding: null,
+      endBinding: null,
+    } as DiagramElement
+    const diagram = makeDiagram(1, 'Free', [freeArrow])
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
+
+    await store.loadDiagram(1)
+
+    const loaded = store.elements.find((e) => e.id === 'arrow-free')
+    expect(loaded).toBeDefined()
+    if (loaded?.type !== 'arrow') return
+    expect(loaded.points[0]).toEqual([0, 0])
+    expect(loaded.points[1]).toEqual([100, 100])
+    expect((loaded as any).waypoints).toEqual([])
+    expect((loaded as any).routeMode).toBe('auto')
   })
 })

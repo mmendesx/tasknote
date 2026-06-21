@@ -163,6 +163,56 @@ export const useDiagramsStore = defineStore('diagrams', () => {
 
   // ── Editor actions ──────────────────────────────────────────────────────────
 
+  /**
+   * Normalize legacy spec-20 scenes at load time so the spec-21 renderer's
+   * [start, ...waypoints, end] path works correctly.
+   *
+   * spec-20 stored bound connectors WITHOUT `waypoints` (the elbow was derived
+   * at render). spec-21 render reads `waypoints` directly, so missing waypoints
+   * would produce a straight diagonal. This function adds them once on load.
+   *
+   * Rules:
+   * - Skip if routeMode === 'manual' (user route — never touch).
+   * - Skip if waypoints is already present (non-undefined, even []) — spec-21 saved it.
+   * - Both-bound, different shapes: recompute anchors + sides → autoWaypoints.
+   * - One-bound, unbound, self-loop, or missing shape: set waypoints:[], routeMode:'auto'.
+   */
+  function normalizeLegacyConnectorRoutes(els: DiagramElement[]): DiagramElement[] {
+    const byId = new Map<string, DiagramElement>()
+    for (const el of els) byId.set(el.id, el)
+
+    return els.map((el) => {
+      if (el.type !== 'arrow' && el.type !== 'line') return el
+      if ((el as any).routeMode === 'manual') return el
+      // ponytail: presence check uses !== undefined so waypoints:[] (spec-21 aligned route)
+      // is treated as already-normalized and skipped.
+      if ((el as any).waypoints !== undefined) return el
+
+      // Legacy auto connector with no waypoints — normalize now.
+      const startId = el.startBinding?.elementId
+      const endId = el.endBinding?.elementId
+      const startShape = startId ? byId.get(startId) : undefined
+      const endShape = endId ? byId.get(endId) : undefined
+
+      const isBothBound = startShape != null && endShape != null
+      if (isBothBound && startId !== endId) {
+        const startCenter = elementCenter(startShape!)
+        const endCenter = elementCenter(endShape!)
+        const startToward: [number, number] = [endCenter.x, endCenter.y]
+        const endToward: [number, number] = [startCenter.x, startCenter.y]
+        const start = facingSideAnchor(startShape!, startToward)
+        const end = facingSideAnchor(endShape!, endToward)
+        const startSide = facingSide(startShape!, startToward)
+        const endSide = facingSide(endShape!, endToward)
+        const waypoints = autoWaypoints(start, startSide, end, endSide)
+        return { ...el, points: [start, end], waypoints, routeMode: 'auto' } as unknown as DiagramElement
+      }
+
+      // One-bound, unbound, self-loop, or missing shape: mark normalized, no elbow.
+      return { ...el, waypoints: [], routeMode: 'auto' } as unknown as DiagramElement
+    })
+  }
+
   let loadDiagramAbort: AbortController | null = null
 
   async function loadDiagram(diagramId: number): Promise<void> {
@@ -182,7 +232,7 @@ export const useDiagramsStore = defineStore('diagrams', () => {
       epoch += 1
       id.value = diagram.id
       title.value = diagram.title
-      elements.value = diagram.scene_json.elements
+      elements.value = normalizeLegacyConnectorRoutes(diagram.scene_json.elements)
       viewport.value = diagram.scene_json.appState.viewport
       dirty.value = false
       sceneGen = 0
