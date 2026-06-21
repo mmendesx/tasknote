@@ -210,6 +210,45 @@ describe('DiagramShapeLabelEdit', () => {
     expect(elements[0].label).toBe('')
   })
 
+  // Regression (bug: double-click to add a label did nothing). The select
+  // pointerdown used to setPointerCapture immediately; capturing on the first
+  // pointerdown of a double-click suppresses the native dblclick that opens the
+  // label editor. A bare click (down → up, no move) must NOT capture the pointer.
+  it('regression: a bare select-click does NOT capture the pointer (keeps dblclick working)', async () => {
+    const rectEl = makeRectElement({ id: 'rect-1', label: 'Start' })
+    const { wrapper } = await mountCanvasWithElement(rectEl)
+
+    const svg = wrapper.find('svg.diagram-canvas').element as SVGElement
+    // jsdom doesn't implement pointer capture; install a spy so we can assert on it.
+    const captureSpy = vi.fn()
+    ;(svg as unknown as { setPointerCapture: unknown }).setPointerCapture = captureSpy
+
+    const node = wrapper.find('[data-element-id="rect-1"]')
+    await node.trigger('pointerdown', { clientX: 150, clientY: 150, pointerId: 1 })
+    await node.trigger('pointerup', { clientX: 150, clientY: 150, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    // No capture on a click that never moved — the dblclick that follows survives.
+    expect(captureSpy).not.toHaveBeenCalled()
+  })
+
+  it('regression: capture IS taken once a drag actually moves the shape', async () => {
+    const rectEl = makeRectElement({ id: 'rect-1' })
+    const { wrapper } = await mountCanvasWithElement(rectEl)
+
+    const svg = wrapper.find('svg.diagram-canvas').element as SVGElement
+    const captureSpy = vi.fn()
+    ;(svg as unknown as { setPointerCapture: unknown }).setPointerCapture = captureSpy
+
+    const node = wrapper.find('[data-element-id="rect-1"]')
+    await node.trigger('pointerdown', { clientX: 150, clientY: 150, pointerId: 1 })
+    // First real move frame: capture is deferred to here.
+    await wrapper.find('svg.diagram-canvas').trigger('pointermove', { clientX: 180, clientY: 150, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    expect(captureSpy).toHaveBeenCalledWith(1)
+  })
+
   it('single click on a rectangle selects it and shows no text input', async () => {
     const rectEl = makeRectElement({ id: 'rect-1', label: 'Click' })
     const { wrapper, pinia } = await mountCanvasWithElement(rectEl)

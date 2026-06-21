@@ -169,7 +169,10 @@ export function useCanvasPointer(
         originalsInSelection.map((e) => ({ ...e }) as DiagramElement),
       )
     }
-    capturePointer(event)
+    // NOTE: do NOT capture the pointer here. Capturing on the first pointerdown of
+    // a double-click suppresses the native dblclick (used to open the label editor).
+    // Capture is deferred to the first real pointermove (handleMovePointerMove), so a
+    // bare click — and thus a double-click — fires normally.
   }
 
   function handleSelectHitEmpty(event: PointerEvent): void {
@@ -278,6 +281,9 @@ export function useCanvasPointer(
     const zoom = store.viewport.zoom
     const dxScene = (event.clientX - mv.startScreenX) / zoom
     const dyScene = (event.clientY - mv.startScreenY) / zoom
+    // Capture lazily on the first drag frame (not on pointerdown) so a bare
+    // click / double-click is left intact for the native dblclick handler.
+    capturePointerOnSvg(event.pointerId)
     // Push the pre-gesture snapshot exactly once, before the first mutation.
     pushGestureHistoryOnce()
     // Build all patches first, then apply in one batched call (FR-B8).
