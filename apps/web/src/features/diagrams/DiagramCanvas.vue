@@ -212,6 +212,9 @@ const textEditState = computed(() => {
 const editingElId = computed(() => {
   const s = drawState.value
   if (s.kind !== 'text') return ''
+  // Only hide the element when editing a text element (the input replaces it).
+  // For shape labels the shape must stay visible while its label is edited.
+  if (s.target === 'label') return ''
   return s.elId
 })
 
