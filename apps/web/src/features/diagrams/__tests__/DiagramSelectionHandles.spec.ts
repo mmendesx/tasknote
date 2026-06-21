@@ -308,3 +308,75 @@ describe('DiagramSelectionHandles — ICT-6 chrome refinement', () => {
     })
   })
 })
+
+// ── ICT-6 regression: elbow-routed arrow shows only 2 stored endpoint handles ──
+
+describe('DiagramSelectionHandles — elbow-routed arrow endpoint handles', () => {
+  it('renders exactly 2 handle groups for an arrow whose points would produce elbow bends', () => {
+    // points [[0,0],[200,40]] would derive a 2-bend elbow at render time,
+    // but selection handles must only sit at the 2 stored endpoints.
+    const element = {
+      id: 'arrow-elbow',
+      type: 'arrow',
+      points: [
+        [0, 0],
+        [200, 40],
+      ] as [[number, number], [number, number]],
+      stroke: '#000000',
+      strokeWidth: 2,
+    } as DiagramElement
+
+    const bbox: SelectionBBox = { x: 0, y: 0, width: 200, height: 40 }
+
+    const wrapper = mount(DiagramSelectionHandles, {
+      attachTo: document.createElement('svg'),
+      props: {
+        bbox,
+        zoom: 1,
+        showEndpointHandles: true,
+        element,
+      },
+    })
+
+    const handleGroups = wrapper.findAll('g[data-resize-handle]')
+    // Must be exactly 2 — one per stored endpoint, never at derived bends
+    expect(handleGroups).toHaveLength(2)
+  })
+
+  it('positions handles at the stored endpoints [0,0] and [200,40], not at derived bends', () => {
+    const element = {
+      id: 'arrow-elbow',
+      type: 'arrow',
+      points: [
+        [0, 0],
+        [200, 40],
+      ] as [[number, number], [number, number]],
+      stroke: '#000000',
+      strokeWidth: 2,
+    } as DiagramElement
+
+    const bbox: SelectionBBox = { x: 0, y: 0, width: 200, height: 40 }
+
+    const wrapper = mount(DiagramSelectionHandles, {
+      attachTo: document.createElement('svg'),
+      props: {
+        bbox,
+        zoom: 1,
+        showEndpointHandles: true,
+        element,
+      },
+    })
+
+    // Visible circles carry the cx/cy derived from element.points[idx]
+    const visibleCircles = wrapper.findAll('.diagram-handle-visible')
+    expect(visibleCircles).toHaveLength(2)
+
+    const first = visibleCircles[0]
+    expect(Number(first.attributes('cx'))).toBe(0)
+    expect(Number(first.attributes('cy'))).toBe(0)
+
+    const second = visibleCircles[1]
+    expect(Number(second.attributes('cx'))).toBe(200)
+    expect(Number(second.attributes('cy'))).toBe(40)
+  })
+})

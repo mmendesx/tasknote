@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DiagramElement } from '@tasknote/shared'
+import { orthogonalRoute } from './orthogonalRoute'
 
 defineProps<{ element: DiagramElement }>()
 
@@ -13,6 +14,17 @@ type PenEl = Extract<DiagramElement, { type: 'pen' }>
 
 function pointsToAttr(points: [number, number][]): string {
   return points.map(([x, y]) => `${x},${y}`).join(' ')
+}
+
+/**
+ * SVG points attr for a connector. Bound connectors route orthogonally;
+ * a fully unbound (freehand) line/arrow stays a direct 2-point segment.
+ * Reading the element's own binding fields is not a shape lookup.
+ */
+function routeToAttr(el: LineEl | ArrowEl): string {
+  const isBound = el.startBinding != null || el.endBinding != null
+  const route = isBound ? orthogonalRoute(el.points[0], el.points[1]) : el.points
+  return pointsToAttr(route as [number, number][])
 }
 </script>
 
@@ -111,22 +123,18 @@ function pointsToAttr(points: [number, number][]): string {
 
   <!-- line -->
   <template v-else-if="element.type === 'line'">
-    <line
+    <polyline
       :data-element-id="element.id"
-      :x1="(element as LineEl).points[0][0]"
-      :y1="(element as LineEl).points[0][1]"
-      :x2="(element as LineEl).points[1][0]"
-      :y2="(element as LineEl).points[1][1]"
+      :points="routeToAttr(element as LineEl)"
+      fill="none"
       :stroke="(element as LineEl).stroke"
       :stroke-width="(element as LineEl).strokeWidth"
     />
-    <!-- wide transparent hit-target -->
-    <line
+    <!-- wide transparent hit-target covers the full elbow path -->
+    <polyline
       :data-element-id="element.id"
-      :x1="(element as LineEl).points[0][0]"
-      :y1="(element as LineEl).points[0][1]"
-      :x2="(element as LineEl).points[1][0]"
-      :y2="(element as LineEl).points[1][1]"
+      :points="routeToAttr(element as LineEl)"
+      fill="none"
       stroke="transparent"
       class="diagram-hit-target"
     />
@@ -134,23 +142,19 @@ function pointsToAttr(points: [number, number][]): string {
 
   <!-- arrow -->
   <template v-else-if="element.type === 'arrow'">
-    <line
+    <polyline
       :data-element-id="element.id"
-      :x1="(element as ArrowEl).points[0][0]"
-      :y1="(element as ArrowEl).points[0][1]"
-      :x2="(element as ArrowEl).points[1][0]"
-      :y2="(element as ArrowEl).points[1][1]"
+      :points="routeToAttr(element as ArrowEl)"
+      fill="none"
       :stroke="(element as ArrowEl).stroke"
       :stroke-width="(element as ArrowEl).strokeWidth"
       marker-end="url(#diagram-arrowhead)"
     />
-    <!-- wide transparent hit-target -->
-    <line
+    <!-- wide transparent hit-target covers the full elbow path -->
+    <polyline
       :data-element-id="element.id"
-      :x1="(element as ArrowEl).points[0][0]"
-      :y1="(element as ArrowEl).points[0][1]"
-      :x2="(element as ArrowEl).points[1][0]"
-      :y2="(element as ArrowEl).points[1][1]"
+      :points="routeToAttr(element as ArrowEl)"
+      fill="none"
       stroke="transparent"
       class="diagram-hit-target"
     />

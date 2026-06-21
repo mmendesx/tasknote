@@ -5,7 +5,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import DiagramCanvas from '../DiagramCanvas.vue'
 import type { DiagramElement } from '@tasknote/shared'
 import { useDiagramsStore } from '@/stores/diagrams'
-import { boundEndpoint, elementCenter } from '../connectors'
+import { elementCenter } from '../connectors'
+import { facingSideAnchor } from '../orthogonalRoute'
 
 // ── API mock ──────────────────────────────────────────────────────────────────
 
@@ -142,13 +143,11 @@ describe('DiagramConnectors — arrow binding on draw (captured-pointer path)', 
     expect(arrow).toBeDefined()
     expect(arrow.startBinding).toEqual({ elementId: 'R' })
     expect(arrow.endBinding).toEqual({ elementId: 'E' })
-    // ICT-12: Points are edge-anchored on shape boundaries, not at centers.
-    // startPt = rectEdgePoint(RECT_R, from=center_E=(240,120)) ≈ (103.615, 55.397)
-    // endPt = ellipseEdgePoint(ELLIPSE_E, from=center_R=(50,30)) ≈ (207.347, 104.533)
-    expect(arrow.points[0][0]).toBeCloseTo(103.61495135557416, 5)
-    expect(arrow.points[0][1]).toBeCloseTo(55.39655590527197, 5)
-    expect(arrow.points[1][0]).toBeCloseTo(207.34694128819277, 5)
-    expect(arrow.points[1][1]).toBeCloseTo(104.53276166282815, 5)
+    // spec-20: Points are facing-side midpoints (GAP=4 out), not ray-to-edge.
+    // start = facingSideAnchor(RECT_R, toward E center (240,120)) → right side → (104, 30)
+    // end = facingSideAnchor(ELLIPSE_E, toward R center (50,30)) → left side → (196, 120)
+    expect(arrow.points[0]).toEqual([104, 30])
+    expect(arrow.points[1]).toEqual([196, 120])
   })
 
   // BDD: arrow start-over-R, end on empty canvas → startBinding R, endBinding null
@@ -168,10 +167,9 @@ describe('DiagramConnectors — arrow binding on draw (captured-pointer path)', 
     expect(arrow).toBeDefined()
     expect(arrow.startBinding).toEqual({ elementId: 'R' })
     expect(arrow.endBinding).toBeNull()
-    // ICT-12: Start is edge-anchored on R's boundary facing rawEnd=(400,400).
-    // rectEdgePoint(RECT_R, from=(400,400)) ≈ (81.127, 62.906)
-    expect(arrow.points[0][0]).toBeCloseTo(81.12717779388271, 5)
-    expect(arrow.points[0][1]).toBeCloseTo(62.90587366781887, 5)
+    // spec-20: Start is facing-side midpoint of R toward rawEnd=(400,400).
+    // |dy|>|dx| from R center (50,30) → bottom side → (50, 60+GAP) = (50, 64)
+    expect(arrow.points[0]).toEqual([50, 64])
     // End is NOT the center of any shape; it is the raw getScenePt result.
     // With zoom=1 and scrollX/Y=0 the scene point equals the client point.
     expect(arrow.points[1]).toEqual([400, 400])
@@ -196,9 +194,10 @@ describe('DiagramConnectors — arrow binding on draw (captured-pointer path)', 
     expect(arrow).toBeDefined()
     expect(arrow.startBinding).toEqual({ elementId: 'R' })
     expect(arrow.endBinding).toEqual({ elementId: 'R' })
-    // Both points are the center of R.
-    expect(arrow.points[0]).toEqual([50, 30])
-    expect(arrow.points[1]).toEqual([50, 30])
+    // spec-20: degenerate self-bind — facingSideAnchor toward own center (adx==ady==0)
+    // resolves to the right side for both ends. No crash; exact side is arbitrary here.
+    expect(arrow.points[0]).toEqual([104, 30])
+    expect(arrow.points[1]).toEqual([104, 30])
   })
 
   // BDD: free arrow over empty canvas → both bindings null, normal arrow
@@ -323,15 +322,15 @@ describe('ICT-3: bound connector re-anchors live during shape drag', () => {
     // Compute expected endpoint: R at new position (50,0) 100×60
     const rNewEl = { ...rectR, x: 50, y: 0 }
     const otherEnd = { x: 200, y: 30 } // unbound start — unchanged
-    const expected = boundEndpoint(rNewEl, otherEnd)
+    const expected = facingSideAnchor(rNewEl, [otherEnd.x, otherEnd.y])
 
-    expect(arrowNew.points[1][0]).toBeCloseTo(expected.x, 5)
-    expect(arrowNew.points[1][1]).toBeCloseTo(expected.y, 5)
+    expect(arrowNew.points[1][0]).toBeCloseTo(expected[0], 5)
+    expect(arrowNew.points[1][1]).toBeCloseTo(expected[1], 5)
 
     // Verify it differs from the OLD anchor (guards against stale-position pass)
     const rOldEl = { ...rectR }
-    const oldExpected = boundEndpoint(rOldEl, otherEnd)
-    expect(expected.x).not.toBeCloseTo(oldExpected.x, 2)
+    const oldExpected = facingSideAnchor(rOldEl, [otherEnd.x, otherEnd.y])
+    expect(expected[0]).not.toBeCloseTo(oldExpected[0], 2)
 
     await svg.trigger('pointerup', { pointerId: 1 })
   })
@@ -382,13 +381,15 @@ describe('ICT-3: bound connector re-anchors live during shape drag', () => {
 
     const aNewEl = { ...shapeA, x: 100, y: 0 }
     const bNewEl = { ...shapeB, x: 400, y: 0 }
-    const expectedStart = boundEndpoint(aNewEl, elementCenter(bNewEl))
-    const expectedEnd = boundEndpoint(bNewEl, elementCenter(aNewEl))
+    const bCenter = elementCenter(bNewEl)
+    const aCenter = elementCenter(aNewEl)
+    const expectedStart = facingSideAnchor(aNewEl, [bCenter.x, bCenter.y])
+    const expectedEnd = facingSideAnchor(bNewEl, [aCenter.x, aCenter.y])
 
-    expect(arrowMoved.points[0][0]).toBeCloseTo(expectedStart.x, 5)
-    expect(arrowMoved.points[0][1]).toBeCloseTo(expectedStart.y, 5)
-    expect(arrowMoved.points[1][0]).toBeCloseTo(expectedEnd.x, 5)
-    expect(arrowMoved.points[1][1]).toBeCloseTo(expectedEnd.y, 5)
+    expect(arrowMoved.points[0][0]).toBeCloseTo(expectedStart[0], 5)
+    expect(arrowMoved.points[0][1]).toBeCloseTo(expectedStart[1], 5)
+    expect(arrowMoved.points[1][0]).toBeCloseTo(expectedEnd[0], 5)
+    expect(arrowMoved.points[1][1]).toBeCloseTo(expectedEnd[1], 5)
 
     await svg.trigger('pointerup', { pointerId: 1 })
   })
@@ -426,11 +427,11 @@ describe('ICT-3: bound connector re-anchors live during shape drag', () => {
 
     const rNewEl = { ...rectR, x: 80, y: 0 }
     const freeEnd = { x: 200, y: 30 }
-    const expectedStart = boundEndpoint(rNewEl, freeEnd)
+    const expectedStart = facingSideAnchor(rNewEl, [freeEnd.x, freeEnd.y])
 
     // Bound start re-anchored
-    expect(arrowMoved.points[0][0]).toBeCloseTo(expectedStart.x, 5)
-    expect(arrowMoved.points[0][1]).toBeCloseTo(expectedStart.y, 5)
+    expect(arrowMoved.points[0][0]).toBeCloseTo(expectedStart[0], 5)
+    expect(arrowMoved.points[0][1]).toBeCloseTo(expectedStart[1], 5)
 
     // Free end unchanged
     expect(arrowMoved.points[1][0]).toBeCloseTo(200, 5)
@@ -550,8 +551,8 @@ describe('ICT-3: bound connector re-anchors live during shape drag', () => {
     let arrowNew = elements.find((e) => e.id === 'A') as any
     // Binding must survive the first move.
     expect(arrowNew.endBinding).toEqual({ elementId: 'R' })
-    let expected = boundEndpoint({ ...rectR, x: 50, y: 0 }, otherEnd)
-    expect(arrowNew.points[1][0]).toBeCloseTo(expected.x, 5)
+    let expected = facingSideAnchor({ ...rectR, x: 50, y: 0 }, [otherEnd.x, otherEnd.y])
+    expect(arrowNew.points[1][0]).toBeCloseTo(expected[0], 5)
 
     // ── Move #2: drag R another +50px (now at x=100) ──
     const rectNode2 = wrapper.find('[data-element-id="R"]')
@@ -567,9 +568,9 @@ describe('ICT-3: bound connector re-anchors live during shape drag', () => {
     // Shape is now at x=100, binding still intact, endpoint re-anchored AGAIN.
     expect(rNew.x).toBeCloseTo(100, 5)
     expect(arrowNew.endBinding).toEqual({ elementId: 'R' })
-    expected = boundEndpoint({ ...rectR, x: 100, y: 0 }, otherEnd)
-    expect(arrowNew.points[1][0]).toBeCloseTo(expected.x, 5)
-    expect(arrowNew.points[1][1]).toBeCloseTo(expected.y, 5)
+    expected = facingSideAnchor({ ...rectR, x: 100, y: 0 }, [otherEnd.x, otherEnd.y])
+    expect(arrowNew.points[1][0]).toBeCloseTo(expected[0], 5)
+    expect(arrowNew.points[1][1]).toBeCloseTo(expected[1], 5)
   })
 
 })

@@ -599,9 +599,9 @@ describe('ICT-6 persistence', () => {
     const savedArrow = savedElements.find((e: DiagramElement) => e.id === 'arrow-1')
     expect(savedArrow).toBeDefined()
     if (savedArrow?.type === 'arrow') {
-      // ICT-12: edge-anchored — start is on the R boundary facing (300,300), not the center.
-      expect(savedArrow.points[0][0]).toBeCloseTo(201.15, 1)
-      expect(savedArrow.points[0][1]).toBeCloseTo(168.2, 1)
+      // spec-20: start = facing-side midpoint of R toward (300,300) — bottom side, (180,169).
+      expect(savedArrow.points[0][0]).toBeCloseTo(180, 1)
+      expect(savedArrow.points[0][1]).toBeCloseTo(169, 1)
       expect(savedArrow.points[1]).toEqual([300, 300])
     }
   })
@@ -899,9 +899,9 @@ describe('useDiagramsStore — connector detach on manual drag (ICT-3)', () => {
     const updatedArrow = store.elements.find((e) => e.id === 'arrow-1')
     expect(updatedArrow?.type).toBe('arrow')
     if (updatedArrow?.type === 'arrow') {
-      // ICT-12: edge-anchored — start is on R's boundary facing the free end (300,300).
-      expect(updatedArrow.points[0][0]).toBeCloseTo(201.15, 1)
-      expect(updatedArrow.points[0][1]).toBeCloseTo(168.2, 1)
+      // spec-20: start = facing-side midpoint of R toward free end (300,300) — (180,169).
+      expect(updatedArrow.points[0][0]).toBeCloseTo(180, 1)
+      expect(updatedArrow.points[0][1]).toBeCloseTo(169, 1)
       expect(updatedArrow.points[1]).toEqual([300, 300])
       // Binding on R must still be intact after shape move
       expect(updatedArrow.startBinding).toEqual({ elementId: 'R' })
@@ -935,9 +935,9 @@ describe('useDiagramsStore — bound connector rerouting (ICT-4)', () => {
     const updatedArrow = store.elements.find((e) => e.id === 'arrow-1')!
     expect(updatedArrow.type).toBe('arrow')
     if (updatedArrow.type === 'arrow') {
-      // ICT-12: edge-anchored — start is on R's boundary facing the free end (300,300).
-      expect(updatedArrow.points[0][0]).toBeCloseTo(201.15, 1)
-      expect(updatedArrow.points[0][1]).toBeCloseTo(168.2, 1)
+      // spec-20: start = facing-side midpoint of R toward free end (300,300) — (180,169).
+      expect(updatedArrow.points[0][0]).toBeCloseTo(180, 1)
+      expect(updatedArrow.points[0][1]).toBeCloseTo(169, 1)
       expect(updatedArrow.points[1]).toEqual([300, 300])
     }
   })
@@ -955,13 +955,13 @@ describe('useDiagramsStore — bound connector rerouting (ICT-4)', () => {
     const updatedArrow = store.elements.find((e) => e.id === 'arrow-1')!
     expect(updatedArrow.type).toBe('arrow')
     if (updatedArrow.type === 'arrow') {
-      // FR-B5/FR-B3: both ends recompute along the new center-to-center ray.
-      // Start is edge-anchored on R's boundary facing the new E center (400,400).
-      expect(updatedArrow.points[0][0]).toBeCloseTo(127.83, 1)
-      expect(updatedArrow.points[0][1]).toBeCloseTo(127.83, 1)
-      // End is edge-anchored on E's boundary facing R's center (100,100).
-      expect(updatedArrow.points[1][0]).toBeCloseTo(372.17, 1)
-      expect(updatedArrow.points[1][1]).toBeCloseTo(372.17, 1)
+      // spec-20: both ends recompute to facing-side midpoints toward the other center.
+      // Start = facingSideAnchor(R, toward new E center (400,400)) → right side → (154,100).
+      expect(updatedArrow.points[0][0]).toBeCloseTo(154, 1)
+      expect(updatedArrow.points[0][1]).toBeCloseTo(100, 1)
+      // End = facingSideAnchor(E, toward R center (100,100)) → left side → (346,400).
+      expect(updatedArrow.points[1][0]).toBeCloseTo(346, 1)
+      expect(updatedArrow.points[1][1]).toBeCloseTo(400, 1)
     }
   })
 
@@ -1003,9 +1003,9 @@ describe('useDiagramsStore — bound connector rerouting (ICT-4)', () => {
     expect(savedArrow).toBeDefined()
     expect(savedArrow!.type).toBe('arrow')
     if (savedArrow!.type === 'arrow') {
-      // ICT-12: edge-anchored — start is on R's boundary facing the free end (300,300).
-      expect(savedArrow!.points[0][0]).toBeCloseTo(201.15, 1)
-      expect(savedArrow!.points[0][1]).toBeCloseTo(168.2, 1)
+      // spec-20: start = facing-side midpoint of R toward free end (300,300) — (180,169).
+      expect(savedArrow!.points[0][0]).toBeCloseTo(180, 1)
+      expect(savedArrow!.points[0][1]).toBeCloseTo(169, 1)
     }
   })
 })
@@ -1088,8 +1088,8 @@ describe('useDiagramsStore — both-bound arrow rerouting (ICT-6)', () => {
     expect(updated.type).toBe('arrow')
     if (updated.type === 'arrow') {
       // Start is edge-anchored on R's new boundary facing the free end (300,300).
-      expect(updated.points[0][0]).toBeCloseTo(201.15, 1)
-      expect(updated.points[0][1]).toBeCloseTo(168.2, 1)
+      expect(updated.points[0][0]).toBeCloseTo(180, 1)
+      expect(updated.points[0][1]).toBeCloseTo(169, 1)
       // End (free) is unchanged.
       expect(updated.points[1]).toEqual([300, 300])
     }
@@ -1701,8 +1701,8 @@ describe('useDiagramsStore — legacy center-anchored binding (ICT-12)', () => {
     expect(arrowAfterMove?.type).toBe('arrow')
     if (arrowAfterMove?.type === 'arrow') {
       // Edge-anchored: start is on R's new boundary facing (300, 300)
-      expect(arrowAfterMove.points[0][0]).toBeCloseTo(201.15, 1)
-      expect(arrowAfterMove.points[0][1]).toBeCloseTo(168.2, 1)
+      expect(arrowAfterMove.points[0][0]).toBeCloseTo(180, 1)
+      expect(arrowAfterMove.points[0][1]).toBeCloseTo(169, 1)
       // Free end unchanged
       expect(arrowAfterMove.points[1]).toEqual([300, 300])
     }
@@ -1809,8 +1809,8 @@ describe('useDiagramsStore — updateElements batch (ICT-11 FR-B8)', () => {
     expect(updatedArrow?.type).toBe('arrow')
     if (updatedArrow?.type === 'arrow') {
       // Edge-anchored result identical to single-call path (ICT-12).
-      expect(updatedArrow.points[0][0]).toBeCloseTo(201.15, 1)
-      expect(updatedArrow.points[0][1]).toBeCloseTo(168.2, 1)
+      expect(updatedArrow.points[0][0]).toBeCloseTo(180, 1)
+      expect(updatedArrow.points[0][1]).toBeCloseTo(169, 1)
       expect(updatedArrow.points[1]).toEqual([300, 300])
     }
   })

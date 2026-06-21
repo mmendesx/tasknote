@@ -1,7 +1,8 @@
 import { ref, computed } from 'vue'
 import type { Ref, ComputedRef } from 'vue'
 import type { DiagramElement, DiagramViewport } from '@tasknote/shared'
-import { findShapeAtScenePoint, findElementById, boundEndpoint } from './connectors'
+import { findShapeAtScenePoint, findElementById } from './connectors'
+import { facingSideAnchor } from './orthogonalRoute'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -246,10 +247,9 @@ export function useResize(
           if (shapeId) {
             const shape = findElementById(getElements(), shapeId)
             if (shape) {
-              const otherPt = { x: patchPts[1][0], y: patchPts[1][1] }
-              const anchored = boundEndpoint(shape, otherPt)
+              const anchored = facingSideAnchor(shape, [patchPts[1][0], patchPts[1][1]])
               const newPts: [[number, number], [number, number]] = [
-                [anchored.x, anchored.y],
+                anchored,
                 patchPts[1],
               ]
               ;(patch as any).points = newPts
@@ -260,11 +260,10 @@ export function useResize(
           if (shapeId) {
             const shape = findElementById(getElements(), shapeId)
             if (shape) {
-              const otherPt = { x: patchPts[0][0], y: patchPts[0][1] }
-              const anchored = boundEndpoint(shape, otherPt)
+              const anchored = facingSideAnchor(shape, [patchPts[0][0], patchPts[0][1]])
               const newPts: [[number, number], [number, number]] = [
                 patchPts[0],
-                [anchored.x, anchored.y],
+                anchored,
               ]
               ;(patch as any).points = newPts
             }

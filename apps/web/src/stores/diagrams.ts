@@ -2,7 +2,8 @@ import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import * as api from '@/api'
 import type { Diagram, DiagramElement, DiagramViewport } from '@tasknote/shared'
-import { detachBindingsTo, elementCenter, isBindableShape, boundEndpoint } from '../features/diagrams/connectors'
+import { detachBindingsTo, elementCenter, isBindableShape } from '../features/diagrams/connectors'
+import { facingSideAnchor } from '../features/diagrams/orthogonalRoute'
 import { useHistory } from '../features/diagrams/useHistory'
 
 const DEBOUNCE_MS = 600
@@ -372,24 +373,21 @@ export const useDiagramsStore = defineStore('diagrams', () => {
           // new center-to-center ray.
           const startCenter = elementCenter(startShape)
           const endCenter = elementCenter(endShape)
-          const startPt = boundEndpoint(startShape, endCenter)
-          const endPt = boundEndpoint(endShape, startCenter)
-          start = [startPt.x, startPt.y]
-          end = [endPt.x, endPt.y]
+          start = facingSideAnchor(startShape, [endCenter.x, endCenter.y])
+          end = facingSideAnchor(endShape, [startCenter.x, startCenter.y])
         }
       } else if (matchesStart && startShape) {
         // Start is bound to a moved shape; end is either free or bound to an
         // unmoved shape.
         const otherEndId = el.endBinding?.elementId
         const otherEl = otherEndId ? byId.get(otherEndId) : undefined
-        const from = otherEl ? elementCenter(otherEl) : { x: el.points[1][0], y: el.points[1][1] }
-        const pt = boundEndpoint(startShape, from)
-        start = [pt.x, pt.y]
+        const fromObj = otherEl ? elementCenter(otherEl) : { x: el.points[1][0], y: el.points[1][1] }
+        start = facingSideAnchor(startShape, [fromObj.x, fromObj.y])
         if (otherEl) {
           // Both ends bound to different shapes (other end unmoved) — recompute
           // end against startShape's new center (FR-B5/FR-B3).
-          const endPt = boundEndpoint(otherEl, elementCenter(startShape))
-          end = [endPt.x, endPt.y]
+          const sc = elementCenter(startShape)
+          end = facingSideAnchor(otherEl, [sc.x, sc.y])
         } else {
           end = el.points[1]
         }
@@ -398,14 +396,13 @@ export const useDiagramsStore = defineStore('diagrams', () => {
         // unmoved shape.
         const otherStartId = el.startBinding?.elementId
         const otherEl = otherStartId ? byId.get(otherStartId) : undefined
-        const from = otherEl ? elementCenter(otherEl) : { x: el.points[0][0], y: el.points[0][1] }
-        const pt = boundEndpoint(endShape, from)
-        end = [pt.x, pt.y]
+        const fromObj = otherEl ? elementCenter(otherEl) : { x: el.points[0][0], y: el.points[0][1] }
+        end = facingSideAnchor(endShape, [fromObj.x, fromObj.y])
         if (otherEl) {
           // Both ends bound to different shapes (other end unmoved) — recompute
           // start against endShape's new center (FR-B5/FR-B3).
-          const startPt = boundEndpoint(otherEl, elementCenter(endShape))
-          start = [startPt.x, startPt.y]
+          const ec = elementCenter(endShape)
+          start = facingSideAnchor(otherEl, [ec.x, ec.y])
         } else {
           start = el.points[0]
         }
@@ -415,22 +412,6 @@ export const useDiagramsStore = defineStore('diagrams', () => {
 
       arr[i] = { ...el, points: [start, end] } as DiagramElement
     }
-  }
-
-  /**
-   * Standalone recompute — copies the array once, re-anchors in place, assigns.
-   * Hot paths (updateElements) skip this wrapper and re-anchor their own copy.
-   */
-  function recomputeBoundConnectorsForSet(movedShapeIds: Set<string>): void {
-    if (movedShapeIds.size === 0) return
-    const next = [...elements.value]
-    reanchorBoundConnectorsInPlace(next, movedShapeIds)
-    elements.value = next
-  }
-
-  /** Thin single-shape wrapper — preserves the existing call signature. */
-  function recomputeBoundConnectors(movedElementId: string): void {
-    recomputeBoundConnectorsForSet(new Set([movedElementId]))
   }
 
   /**

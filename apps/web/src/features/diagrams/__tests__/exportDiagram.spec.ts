@@ -257,6 +257,122 @@ describe('buildExportSvg', () => {
     expect(svg).not.toContain('<text')
   })
 
+  // ── Line / arrow orthogonal polyline export ──────────────────────────────────
+
+  it('arrow with offset endpoints exports as <polyline> not <line>', () => {
+    const elements: DiagramElement[] = [
+      makeArrow({ stroke: '#ff0000', points: [[0, 0], [200, 40]], startBinding: { elementId: 'A' } }),
+    ]
+    const svg = buildExportSvg(elements, { resolvedColor: '#000000' })
+
+    expect(svg).not.toContain('<line')
+    expect(svg).toContain('<polyline')
+    expect(svg).toContain('marker-end="url(#')
+  })
+
+  it('arrow polyline points are axis-aligned (consecutive points share x or y)', () => {
+    const elements: DiagramElement[] = [
+      makeArrow({ stroke: '#ff0000', points: [[0, 0], [200, 40]], startBinding: { elementId: 'A' } }),
+    ]
+    const svg = buildExportSvg(elements, { resolvedColor: '#000000' })
+
+    // Extract points attribute value from the <polyline> element specifically
+    const match = svg.match(/<polyline[^>]*points="([^"]+)"/)
+    expect(match).not.toBeNull()
+    const pts = match![1].split(' ').map((p) => p.split(',').map(Number) as [number, number])
+
+    // Endpoints must be present
+    expect(pts[0]).toEqual([0, 0])
+    expect(pts[pts.length - 1]).toEqual([200, 40])
+
+    // Every consecutive pair must share x or y
+    for (let i = 1; i < pts.length; i++) {
+      const [px, py] = pts[i - 1]
+      const [cx, cy] = pts[i]
+      expect(px === cx || py === cy).toBe(true)
+    }
+  })
+
+  it('arrow polyline has fill="none"', () => {
+    const elements: DiagramElement[] = [
+      makeArrow({ stroke: '#ff0000', points: [[0, 0], [200, 40]], startBinding: { elementId: 'A' } }),
+    ]
+    const svg = buildExportSvg(elements, { resolvedColor: '#000000' })
+
+    // The polyline for the arrow must carry fill="none"
+    const polylineMatch = svg.match(/<polyline[^>]*>/)
+    expect(polylineMatch).not.toBeNull()
+    expect(polylineMatch![0]).toContain('fill="none"')
+  })
+
+  it('line with axis-aligned endpoints exports as a 2-point polyline', () => {
+    const line: DiagramElement = {
+      id: 'l1',
+      type: 'line',
+      points: [[10, 20], [10, 80]],
+      stroke: '#333333',
+      strokeWidth: 2,
+    }
+    const svg = buildExportSvg([line], { resolvedColor: '#000000' })
+
+    expect(svg).not.toContain('<line')
+    expect(svg).toContain('<polyline')
+    expect(svg).toContain('10,20 10,80')
+  })
+
+  it('unbound diagonal line exports its 2 stored points (no forced elbow)', () => {
+    const line: DiagramElement = {
+      id: 'l-free',
+      type: 'line',
+      points: [[0, 0], [100, 40]],
+      stroke: '#333333',
+      strokeWidth: 2,
+    }
+    const svg = buildExportSvg([line], { resolvedColor: '#000000' })
+
+    const match = svg.match(/<polyline[^>]*points="([^"]+)"/)
+    expect(match![1]).toBe('0,0 100,40')
+  })
+
+  it('no <line substring remains for connectors (only polyline)', () => {
+    const elements: DiagramElement[] = [
+      makeArrow({ id: 'a1', stroke: '#ff0000', points: [[0, 0], [200, 40]] }),
+      {
+        id: 'l1',
+        type: 'line',
+        points: [[0, 0], [100, 0]],
+        stroke: '#000000',
+        strokeWidth: 1,
+      },
+    ]
+    const svg = buildExportSvg(elements, { resolvedColor: '#000000' })
+
+    // Strip the SVG open-tag (which contains "xmlns") to avoid false positives
+    const body = svg.replace(/<svg[^>]*>/, '')
+    expect(body).not.toContain('<line')
+  })
+
+  it('per-color arrowhead marker defs are still present for arrows (regression)', () => {
+    const elements: DiagramElement[] = [
+      makeArrow({ stroke: '#0055ff', points: [[0, 0], [200, 40]] }),
+    ]
+    const svg = buildExportSvg(elements, { resolvedColor: '#000000' })
+
+    expect(svg).toContain('<defs>')
+    expect(svg).toContain('<marker')
+    expect(svg).toContain('fill="#0055ff"')
+  })
+
+  it('rectangle and ellipse are unaffected by polyline changes', () => {
+    const elements: DiagramElement[] = [
+      makeRect({ x: 0, y: 0, width: 100, height: 50 }),
+    ]
+    const svg = buildExportSvg(elements, { resolvedColor: '#000000' })
+
+    expect(svg).toContain('<rect')
+    expect(svg).not.toContain('<polyline')
+  })
+
   it('rectangle with whitespace-only label emits no <text> element', () => {
     const el = makeRect({ label: '   ' } as any)
     const svg = buildExportSvg([el], { resolvedColor: '#000000' })

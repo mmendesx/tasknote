@@ -1,6 +1,7 @@
 import type { DiagramElement } from '@tasknote/shared'
 import { computeElementBbox, unionBboxes } from './useSelection'
 import type { SelectionBBox } from './useSelection'
+import { orthogonalRoute } from './orthogonalRoute'
 
 // ── XML escape ────────────────────────────────────────────────────────────────
 
@@ -32,6 +33,12 @@ function slugify(title: string): string {
 
 function pointsToAttr(points: [number, number][]): string {
   return points.map(([x, y]) => `${x},${y}`).join(' ')
+}
+
+/** Bound connectors route orthogonally; a fully unbound line/arrow stays direct. */
+function connectorRoute(el: Extract<DiagramElement, { type: 'line' | 'arrow' }>): [number, number][] {
+  const isBound = el.startBinding != null || el.endBinding != null
+  return (isBound ? orthogonalRoute(el.points[0], el.points[1]) : el.points) as [number, number][]
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -131,13 +138,13 @@ export function buildExportSvg(elements: DiagramElement[], opts: ExportSvgOpts):
       }
     } else if (el.type === 'line') {
       const stroke = resolveColor(el.stroke, resolvedColor)
-      const [[x1, y1], [x2, y2]] = el.points
-      bodyParts.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${escapeXml(stroke)}" stroke-width="${el.strokeWidth}"/>`)
+      const ptsAttr = pointsToAttr(connectorRoute(el))
+      bodyParts.push(`<polyline points="${ptsAttr}" fill="none" stroke="${escapeXml(stroke)}" stroke-width="${el.strokeWidth}"/>`)
     } else if (el.type === 'arrow') {
       const stroke = resolveColor(el.stroke, resolvedColor)
       const safeId = `diagram-arrowhead-${stroke.replace(/[^a-zA-Z0-9]/g, '_')}`
-      const [[x1, y1], [x2, y2]] = el.points
-      bodyParts.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${escapeXml(stroke)}" stroke-width="${el.strokeWidth}" marker-end="url(#${safeId})"/>`)
+      const ptsAttr = pointsToAttr(connectorRoute(el))
+      bodyParts.push(`<polyline points="${ptsAttr}" fill="none" stroke="${escapeXml(stroke)}" stroke-width="${el.strokeWidth}" marker-end="url(#${safeId})"/>`)
     } else if (el.type === 'text') {
       const fill = resolveColor(el.color, resolvedColor)
       bodyParts.push(`<text x="${el.x}" y="${el.y}" font-size="${el.fontSize}" fill="${escapeXml(fill)}">${escapeXml(el.text)}</text>`)

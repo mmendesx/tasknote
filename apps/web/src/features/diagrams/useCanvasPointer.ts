@@ -16,7 +16,8 @@ import { buildMovePatch } from './useSelection'
 import type { useSelection } from './useSelection'
 import type { useMarquee } from './useMarquee'
 import type { useResize } from './useResize'
-import { resolveShapeIdAtPoint, elementCenter, findElementById, boundEndpoint } from './connectors'
+import { resolveShapeIdAtPoint, elementCenter, findElementById } from './connectors'
+import { facingSideAnchor } from './orthogonalRoute'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -248,19 +249,18 @@ export function useCanvasPointer(
       // Both bound: anchor each end toward the other shape's center.
       const endCenter = elementCenter(endEl)
       const startCenter = elementCenter(startEl)
-      const startPt = boundEndpoint(startEl, endCenter)
-      const endPt = boundEndpoint(endEl, startCenter)
-      ax = startPt.x; ay = startPt.y
-      bx = endPt.x;   by = endPt.y
+      const [sax, say] = facingSideAnchor(startEl, [endCenter.x, endCenter.y])
+      const [ebx, eby] = facingSideAnchor(endEl, [startCenter.x, startCenter.y])
+      ax = sax; ay = say
+      bx = ebx; by = eby
     } else if (startEl) {
       // Only start is bound; `from` for the start anchor is the raw end point.
-      const startPt = boundEndpoint(startEl, rawEnd)
-      ax = startPt.x; ay = startPt.y
+      const [sax, say] = facingSideAnchor(startEl, [rawEnd.x, rawEnd.y])
+      ax = sax; ay = say
     } else if (endEl) {
       // Only end is bound; `from` for the end anchor is the raw start point.
-      const rawStart = { x: state.ax, y: state.ay }
-      const endPt = boundEndpoint(endEl, rawStart)
-      bx = endPt.x; by = endPt.y
+      const [ebx, eby] = facingSideAnchor(endEl, [state.ax, state.ay])
+      bx = ebx; by = eby
     }
 
     return {

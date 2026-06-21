@@ -43,6 +43,11 @@ function pickHorizontalSide(
  * degenerates to a 1-point array.
  *
  * Pure, O(1), no DOM, no shape arguments.
+ *
+ * ponytail: H/V-first is chosen from anchor-to-anchor, while facingSideAnchor picks
+ * the side from center-to-center. For large, close, cross-offset shapes the exit
+ * direction can disagree (still all right angles). Render derives from 2 stored
+ * points by design (no shape lookup); unify only if a scenario needs exact exit dir.
  */
 export function orthogonalRoute(start: Point, end: Point): Point[] {
   const [sx, sy] = start

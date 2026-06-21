@@ -251,9 +251,9 @@ describe('DiagramCanvas', () => {
 
     const { wrapper } = await mountCanvas()
 
-    // Arrow renders as <line> with marker-end
-    const lines = wrapper.findAll('line')
-    const arrowLine = lines.find(
+    // Arrow renders as <polyline> with marker-end
+    const polylines = wrapper.findAll('polyline')
+    const arrowLine = polylines.find(
       (l) => l.attributes('marker-end') === 'url(#diagram-arrowhead)'
     )
     expect(arrowLine).toBeDefined()
