@@ -26,6 +26,30 @@ vi.mock('@/api', () => ({
   },
 }))
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Assert every consecutive pair of points in the route shares x or y. */
+function assertAxisAligned(route: [number, number][]): void {
+  for (let i = 0; i < route.length - 1; i++) {
+    const [x1, y1] = route[i]!
+    const [x2, y2] = route[i + 1]!
+    expect(
+      x1 === x2 || y1 === y2,
+      `Segment ${i}→${i + 1} is diagonal: (${x1},${y1})→(${x2},${y2})`,
+    ).toBe(true)
+  }
+}
+
+/** Build the full route from a patch. */
+function fullRoute(
+  patch: Partial<DiagramElement>,
+  original: DiagramElement,
+): [number, number][] {
+  const pts = (original as any).points as [[number, number], [number, number]]
+  const waypoints: [number, number][] = (patch as any).waypoints ?? []
+  return [pts[0], ...waypoints, pts[1]]
+}
+
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 function makeArrow(overrides: Record<string, unknown> = {}): DiagramElement {
@@ -50,45 +74,91 @@ function makeResize(elements: DiagramElement[], viewport: DiagramViewport = defa
 // ── Waypoint patch logic ──────────────────────────────────────────────────────
 
 describe('useResize — waypoint drag patch logic', () => {
-  it('beginWaypointDrag + updateResize (segment) inserts waypoint at segment midpoint + delta', () => {
-    // Route: [[0,0], [200,0]] — segment 0 midpoint = (100, 0)
+  it('beginWaypointDrag + updateResize (segment) slides horizontal segment by dy, produces two axis-aligned corners', () => {
+    // Route: [[0,0], [200,0]] — a horizontal segment (y=0)
+    // Dragging by dx=10, dy=30 → horizontal seg slides to y=30; dx is ignored.
+    // Expected corners: (0,30) and (200,30). Endpoint A=(0,0) and B=(200,0) stay fixed.
     const arrow = makeArrow({ waypoints: [], routeMode: 'auto' })
     const resize = makeResize([arrow])
 
-    // Begin dragging segment 0
     resize.beginWaypointDrag('arrow-1', 'segment', 0, 0, 0)
 
-    // Move 10px right, 30px down in screen space (zoom=1 → same in scene)
     const patch = resize.updateResize(10, 30)
     expect(patch).not.toBeNull()
     const waypoints = (patch as any).waypoints as [number, number][]
-    expect(waypoints).toHaveLength(1)
-    // Midpoint (100, 0) + delta (10, 30) = (110, 30)
-    expect(waypoints[0]![0]).toBeCloseTo(110)
-    expect(waypoints[0]![1]).toBeCloseTo(30)
+    expect(waypoints).toHaveLength(2)
+    // Segment slides to y = 0 + 30 = 30; corners at A.x and B.x
+    expect(waypoints[0]).toEqual([0, 30])
+    expect(waypoints[1]).toEqual([200, 30])
     expect((patch as any).routeMode).toBe('manual')
+
+    // Full route must be axis-aligned
+    assertAxisAligned(fullRoute(patch!, arrow))
   })
 
-  it('inserts waypoint at the correct index for a segment in the middle of the route', () => {
-    // Route: [[0,0], wp[100,0], wp[100,100], [200,100]]
-    // segment 1 connects wp[100,0] → wp[100,100], midpoint = (100, 50)
+  it('sliding a horizontal segment sets the new y correctly (dy asserted)', () => {
+    // Route: [[0,100], [300,100]] — horizontal at y=100
+    // Drag up by dy=-40 → new y = 60
     const arrow = makeArrow({
+      points: [[0, 100], [300, 100]],
+      waypoints: [],
+      routeMode: 'auto',
+    })
+    const resize = makeResize([arrow])
+
+    resize.beginWaypointDrag('arrow-1', 'segment', 0, 0, 0)
+    const patch = resize.updateResize(50, -40) // dx=50 must be ignored
+
+    const waypoints = (patch as any).waypoints as [number, number][]
+    expect(waypoints[0]![1]).toBeCloseTo(60) // y = 100 + (-40)
+    expect(waypoints[1]![1]).toBeCloseTo(60)
+    assertAxisAligned(fullRoute(patch!, arrow))
+  })
+
+  it('sliding a vertical segment sets the new x correctly (dx asserted)', () => {
+    // Route: [[100,0], [100,200]] — vertical at x=100
+    // Drag right by dx=50 → new x = 150; dy is ignored
+    const arrow = makeArrow({
+      points: [[100, 0], [100, 200]],
+      waypoints: [],
+      routeMode: 'auto',
+    })
+    const resize = makeResize([arrow])
+
+    resize.beginWaypointDrag('arrow-1', 'segment', 0, 0, 0)
+    const patch = resize.updateResize(50, 99) // dy=99 must be ignored
+
+    const waypoints = (patch as any).waypoints as [number, number][]
+    expect(waypoints[0]![0]).toBeCloseTo(150) // x = 100 + 50
+    expect(waypoints[1]![0]).toBeCloseTo(150)
+    assertAxisAligned(fullRoute(patch!, arrow))
+  })
+
+  it('inserts two axis-aligned corners for a segment in the middle of the route', () => {
+    // Route: [[0,0], wp[100,0], wp[100,100], [200,100]]
+    // segment 1 connects route[1]=(100,0) → route[2]=(100,100) — a vertical segment
+    // Drag dx=20, dy=99 → new x = 120; dy ignored
+    // New waypoints: [100,0], [120,0], [120,100], [100,100]
+    const arrow = makeArrow({
+      points: [[0, 0], [200, 100]],
       waypoints: [[100, 0], [100, 100]],
       routeMode: 'manual',
     })
     const resize = makeResize([arrow])
 
     resize.beginWaypointDrag('arrow-1', 'segment', 1, 0, 0)
-    const patch = resize.updateResize(20, 0) // 20px right, 0 down
+    const patch = resize.updateResize(20, 99)
 
     const waypoints = (patch as any).waypoints as [number, number][]
-    // Expected: 3 waypoints — insert before index 1
-    expect(waypoints).toHaveLength(3)
+    expect(waypoints).toHaveLength(4)
     expect(waypoints[0]).toEqual([100, 0])
-    // New waypoint at midpoint(100,0)→(100,100) + delta(20,0) = (120, 50)
-    expect(waypoints[1]![0]).toBeCloseTo(120)
-    expect(waypoints[1]![1]).toBeCloseTo(50)
-    expect(waypoints[2]).toEqual([100, 100])
+    expect(waypoints[1]![0]).toBeCloseTo(120) // new x
+    expect(waypoints[1]![1]).toBeCloseTo(0)   // A.y preserved
+    expect(waypoints[2]![0]).toBeCloseTo(120) // new x
+    expect(waypoints[2]![1]).toBeCloseTo(100) // B.y preserved
+    expect(waypoints[3]).toEqual([100, 100])
+
+    assertAxisAligned(fullRoute(patch!, arrow))
   })
 
   it('commitResize (segment) clears waypointDragState and returns patch', () => {
@@ -105,23 +175,26 @@ describe('useResize — waypoint drag patch logic', () => {
     expect(resize.waypointDragState.value).toBeNull()
   })
 
-  it('beginWaypointDrag + updateResize (waypoint) moves the existing waypoint', () => {
-    // Route: [[0,0], wp[50,50], wp[150,50], [200,0]]
+  it('beginWaypointDrag + updateResize (waypoint) moves the existing corner along its free axis', () => {
+    // Route: [[0,0], wp[0,50], wp[200,50], [200,100]]
+    // Corner at waypoint index 1 = (200,50): prev segment (0,50)→(200,50) is H → free axis is x.
+    // Drag dx=-60, dy=25 → dy is ignored, new position: (140, 50)
     const arrow = makeArrow({
-      waypoints: [[50, 50], [150, 50]],
+      points: [[0, 0], [200, 100]],
+      waypoints: [[0, 50], [200, 50]],
       routeMode: 'manual',
     })
     const resize = makeResize([arrow])
 
-    // Drag waypoint at index 1 (currently at [150,50])
     resize.beginWaypointDrag('arrow-1', 'waypoint', 1, 0, 0)
-    const patch = resize.updateResize(-10, 25) // move left 10, down 25
+    const patch = resize.updateResize(-60, 25)
 
     const waypoints = (patch as any).waypoints as [number, number][]
     expect(waypoints).toHaveLength(2)
-    expect(waypoints[0]).toEqual([50, 50]) // unchanged
-    expect(waypoints[1]![0]).toBeCloseTo(140) // 150 - 10
-    expect(waypoints[1]![1]).toBeCloseTo(75)  // 50 + 25
+    expect(waypoints[0]).toEqual([0, 50]) // unchanged
+    // Corner 1: prev seg is H → free axis x → moved by dx=-60: (200-60=140, 50)
+    expect(waypoints[1]![0]).toBeCloseTo(140)
+    expect(waypoints[1]![1]).toBeCloseTo(50) // y unchanged
     expect((patch as any).routeMode).toBe('manual')
   })
 
@@ -193,10 +266,10 @@ describe('waypoint drag produces one undo entry — real pointer flow', () => {
     // History should now be pushed (canUndo = true)
     expect(store.canUndo).toBe(true)
 
-    // The element should be updated (waypoint inserted)
+    // The element should be updated — segment slide produces two waypoints
     const mid = store.elements.find((e: DiagramElement) => e.id === 'arrow-1')!
     expect((mid as any).routeMode).toBe('manual')
-    expect((mid as any).waypoints).toHaveLength(1)
+    expect((mid as any).waypoints).toHaveLength(2)
 
     // 4. pointerup: commitResize → final updateElement, endGestureHistory
     pointer.onCanvasPointerUp(makePointerEvent(60, 40))
