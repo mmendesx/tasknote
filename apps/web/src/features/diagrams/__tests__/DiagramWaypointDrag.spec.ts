@@ -175,10 +175,13 @@ describe('useResize — waypoint drag patch logic', () => {
     expect(resize.waypointDragState.value).toBeNull()
   })
 
-  it('beginWaypointDrag + updateResize (waypoint) moves the existing corner along its free axis', () => {
+  it('beginWaypointDrag + updateResize (waypoint) moves the corner freely and rebuilds adjacent legs as orthogonal', () => {
     // Route: [[0,0], wp[0,50], wp[200,50], [200,100]]
-    // Corner at waypoint index 1 = (200,50): prev segment (0,50)→(200,50) is H → free axis is x.
-    // Drag dx=-60, dy=25 → dy is ignored, new position: (140, 50)
+    // Corner at waypoint index 1 = (200,50). Drag dx=-60, dy=25 → Cnew=(140,75).
+    // prev=[0,50]→corner=[200,50] was H → bend1=(140,50) [leave prev horizontally]
+    // corner=[200,50]→next=[200,100] was V → bend2=(200,75) [exit next vertically]
+    // New waypoints: [[0,50],[140,50],[140,75],[200,75]] (length 4)
+    // Full route: [[0,0],[0,50],[140,50],[140,75],[200,75],[200,100]] — all axis-aligned
     const arrow = makeArrow({
       points: [[0, 0], [200, 100]],
       waypoints: [[0, 50], [200, 50]],
@@ -190,12 +193,47 @@ describe('useResize — waypoint drag patch logic', () => {
     const patch = resize.updateResize(-60, 25)
 
     const waypoints = (patch as any).waypoints as [number, number][]
-    expect(waypoints).toHaveLength(2)
-    expect(waypoints[0]).toEqual([0, 50]) // unchanged
-    // Corner 1: prev seg is H → free axis x → moved by dx=-60: (200-60=140, 50)
-    expect(waypoints[1]![0]).toBeCloseTo(140)
-    expect(waypoints[1]![1]).toBeCloseTo(50) // y unchanged
+    expect(waypoints).toHaveLength(4)
+    expect(waypoints[0]).toEqual([0, 50])       // unchanged (prev waypoint)
+    expect(waypoints[1]).toEqual([140, 50])     // bend1: leave prev horizontally
+    expect(waypoints[2]).toEqual([140, 75])     // Cnew: dragged corner position
+    expect(waypoints[3]).toEqual([200, 75])     // bend2: exit next vertically
     expect((patch as any).routeMode).toBe('manual')
+    assertAxisAligned(fullRoute(patch!, arrow))
+  })
+
+  it('waypoint drag (FR-3 regression): dragging a corner never produces a diagonal segment', () => {
+    // Repro case: points=[[0,0],[200,100]], waypoints=[[0,50],[200,50]],
+    // drag waypoint index 1 by (-60,25) — the old code left [140,50]→[200,100] diagonal.
+    const arrow = makeArrow({
+      points: [[0, 0], [200, 100]],
+      waypoints: [[0, 50], [200, 50]],
+      routeMode: 'manual',
+    })
+    const resize = makeResize([arrow])
+
+    resize.beginWaypointDrag('arrow-1', 'waypoint', 1, 0, 0)
+    const patch = resize.updateResize(-60, 25)
+
+    const route = fullRoute(patch!, arrow)
+    // Must be fully axis-aligned — no diagonal segments anywhere.
+    assertAxisAligned(route)
+    // Corner moved toward the pointer: some point's x should be less than 200 (original).
+    const xs = route.map(([x]) => x)
+    expect(xs.some(x => x < 200)).toBe(true)
+  })
+
+  it('segment slide is capped at the 50-waypoint schema limit (no oversized save)', () => {
+    // 49 existing waypoints: a slide would add 2 → 51 > 50 cap, so it must be blocked.
+    const many: [number, number][] = Array.from({ length: 49 }, (_, i) => [i, 0])
+    const arrow = makeArrow({ points: [[0, 0], [200, 0]], waypoints: many, routeMode: 'manual' })
+    const resize = makeResize([arrow])
+
+    resize.beginWaypointDrag('arrow-1', 'segment', 0, 0, 0)
+    const patch = resize.updateResize(10, 30)
+
+    // Blocked: waypoints unchanged (still 49), never grows past the cap.
+    expect((patch as any).waypoints).toHaveLength(49)
   })
 
   it('cancelResize clears waypointDragState', () => {

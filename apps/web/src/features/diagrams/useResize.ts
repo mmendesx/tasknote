@@ -38,6 +38,10 @@ export interface WaypointDragState {
 
 const MIN_SIZE = 8
 
+// Mirrors the connector `waypoints` cap in packages/shared/src/dtos.ts (max 50).
+// Kept in sync manually; if the schema cap changes, update this too.
+const MAX_WAYPOINTS = 50
+
 // ── Shape resize patch builder ────────────────────────────────────────────────
 
 /**
@@ -210,6 +214,25 @@ function buildSlideCorners(
 }
 
 /**
+ * Build an axis-aligned two-segment leg from `from` to `to`, where the first
+ * segment leaves `from` along the axis determined by `fromSegWasHorizontal`.
+ * Returns the single interior bend point (may coincide with `to` if already aligned).
+ *
+ * fromSegWasHorizontal=true  → first leave horizontally: bend at (to.x, from.y)
+ * fromSegWasHorizontal=false → first leave vertically:   bend at (from.x, to.y)
+ */
+function orthogonalCornerLeg(
+  from: [number, number],
+  to: [number, number],
+  fromSegWasHorizontal: boolean,
+): [number, number] {
+  if (fromSegWasHorizontal) {
+    return [to[0], from[1]]
+  }
+  return [from[0], to[1]]
+}
+
+/**
  * Compute the new waypoints array for a waypoint drag gesture.
  *
  * For 'segment': slides the segment at index s perpendicular to its orientation,
@@ -217,15 +240,10 @@ function buildSlideCorners(
  * Horizontal segment dragged by dy → corners at (A.x, A.y+dy) and (B.x, A.y+dy).
  * Vertical segment dragged by dx → corners at (A.x+dx, A.y) and (A.x+dx, B.y).
  *
- * For 'waypoint': moves the existing corner along its one free axis (the axis
- * that keeps both adjacent segments orthogonal). A corner between an H and V
- * segment can only freely move along the axis parallel to the V segment (x for
- * H→V corners, y for V→H corners). The perpendicular delta is ignored so the
- * adjacent legs remain axis-aligned.
- *
- * ponytail: 'waypoint' drag constrains to a single axis. Dragging a corner
- * away from its constrained axis has no effect; the segment-slide (clicking the
- * midpoint +) is the canonical way to add new bends.
+ * For 'waypoint': moves the corner freely by (dxScene, dyScene), then rebuilds
+ * the two adjacent legs as orthogonal two-segment paths (prev→Cnew, Cnew→next),
+ * preserving the original orientation of each leg's first segment. This guarantees
+ * every consecutive pair in the full route shares x or y (FR-3).
  */
 function buildWaypointPatch(
   original: DiagramElement,
@@ -245,6 +263,11 @@ function buildWaypointPatch(
   let newWaypoints: [number, number][]
 
   if (kind === 'segment') {
+    // Cap waypoints at the schema limit (50) so a save can't be rejected
+    // server-side. A segment slide inserts 2 corners, so block at 48.
+    if (existingWaypoints.length > MAX_WAYPOINTS - 2) {
+      return { waypoints: existingWaypoints, routeMode: 'manual' } as Partial<DiagramElement>
+    }
     // Segment s connects route[s] → route[s+1].
     // Replace it with two corners so the route stays fully axis-aligned.
     const s = waypointIndex
@@ -264,27 +287,28 @@ function buildWaypointPatch(
     const fullRoute = dedupRoute([pts[0], ...rawWaypoints, pts[1]])
     newWaypoints = fullRoute.slice(1, -1) as [number, number][]
   } else {
-    // Move an existing corner along its one free axis.
-    // The corner at route index (waypointIndex+1) sits between two segments:
+    // Move the corner freely; rebuild both adjacent legs to stay axis-aligned.
+    // The corner at route index (waypointIndex+1) sits between:
     //   prev: route[waypointIndex] → corner
     //   next: corner → route[waypointIndex+2]
-    // One of these is H, the other V. The corner is free to move along the axis
-    // parallel to the V segment (i.e. perpendicular to the H segment).
-    const cornerRouteIdx = waypointIndex + 1
-    const prev = route[cornerRouteIdx - 1]!
-    const corner = route[cornerRouteIdx]!
-    const next = route[cornerRouteIdx + 1]!
-    const prevIsHorizontal = segmentIsHorizontal(prev, corner)
-    let moved: [number, number]
-    if (prevIsHorizontal) {
-      // prev→corner is H: corner.y is fixed by the H level; free axis is x
-      moved = [corner[0] + dxScene, corner[1]]
-    } else {
-      // prev→corner is V: corner.x is fixed; free axis is y
-      moved = [corner[0], corner[1] + dyScene]
-    }
-    // Also update the next corner if it shares the constrained axis (chain fix)
-    newWaypoints = existingWaypoints.map((p, i) => (i === waypointIndex ? moved : p))
+    const ci = waypointIndex + 1
+    const prev = route[ci - 1]!
+    const corner = route[ci]!
+    const next = route[ci + 1]!
+    const Cnew: [number, number] = [corner[0] + dxScene, corner[1] + dyScene]
+    const prevWasH = segmentIsHorizontal(prev, corner)
+    const nextWasH = segmentIsHorizontal(corner, next)
+    const bend1 = orthogonalCornerLeg(prev, Cnew, prevWasH)
+    const bend2 = orthogonalCornerLeg(Cnew, next, !nextWasH)
+    // Interior points replacing the single old corner between prev and next
+    const interior: [number, number][] = [bend1, Cnew, bend2]
+    const rawWaypoints: [number, number][] = [
+      ...existingWaypoints.slice(0, waypointIndex),
+      ...interior,
+      ...existingWaypoints.slice(waypointIndex + 1),
+    ]
+    const fullRouteArr = dedupRoute([pts[0], ...rawWaypoints, pts[1]])
+    newWaypoints = fullRouteArr.slice(1, -1) as [number, number][]
   }
 
   return { waypoints: newWaypoints, routeMode: 'manual' } as Partial<DiagramElement>
