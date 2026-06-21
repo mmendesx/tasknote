@@ -66,6 +66,14 @@ vi.mock('@tasknote/ui', () => ({
       </div>
     `,
   },
+  useToast: () => ({
+    success: vi.fn(),
+    error: vi.fn(),
+    warning: vi.fn(),
+    info: vi.fn(),
+    dismiss: vi.fn(),
+    toasts: [],
+  }),
 }))
 
 import TodayView from '../TodayView.vue'

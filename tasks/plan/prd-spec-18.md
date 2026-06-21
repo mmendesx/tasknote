@@ -122,9 +122,12 @@ Full UI/UX redesign of the Today page (`apps/web/src/views/TodayView.vue`): real
   When a task "My Task" is marked done
   Then a polite live region announces "'My Task' marked done"
 
-#### Scenario: Removal announced
-  When a task "My Task" is removed from today
-  Then a polite live region announces "'My Task' removed from today"
+#### Scenario: Removal (−) announces completion
+  Given the "remove = complete" behavior (the − action completes the task on the board)
+  When a task "My Task" is removed from today via the − action
+  Then it routes through toggleDone, a polite live region announces "'My Task' marked done", and an Undo affordance is offered
+  # Note: − and Done share the completion path, so both announce "marked done".
+  # The earlier "removed from today" phrasing was superseded by the remove=complete decision.
 
 ### Feature: Undo after Done (extra)
 
@@ -207,10 +210,10 @@ Full UI/UX redesign of the Today page (`apps/web/src/views/TodayView.vue`): real
 - **Validated by**: Carried badge with accessible label; Priority uses configured label and color; Due date formatting with overdue; Row opens the task drawer; Done and Remove actions are labeled and functional; API order preserved (no client re-sort)
 - **Estimate**: M
 
-### ICT-7: Completion & removal aria-live announcements
-- **What**: Add a polite live region; on `toggleDone`/`uncommit` success, announce "'<title>' marked done" / "'<title>' removed from today".
+### ICT-7: Completion aria-live announcements
+- **What**: Add a polite live region; on `toggleDone` success (used by BOTH Done and the − action per the remove=complete decision), announce "'<title>' marked done". Also announce moves ("'<title>' moved") and undo ("'<title>' restored to today").
 - **Where**: `apps/web/src/views/TodayView.vue` (+ tests)
-- **Validated by**: Completion announced; Removal announced
+- **Validated by**: Completion announced; Removal (−) announces completion
 - **Estimate**: S
 
 ### ICT-8: Undo after Done (extra) — frontend-only

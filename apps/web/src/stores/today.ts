@@ -37,6 +37,9 @@ export const useTodayStore = defineStore('today', () => {
     }
   }
 
+  // Retained per spec-18 FR-6: the Today UI's − action now completes the task
+  // (see toggleDone), so this has no current caller, but the uncommit endpoint
+  // stays available for other surfaces.
   async function uncommit(id: number): Promise<void> {
     try {
       await api.tasks.uncommitTask(id)

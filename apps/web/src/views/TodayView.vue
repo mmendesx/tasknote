@@ -5,13 +5,14 @@ import { useBoardsStore } from '@/stores/boards'
 import * as api from '@/api'
 import TaskDrawer from '@/features/board/TaskDrawer.vue'
 import TodayRow from '@/features/today/TodayRow.vue'
-import { Button } from '@tasknote/ui'
+import { Button, useToast } from '@tasknote/ui'
 import { IconUndo, IconSun, IconRetry } from '@/features/today/icons'
 import type { BoardWithColumns, ColumnWithTasks } from '@tasknote/shared'
 import type { TodayTask } from '@/api/tasks'
 
 const todayStore = useTodayStore()
 const boardsStore = useBoardsStore()
+const toast = useToast()
 
 const today = localDateString()
 
@@ -89,7 +90,9 @@ onMounted(async () => {
   // counts grow, invalidate from column CRUD instead of refetching all.
   boardsStore.invalidateColumns()
   boardsStore.ensureColumns().catch(() => {
-    // status menu will simply be empty if columns can't load
+    // The status-move menus depend on this; if it fails they would silently
+    // vanish, so surface it rather than leave the user wondering.
+    toast.error('Could not load board columns', 'The "change status" menu is unavailable.')
   })
 })
 
