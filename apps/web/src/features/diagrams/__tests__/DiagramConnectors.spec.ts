@@ -150,6 +150,31 @@ describe('DiagramConnectors — arrow binding on draw (captured-pointer path)', 
     expect(arrow.points[1]).toEqual([196, 120])
   })
 
+  // Regression (bug: an arrow end released near an ellipse's bbox corner did not
+  // bind, so it never followed the ellipse on move). The draw-commit path now
+  // resolves bindings geometrically via findShapeAtScenePoint (bbox containment),
+  // NOT document.elementFromPoint — so NO elementFromPoint stub is installed here:
+  // if the draw path regressed to the DOM resolver, jsdom returns null and the
+  // end would not bind, failing this test.
+  it('arrow drawn ending on an ellipse bbox corner binds the end (geometric resolver)', async () => {
+    const { wrapper, pinia } = await mountCanvasWithShapes([RECT_R, ELLIPSE_E])
+    const svg = wrapper.find('svg.diagram-canvas')
+
+    // Start inside R (scene 50,30), end at ELLIPSE_E's bbox corner (201,101):
+    // inside bbox (200..280, 100..140) but outside the ellipse curve.
+    await svg.trigger('pointerdown', { clientX: 50, clientY: 30, pointerId: 1 })
+    await svg.trigger('pointermove', { clientX: 201, clientY: 101, pointerId: 1 })
+    await svg.trigger('pointerup', { clientX: 201, clientY: 101, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    const arrow = pinia.state.value['diagrams'].elements.find(
+      (el: DiagramElement) => el.type === 'arrow',
+    )
+    expect(arrow).toBeDefined()
+    expect(arrow.startBinding).toEqual({ elementId: 'R' })
+    expect(arrow.endBinding).toEqual({ elementId: 'E' })
+  })
+
   // BDD: arrow start-over-R, end on empty canvas → startBinding R, endBinding null
   it('arrow drawn start-over-R end-on-empty has startBinding R and endBinding null', async () => {
     // Start lands on R; end returns null (empty canvas).
