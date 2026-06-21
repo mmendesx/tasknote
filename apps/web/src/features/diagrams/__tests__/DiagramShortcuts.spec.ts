@@ -5,7 +5,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import DiagramCanvas from '../DiagramCanvas.vue'
 import { useDiagramsStore } from '@/stores/diagrams'
 import type { DiagramElement } from '@tasknote/shared'
-import { boundEndpoint } from '../connectors'
+import { facingSideAnchor } from '../orthogonalRoute'
 
 // ── API mock ──────────────────────────────────────────────────────────────────
 
@@ -349,7 +349,7 @@ describe('DiagramShortcuts', () => {
     expect((updatedRect as { x: number }).x).toBe(101)
 
     const rectAtNewX = makeRect('rect-1', 101, 50)
-    const expected = boundEndpoint(rectAtNewX, { x: startPoint[0], y: startPoint[1] })
+    const [expectedX, expectedY] = facingSideAnchor(rectAtNewX, [startPoint[0], startPoint[1]])
 
     const updatedArrow = store.elements.find((e) => e.id === 'arrow-1') as DiagramElement & {
       points: [[number, number], [number, number]]
@@ -357,8 +357,8 @@ describe('DiagramShortcuts', () => {
     expect(updatedArrow).toBeDefined()
     expect(updatedArrow.points[0][0]).toBeCloseTo(startPoint[0], 5)
     expect(updatedArrow.points[0][1]).toBeCloseTo(startPoint[1], 5)
-    expect(updatedArrow.points[1][0]).toBeCloseTo(expected.x, 5)
-    expect(updatedArrow.points[1][1]).toBeCloseTo(expected.y, 5)
+    expect(updatedArrow.points[1][0]).toBeCloseTo(expectedX, 5)
+    expect(updatedArrow.points[1][1]).toBeCloseTo(expectedY, 5)
   })
 
   // ICT-4: Shift+ArrowRight uses step 10 and re-anchors accordingly
@@ -378,13 +378,13 @@ describe('DiagramShortcuts', () => {
     expect((updatedRect as { x: number }).x).toBe(110)
 
     const rectAtNewX = makeRect('rect-1', 110, 50)
-    const expected = boundEndpoint(rectAtNewX, { x: startPoint[0], y: startPoint[1] })
+    const [expectedX, expectedY] = facingSideAnchor(rectAtNewX, [startPoint[0], startPoint[1]])
 
     const updatedArrow = store.elements.find((e) => e.id === 'arrow-1') as DiagramElement & {
       points: [[number, number], [number, number]]
     }
-    expect(updatedArrow.points[1][0]).toBeCloseTo(expected.x, 5)
-    expect(updatedArrow.points[1][1]).toBeCloseTo(expected.y, 5)
+    expect(updatedArrow.points[1][0]).toBeCloseTo(expectedX, 5)
+    expect(updatedArrow.points[1][1]).toBeCloseTo(expectedY, 5)
   })
 
   // ICT-4: nudge + single undo reverts both shape position and connector endpoint

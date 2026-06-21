@@ -143,11 +143,11 @@ describe('DiagramConnectors — arrow binding on draw (captured-pointer path)', 
     expect(arrow).toBeDefined()
     expect(arrow.startBinding).toEqual({ elementId: 'R' })
     expect(arrow.endBinding).toEqual({ elementId: 'E' })
-    // spec-20: Points are facing-side midpoints (GAP=4 out), not ray-to-edge.
-    // start = facingSideAnchor(RECT_R, toward E center (240,120)) → right side → (104, 30)
-    // end = facingSideAnchor(ELLIPSE_E, toward R center (50,30)) → left side → (196, 120)
-    expect(arrow.points[0]).toEqual([104, 30])
-    expect(arrow.points[1]).toEqual([196, 120])
+    // spec-20: Points are facing-side midpoints (GAP=0), not ray-to-edge.
+    // start = facingSideAnchor(RECT_R, toward E center (240,120)) → right side → (100, 30)
+    // end = facingSideAnchor(ELLIPSE_E, toward R center (50,30)) → left side → (200, 120)
+    expect(arrow.points[0]).toEqual([100, 30])
+    expect(arrow.points[1]).toEqual([200, 120])
   })
 
   // Regression (bug: an arrow end released near an ellipse's bbox corner did not
@@ -193,8 +193,8 @@ describe('DiagramConnectors — arrow binding on draw (captured-pointer path)', 
     expect(arrow.startBinding).toEqual({ elementId: 'R' })
     expect(arrow.endBinding).toBeNull()
     // spec-20: Start is facing-side midpoint of R toward rawEnd=(400,400).
-    // |dy|>|dx| from R center (50,30) → bottom side → (50, 60+GAP) = (50, 64)
-    expect(arrow.points[0]).toEqual([50, 64])
+    // |dy|>|dx| from R center (50,30) → bottom side → (50, 60+GAP) = (50, 60)
+    expect(arrow.points[0]).toEqual([50, 60])
     // End is NOT the center of any shape; it is the raw getScenePt result.
     // With zoom=1 and scrollX/Y=0 the scene point equals the client point.
     expect(arrow.points[1]).toEqual([400, 400])
@@ -221,8 +221,8 @@ describe('DiagramConnectors — arrow binding on draw (captured-pointer path)', 
     expect(arrow.endBinding).toEqual({ elementId: 'R' })
     // spec-20: degenerate self-bind — facingSideAnchor toward own center (adx==ady==0)
     // resolves to the right side for both ends. No crash; exact side is arbitrary here.
-    expect(arrow.points[0]).toEqual([104, 30])
-    expect(arrow.points[1]).toEqual([104, 30])
+    expect(arrow.points[0]).toEqual([100, 30])
+    expect(arrow.points[1]).toEqual([100, 30])
   })
 
   // BDD: free arrow over empty canvas → both bindings null, normal arrow

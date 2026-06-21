@@ -113,52 +113,52 @@ const ellipseEl: DiagramElement = {
 }
 
 describe('facingSideAnchor — rectangle (0,0,100,60), center=(50,30)', () => {
-  it('toward right [200,30]: anchor at right edge midpoint + GAP = [104, 30]', () => {
+  it('toward right [200,30]: anchor at right edge midpoint + GAP = [100, 30]', () => {
     const anchor = facingSideAnchor(rectEl, [200, 30])
-    expect(anchor).toEqual([104, 30])
+    expect(anchor).toEqual([100, 30])
   })
 
-  it('toward left [-100,30]: anchor at left edge midpoint - GAP = [-4, 30]', () => {
+  it('toward left [-100,30]: anchor at left edge midpoint - GAP = [0, 30]', () => {
     const anchor = facingSideAnchor(rectEl, [-100, 30])
-    expect(anchor).toEqual([-4, 30])
+    expect(anchor).toEqual([0, 30])
   })
 
-  it('toward top [50,-100]: anchor at top edge midpoint - GAP = [50, -4]', () => {
+  it('toward top [50,-100]: anchor at top edge midpoint - GAP = [50, 0]', () => {
     const anchor = facingSideAnchor(rectEl, [50, -100])
-    expect(anchor).toEqual([50, -4])
+    expect(anchor).toEqual([50, 0])
   })
 
-  it('toward bottom [50,200]: anchor at bottom edge midpoint + GAP = [50, 64]', () => {
+  it('toward bottom [50,200]: anchor at bottom edge midpoint + GAP = [50, 60]', () => {
     const anchor = facingSideAnchor(rectEl, [50, 200])
-    expect(anchor).toEqual([50, 64])
+    expect(anchor).toEqual([50, 60])
   })
 
   it('ties on x-axis (|adx| === |ady|, toward right) resolve to x-dominant side', () => {
     // cx=50, cy=30; toward=[130,110] → adx=80, ady=80 → tie → x dominates → right side
     const anchor = facingSideAnchor(rectEl, [130, 110])
-    expect(anchor).toEqual([104, 30])
+    expect(anchor).toEqual([100, 30])
   })
 })
 
 describe('facingSideAnchor — ellipse same bbox (0,0,100,60)', () => {
-  it('toward right [200,30]: same cardinal point as rectangle → [104, 30]', () => {
+  it('toward right [200,30]: same cardinal point as rectangle → [100, 30]', () => {
     const anchor = facingSideAnchor(ellipseEl, [200, 30])
-    expect(anchor).toEqual([104, 30])
+    expect(anchor).toEqual([100, 30])
   })
 
-  it('toward top [50,-100]: top cardinal point → [50, -4]', () => {
+  it('toward top [50,-100]: top cardinal point → [50, 0]', () => {
     const anchor = facingSideAnchor(ellipseEl, [50, -100])
-    expect(anchor).toEqual([50, -4])
+    expect(anchor).toEqual([50, 0])
   })
 
-  it('toward bottom [50,200]: bottom cardinal point → [50, 64]', () => {
+  it('toward bottom [50,200]: bottom cardinal point → [50, 60]', () => {
     const anchor = facingSideAnchor(ellipseEl, [50, 200])
-    expect(anchor).toEqual([50, 64])
+    expect(anchor).toEqual([50, 60])
   })
 
-  it('toward left [-100,30]: left cardinal point → [-4, 30]', () => {
+  it('toward left [-100,30]: left cardinal point → [0, 30]', () => {
     const anchor = facingSideAnchor(ellipseEl, [-100, 30])
-    expect(anchor).toEqual([-4, 30])
+    expect(anchor).toEqual([0, 30])
   })
 })
 
@@ -166,8 +166,8 @@ describe('facingSideAnchor — ellipse same bbox (0,0,100,60)', () => {
 
 describe('orthogonalRoute — side-aware', () => {
   it('right-side start + left-side end, vertically offset: exits horizontally, ≤2 bends (screenshot case)', () => {
-    // A-right [234,80], B-left [296,305] → clean Z: 234,80→265,80→265,305→296,305
-    const pts = orthogonalRoute([234, 80], [296, 305], 'right', 'left') as [number, number][]
+    // A-right [230,80], B-left [300,305] → clean Z: 230,80→265,80→265,305→300,305
+    const pts = orthogonalRoute([230, 80], [300, 305], 'right', 'left') as [number, number][]
     expect(allSegmentsAxisAligned(pts)).toBe(true)
     // First segment must be horizontal (exits right side)
     expect(pts[0][1]).toBe(pts[1][1])
@@ -175,7 +175,7 @@ describe('orthogonalRoute — side-aware', () => {
     expect(pts[pts.length - 2][1]).toBe(pts[pts.length - 1][1])
     // ≤2 interior bends → ≤4 points
     expect(pts.length).toBeLessThanOrEqual(4)
-    // Midpoint x is mean of 234 and 296 = 265
+    // Midpoint x is mean of 230 and 300 = 265
     expect(pts[1][0]).toBe(265)
   })
 
@@ -233,8 +233,8 @@ describe('orthogonalRoute — side-aware', () => {
 
 describe('autoWaypoints', () => {
   it('excludes endpoints: length equals route length minus 2', () => {
-    const start: [number, number] = [234, 80]
-    const end: [number, number] = [296, 305]
+    const start: [number, number] = [230, 80]
+    const end: [number, number] = [300, 305]
     const route = orthogonalRoute(start, end, 'right', 'left')
     const waypoints = autoWaypoints(start, 'right', end, 'left')
     expect(waypoints.length).toBe(route.length - 2)
@@ -246,7 +246,7 @@ describe('autoWaypoints', () => {
   })
 
   it('Z-route: returns 2 interior waypoints', () => {
-    const waypoints = autoWaypoints([234, 80], 'right', [296, 305], 'left')
+    const waypoints = autoWaypoints([230, 80], 'right', [300, 305], 'left')
     expect(waypoints.length).toBe(2)
     expect(waypoints[0]).toEqual([265, 80])
     expect(waypoints[1]).toEqual([265, 305])

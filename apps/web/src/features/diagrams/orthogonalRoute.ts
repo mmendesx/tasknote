@@ -12,8 +12,9 @@ export type Point = [number, number]
 /** Cardinal side of a shape bbox. */
 export type Side = 'left' | 'right' | 'top' | 'bottom'
 
-// Mirrors connectorGeometry's module-local DEFAULT_GAP.
-const GAP = 4
+// Perimeter gap between a bound connector's anchor and the shape edge.
+// 0 = the connector touches the shape (no visible space). Bump up to inset.
+const GAP = 0
 
 const EPSILON = 0.001
 
@@ -208,7 +209,7 @@ export function facingSide(shape: DiagramElement, toward: Point): Side {
 
 /**
  * Returns the midpoint of the shape side that faces `toward`, offset outward
- * by GAP (4px, mirroring connectorGeometry's DEFAULT_GAP).
+ * by GAP (0 by default → the anchor sits on the shape edge).
  *
  * Works identically for rectangles and ellipses: the bbox side midpoint
  * coincides with the ellipse's cardinal extreme (top/bottom/left/right), so
