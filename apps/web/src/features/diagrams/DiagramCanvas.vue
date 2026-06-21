@@ -539,6 +539,10 @@ function openShapeLabelEdit(el: DiagramElement): void {
   background-color: var(--color-bg, #ffffff);
   border: 1px solid var(--color-border, #e5e7eb);
   touch-action: none;
+  /* Drawing surface — never let a double-click/drag select the SVG text
+     (shape labels, text elements). The label editor handles its own input. */
+  user-select: none;
+  -webkit-user-select: none;
   /* Drives `currentColor` for committed-element and preview strokes so they
      stay visible (and theme-correct) in both light and dark mode. */
   color: var(--color-text-primary, #1f2937);
@@ -615,5 +619,8 @@ function openShapeLabelEdit(el: DiagramElement): void {
   padding: 2px 4px;
   outline: none;
   box-sizing: border-box;
+  /* Re-enable selection inside the editor — the canvas sets user-select:none. */
+  user-select: text;
+  -webkit-user-select: text;
 }
 </style>
