@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { DiagramElement } from '@tasknote/shared'
-import { orthogonalRoute } from './orthogonalRoute'
 
 defineProps<{ element: DiagramElement }>()
 
@@ -17,14 +16,12 @@ function pointsToAttr(points: [number, number][]): string {
 }
 
 /**
- * SVG points attr for a connector. Bound connectors route orthogonally;
- * a fully unbound (freehand) line/arrow stays a direct 2-point segment.
- * Reading the element's own binding fields is not a shape lookup.
+ * SVG points attr for a connector. Renders from the stored route:
+ * [start, ...waypoints, end]. No routing is performed at render time.
  */
 function routeToAttr(el: LineEl | ArrowEl): string {
-  const isBound = el.startBinding != null || el.endBinding != null
-  const route = isBound ? orthogonalRoute(el.points[0], el.points[1]) : el.points
-  return pointsToAttr(route as [number, number][])
+  const route: [number, number][] = [el.points[0], ...(el.waypoints ?? []), el.points[1]]
+  return pointsToAttr(route)
 }
 </script>
 

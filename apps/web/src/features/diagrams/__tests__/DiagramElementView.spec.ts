@@ -107,8 +107,8 @@ function expectAxisAligned(pts: [number, number][]) {
 }
 
 describe('DiagramElementView — orthogonal polyline connectors (ICT-3 + ICT-4)', () => {
-  describe('bound arrow with offset endpoints (diagonal storage)', () => {
-    // Bound → routes orthogonally. (An unbound diagonal stays direct; see below.)
+  describe('arrow with stored waypoints renders through them', () => {
+    // Render is dumb: it draws [start, ...waypoints, end]. No routing at render time.
     const arrowEl: DiagramElement = {
       id: 'arrow-offset',
       type: 'arrow',
@@ -116,6 +116,7 @@ describe('DiagramElementView — orthogonal polyline connectors (ICT-3 + ICT-4)'
       stroke: '#ff0000',
       strokeWidth: 2,
       startBinding: { elementId: 'A' },
+      waypoints: [[100, 0], [100, 40]] as [number, number][],
     }
 
     it('renders a <polyline> not a <line>', () => {
@@ -147,6 +148,42 @@ describe('DiagramElementView — orthogonal polyline connectors (ICT-3 + ICT-4)'
       expect(visible).toBeDefined()
       expect(visible!.attributes('marker-end')).toBe('url(#diagram-arrowhead)')
       expect(visible!.attributes('fill')).toBe('none')
+    })
+  })
+
+  describe('route is stored, not derived at render', () => {
+    it('arrow with waypoints renders polyline through all stored points in order', () => {
+      const arrowEl: DiagramElement = {
+        id: 'arrow-waypoints',
+        type: 'arrow',
+        points: [[234, 80], [296, 305]] as [[number, number], [number, number]],
+        stroke: '#000000',
+        strokeWidth: 2,
+        waypoints: [[265, 80], [265, 305]] as [number, number][],
+      }
+      const wrapper = mountInSvg(arrowEl)
+      const visible = wrapper.findAll('polyline').find(
+        (p) => p.attributes('stroke') !== 'transparent',
+      )
+      expect(visible).toBeDefined()
+      expect(visible!.attributes('points')).toBe('234,80 265,80 265,305 296,305')
+    })
+
+    it('fully unbound line with no waypoints renders as a direct 2-point segment', () => {
+      const lineEl: DiagramElement = {
+        id: 'line-unbound-nodirect',
+        type: 'line',
+        points: [[50, 50], [150, 200]] as [[number, number], [number, number]],
+        stroke: '#000000',
+        strokeWidth: 2,
+      }
+      const wrapper = mountInSvg(lineEl)
+      const visible = wrapper.findAll('polyline').find(
+        (p) => !p.classes().includes('diagram-hit-target'),
+      )
+      expect(visible).toBeDefined()
+      const pts = parsePoints(visible!.attributes('points') ?? '')
+      expect(pts).toEqual([[50, 50], [150, 200]])
     })
   })
 
