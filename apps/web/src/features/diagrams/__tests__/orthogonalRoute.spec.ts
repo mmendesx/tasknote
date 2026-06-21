@@ -1,0 +1,163 @@
+import { describe, it, expect } from 'vitest'
+import { orthogonalRoute, facingSideAnchor } from '../orthogonalRoute'
+import type { DiagramElement } from '@tasknote/shared'
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function isAxisAligned(a: [number, number], b: [number, number]): boolean {
+  return a[0] === b[0] || a[1] === b[1]
+}
+
+function allSegmentsAxisAligned(pts: [number, number][]): boolean {
+  for (let i = 1; i < pts.length; i++) {
+    if (!isAxisAligned(pts[i - 1], pts[i])) return false
+  }
+  return true
+}
+
+// ── orthogonalRoute ───────────────────────────────────────────────────────────
+
+describe('orthogonalRoute', () => {
+  it('horizontally separated (|dx| > |dy|): all segments axis-aligned, first segment horizontal', () => {
+    const pts = orthogonalRoute([100, 50], [300, 90]) as [number, number][]
+    // All consecutive pairs share x or y
+    expect(allSegmentsAxisAligned(pts)).toBe(true)
+    // First segment must be horizontal (same y)
+    expect(pts[0][1]).toBe(pts[1][1])
+    // At most 2 interior bends → ≤ 4 points
+    expect(pts.length).toBeLessThanOrEqual(4)
+  })
+
+  it('vertically separated (|dy| > |dx|): all segments axis-aligned, first segment vertical', () => {
+    // start=[10,0], end=[20,200] → dy=200 > dx=10
+    const pts = orthogonalRoute([10, 0], [20, 200]) as [number, number][]
+    expect(allSegmentsAxisAligned(pts)).toBe(true)
+    // First segment must be vertical (same x)
+    expect(pts[0][0]).toBe(pts[1][0])
+    expect(pts.length).toBeLessThanOrEqual(4)
+  })
+
+  it('aligned on x-axis (dy=0): returns exactly [start, end] — 0 bends', () => {
+    const pts = orthogonalRoute([0, 0], [200, 0])
+    expect(pts).toEqual([[0, 0], [200, 0]])
+  })
+
+  it('aligned on y-axis (dx=0): returns exactly [start, end] — 0 bends', () => {
+    const pts = orthogonalRoute([50, 10], [50, 90])
+    expect(pts).toEqual([[50, 10], [50, 90]])
+  })
+
+  it('offset on both axes: ≤ 4 points and each consecutive pair differs in exactly one axis', () => {
+    const pts = orthogonalRoute([0, 0], [100, 60]) as [number, number][]
+    expect(pts.length).toBeLessThanOrEqual(4)
+    for (let i = 1; i < pts.length; i++) {
+      const sameX = pts[i][0] === pts[i - 1][0]
+      const sameY = pts[i][1] === pts[i - 1][1]
+      // Each segment runs along exactly one axis (sameX XOR sameY)
+      expect(sameX || sameY).toBe(true)
+    }
+  })
+
+  it('equal dx and dy uses horizontal-first rule (|dx| >= |dy|)', () => {
+    // dx=100, dy=100 → horizontal-first → first segment shares y
+    const pts = orthogonalRoute([0, 0], [100, 100]) as [number, number][]
+    expect(pts[0][1]).toBe(pts[1][1]) // first segment horizontal
+  })
+
+  it('coincident points: no crash, returns 1-point array', () => {
+    const pts = orthogonalRoute([50, 50], [50, 50])
+    // Dedup collapses two identical points to one
+    expect(pts.length).toBe(1)
+    expect(pts[0]).toEqual([50, 50])
+  })
+
+  it('horizontal-first route: midpoint x is the arithmetic mean of start.x and end.x', () => {
+    // start=[100,50], end=[300,90], midX = 200
+    const pts = orthogonalRoute([100, 50], [300, 90]) as [number, number][]
+    expect(pts.length).toBe(4)
+    expect(pts[1][0]).toBe(200) // midX
+    expect(pts[2][0]).toBe(200) // same midX
+  })
+
+  it('vertical-first route: midpoint y is the arithmetic mean of start.y and end.y', () => {
+    // start=[10,0], end=[20,200], midY = 100
+    const pts = orthogonalRoute([10, 0], [20, 200]) as [number, number][]
+    expect(pts.length).toBe(4)
+    expect(pts[1][1]).toBe(100) // midY
+    expect(pts[2][1]).toBe(100)
+  })
+})
+
+// ── facingSideAnchor ──────────────────────────────────────────────────────────
+
+const rectEl: DiagramElement = {
+  id: 'r1',
+  type: 'rectangle',
+  x: 0,
+  y: 0,
+  width: 100,
+  height: 60,
+  stroke: '#000',
+  strokeWidth: 1,
+}
+
+const ellipseEl: DiagramElement = {
+  id: 'e1',
+  type: 'ellipse',
+  x: 0,
+  y: 0,
+  width: 100,
+  height: 60,
+  stroke: '#000',
+  strokeWidth: 1,
+}
+
+describe('facingSideAnchor — rectangle (0,0,100,60), center=(50,30)', () => {
+  it('toward right [200,30]: anchor at right edge midpoint + GAP = [104, 30]', () => {
+    const anchor = facingSideAnchor(rectEl, [200, 30])
+    expect(anchor).toEqual([104, 30])
+  })
+
+  it('toward left [-100,30]: anchor at left edge midpoint - GAP = [-4, 30]', () => {
+    const anchor = facingSideAnchor(rectEl, [-100, 30])
+    expect(anchor).toEqual([-4, 30])
+  })
+
+  it('toward top [50,-100]: anchor at top edge midpoint - GAP = [50, -4]', () => {
+    const anchor = facingSideAnchor(rectEl, [50, -100])
+    expect(anchor).toEqual([50, -4])
+  })
+
+  it('toward bottom [50,200]: anchor at bottom edge midpoint + GAP = [50, 64]', () => {
+    const anchor = facingSideAnchor(rectEl, [50, 200])
+    expect(anchor).toEqual([50, 64])
+  })
+
+  it('ties on x-axis (|adx| === |ady|, toward right) resolve to x-dominant side', () => {
+    // cx=50, cy=30; toward=[130,110] → adx=80, ady=80 → tie → x dominates → right side
+    const anchor = facingSideAnchor(rectEl, [130, 110])
+    expect(anchor).toEqual([104, 30])
+  })
+})
+
+describe('facingSideAnchor — ellipse same bbox (0,0,100,60)', () => {
+  it('toward right [200,30]: same cardinal point as rectangle → [104, 30]', () => {
+    const anchor = facingSideAnchor(ellipseEl, [200, 30])
+    expect(anchor).toEqual([104, 30])
+  })
+
+  it('toward top [50,-100]: top cardinal point → [50, -4]', () => {
+    const anchor = facingSideAnchor(ellipseEl, [50, -100])
+    expect(anchor).toEqual([50, -4])
+  })
+
+  it('toward bottom [50,200]: bottom cardinal point → [50, 64]', () => {
+    const anchor = facingSideAnchor(ellipseEl, [50, 200])
+    expect(anchor).toEqual([50, 64])
+  })
+
+  it('toward left [-100,30]: left cardinal point → [-4, 30]', () => {
+    const anchor = facingSideAnchor(ellipseEl, [-100, 30])
+    expect(anchor).toEqual([-4, 30])
+  })
+})
