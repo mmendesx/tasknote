@@ -170,6 +170,7 @@ export function buildLinearElement(
   startBinding: DiagramBinding | null = null,
   endBinding: DiagramBinding | null = null,
   style: StyleOverrides = {},
+  waypoints: [number, number][] = [],
 ) {
   const isBound = startBinding !== null || endBinding !== null
   const dx = bx - ax, dy = by - ay
@@ -182,6 +183,8 @@ export function buildLinearElement(
     strokeWidth: style.strokeWidth ?? STROKE_WIDTH,
     startBinding,
     endBinding,
+    waypoints,
+    routeMode: 'auto' as const,
   }
 }
 

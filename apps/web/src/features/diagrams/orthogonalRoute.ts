@@ -142,6 +142,44 @@ export function autoWaypoints(
   return route.slice(1, -1)
 }
 
+// ── fixManualLeg ──────────────────────────────────────────────────────────────
+
+/**
+ * Regenerates the axis-aligned leg between a moved endpoint `p` (new anchor,
+ * exiting perpendicular to `side`) and the array of preserved interior
+ * waypoints `w` (start→end order). Only the leg adjacent to `p` is replaced;
+ * interior waypoints are kept verbatim.
+ *
+ * `whichEnd` indicates which side of the route was moved:
+ *   'start' → rebuild the leg from p to w[0]
+ *   'end'   → rebuild the leg from w[last] to p
+ *
+ * If `w` is empty (manual but no interior waypoints) the caller should fall
+ * back to auto — this function returns `undefined` in that case.
+ *
+ * ponytail: single-corner L; does not handle U-turns (anchor facing away).
+ */
+export function fixManualLeg(
+  p: Point,
+  side: Side,
+  w: Point[],
+  whichEnd: 'start' | 'end',
+): Point[] | undefined {
+  if (w.length === 0) return undefined
+
+  const isH = isHorizontalSide(side)
+  if (whichEnd === 'start') {
+    const wAdj = w[0]!
+    // Horizontal exit: move right/left first → corner at (wAdj[0], p[1])
+    const corner: Point = isH ? [wAdj[0], p[1]] : [p[0], wAdj[1]]
+    return dedup([corner, ...w])
+  }
+  // 'end': exit from the last waypoint into p
+  const wAdj = w[w.length - 1]!
+  const corner: Point = isH ? [wAdj[0], p[1]] : [p[0], wAdj[1]]
+  return dedup([...w, corner])
+}
+
 // ── facingSide ────────────────────────────────────────────────────────────────
 
 /**

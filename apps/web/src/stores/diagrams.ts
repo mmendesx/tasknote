@@ -3,7 +3,8 @@ import { defineStore } from 'pinia'
 import * as api from '@/api'
 import type { Diagram, DiagramElement, DiagramViewport } from '@tasknote/shared'
 import { detachBindingsTo, elementCenter, isBindableShape } from '../features/diagrams/connectors'
-import { facingSideAnchor } from '../features/diagrams/orthogonalRoute'
+import { facingSideAnchor, facingSide, autoWaypoints, fixManualLeg } from '../features/diagrams/orthogonalRoute'
+import type { Side } from '../features/diagrams/orthogonalRoute'
 import { useHistory } from '../features/diagrams/useHistory'
 
 const DEBOUNCE_MS = 600
@@ -361,6 +362,8 @@ export const useDiagramsStore = defineStore('diagrams', () => {
 
       let start: [number, number]
       let end: [number, number]
+      let startSide: Side | undefined
+      let endSide: Side | undefined
 
       if (matchesStart && matchesEnd && startShape && endShape) {
         if (startShapeId === endShapeId) {
@@ -368,13 +371,18 @@ export const useDiagramsStore = defineStore('diagrams', () => {
           const center = elementCenter(startShape)
           start = [center.x, center.y]
           end = [center.x, center.y]
+          // startSide/endSide left undefined: no waypoints for self-loop.
         } else {
           // Both ends bound to different moved shapes — recompute both along the
           // new center-to-center ray.
           const startCenter = elementCenter(startShape)
           const endCenter = elementCenter(endShape)
-          start = facingSideAnchor(startShape, [endCenter.x, endCenter.y])
-          end = facingSideAnchor(endShape, [startCenter.x, startCenter.y])
+          const startToward: [number, number] = [endCenter.x, endCenter.y]
+          const endToward: [number, number] = [startCenter.x, startCenter.y]
+          start = facingSideAnchor(startShape, startToward)
+          end = facingSideAnchor(endShape, endToward)
+          startSide = facingSide(startShape, startToward)
+          endSide = facingSide(endShape, endToward)
         }
       } else if (matchesStart && startShape) {
         // Start is bound to a moved shape; end is either free or bound to an
@@ -382,14 +390,19 @@ export const useDiagramsStore = defineStore('diagrams', () => {
         const otherEndId = el.endBinding?.elementId
         const otherEl = otherEndId ? byId.get(otherEndId) : undefined
         const fromObj = otherEl ? elementCenter(otherEl) : { x: el.points[1][0], y: el.points[1][1] }
-        start = facingSideAnchor(startShape, [fromObj.x, fromObj.y])
+        const startToward: [number, number] = [fromObj.x, fromObj.y]
+        start = facingSideAnchor(startShape, startToward)
+        startSide = facingSide(startShape, startToward)
         if (otherEl) {
           // Both ends bound to different shapes (other end unmoved) — recompute
           // end against startShape's new center (FR-B5/FR-B3).
           const sc = elementCenter(startShape)
-          end = facingSideAnchor(otherEl, [sc.x, sc.y])
+          const endToward: [number, number] = [sc.x, sc.y]
+          end = facingSideAnchor(otherEl, endToward)
+          endSide = facingSide(otherEl, endToward)
         } else {
           end = el.points[1]
+          // endSide left undefined: free end, no side known.
         }
       } else if (matchesEnd && endShape) {
         // End is bound to a moved shape; start is either free or bound to an
@@ -397,20 +410,62 @@ export const useDiagramsStore = defineStore('diagrams', () => {
         const otherStartId = el.startBinding?.elementId
         const otherEl = otherStartId ? byId.get(otherStartId) : undefined
         const fromObj = otherEl ? elementCenter(otherEl) : { x: el.points[0][0], y: el.points[0][1] }
-        end = facingSideAnchor(endShape, [fromObj.x, fromObj.y])
+        const endToward: [number, number] = [fromObj.x, fromObj.y]
+        end = facingSideAnchor(endShape, endToward)
+        endSide = facingSide(endShape, endToward)
         if (otherEl) {
           // Both ends bound to different shapes (other end unmoved) — recompute
           // start against endShape's new center (FR-B5/FR-B3).
           const ec = elementCenter(endShape)
-          start = facingSideAnchor(otherEl, [ec.x, ec.y])
+          const startToward: [number, number] = [ec.x, ec.y]
+          start = facingSideAnchor(otherEl, startToward)
+          startSide = facingSide(otherEl, startToward)
         } else {
           start = el.points[0]
+          // startSide left undefined: free end, no side known.
         }
       } else {
         continue
       }
 
-      arr[i] = { ...el, points: [start, end] } as DiagramElement
+      // Compute waypoints for the updated route.
+      const isManual = (el as any).routeMode === 'manual'
+      let waypoints: [number, number][]
+      if (isManual) {
+        const existingWaypoints: [number, number][] = (el as any).waypoints ?? []
+        if (existingWaypoints.length === 0) {
+          // No interior points to preserve — fall back to auto.
+          waypoints = startSide && endSide ? autoWaypoints(start, startSide, end, endSide) : []
+        } else {
+          // Fix start and/or end legs while keeping interior waypoints.
+          let w: [number, number][] = existingWaypoints
+          const startMoved = matchesStart && startShape !== undefined
+          const endMoved = matchesEnd && endShape !== undefined
+          if (startMoved && startSide) {
+            const fixed = fixManualLeg(start, startSide, w, 'start')
+            w = fixed ?? (startSide && endSide ? autoWaypoints(start, startSide, end, endSide) : [])
+            if (fixed === undefined) {
+              arr[i] = { ...el, points: [start, end], waypoints: w, routeMode: 'manual' } as unknown as DiagramElement
+              continue
+            }
+          }
+          if (endMoved && endSide) {
+            const fixed = fixManualLeg(end, endSide, w, 'end')
+            w = fixed ?? (startSide && endSide ? autoWaypoints(start, startSide, end, endSide) : [])
+            if (fixed === undefined) {
+              arr[i] = { ...el, points: [start, end], waypoints: w, routeMode: 'manual' } as unknown as DiagramElement
+              continue
+            }
+          }
+          waypoints = w
+        }
+        arr[i] = { ...el, points: [start, end], waypoints, routeMode: 'manual' } as unknown as DiagramElement
+        continue
+      }
+
+      // AUTO mode: recompute waypoints from new anchors and sides.
+      waypoints = startSide && endSide ? autoWaypoints(start, startSide, end, endSide) : []
+      arr[i] = { ...el, points: [start, end], waypoints, routeMode: (el as any).routeMode ?? 'auto' } as unknown as DiagramElement
     }
   }
 

@@ -14,6 +14,8 @@ vi.mock('@/api', () => ({
 import { useDiagramsStore } from '@/stores/diagrams'
 import * as api from '@/api'
 import type { Diagram, DiagramElement, DiagramViewport } from '@tasknote/shared'
+import { autoWaypoints, facingSide } from '@/features/diagrams/orthogonalRoute'
+import { elementCenter } from '@/features/diagrams/connectors'
 
 // makeRectangle width=100, height=50 → center = (x+50, y+25)
 // For center (100,100): x=50, y=75
@@ -1856,5 +1858,99 @@ describe('useDiagramsStore — updateElements batch (ICT-11 FR-B8)', () => {
     vi.advanceTimersByTime(700)
     await Promise.resolve()
     expect(api.diagrams.updateDiagram).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ── ICT-3: waypoints written on every connector write path ──────────────────
+
+const EPSILON = 0.001
+
+describe('reanchorBoundConnectorsInPlace — waypoints (ICT-3)', () => {
+  let store: ReturnType<typeof useDiagramsStore>
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    store = useDiagramsStore()
+    vi.resetAllMocks()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('both-bound auto arrow: moving a shape stores side-aware waypoints and routeMode auto', () => {
+    // R at (50,75): center (100,100). S at (300,75): center (350,100).
+    // After moving R down to y=175, centers differ in y: R=(100,200), S=(350,100).
+    // Both sides are right/left (|dx|>=|dy|) but y differs → 2-bend Z waypoints.
+    const R = makeRectangleAt('R', 50, 75)
+    const S = makeRectangleAt('S', 300, 75)
+    const arrow: DiagramElement = {
+      ...makeArrow('arrow-1', [[154, 100], [296, 100]], 'R', 'S'),
+    }
+    store.elements = [R, S, arrow]
+
+    // Move R down by 100px: new center (100,200), S center still (350,100).
+    store.updateElements([{ id: 'R', patch: { x: 50, y: 175 } }])
+
+    const updatedArrow = store.elements.find((e) => e.id === 'arrow-1')
+    expect(updatedArrow?.type).toBe('arrow')
+    if (updatedArrow?.type !== 'arrow') return
+
+    const newR = store.elements.find((e) => e.id === 'R')!
+    const newS = store.elements.find((e) => e.id === 'S')!
+
+    const rCenter = elementCenter(newR)
+    const sCenter = elementCenter(newS)
+    const expectedStartSide = facingSide(newR, [sCenter.x, sCenter.y])
+    const expectedEndSide = facingSide(newS, [rCenter.x, rCenter.y])
+    const start = updatedArrow.points[0]
+    const end = updatedArrow.points[1]
+    const expectedWaypoints = autoWaypoints(start, expectedStartSide, end, expectedEndSide)
+
+    // The route must have interior bends (non-degenerate case).
+    expect(expectedWaypoints.length).toBeGreaterThan(0)
+    expect((updatedArrow as any).waypoints).toEqual(expectedWaypoints)
+    expect((updatedArrow as any).routeMode).toBe('auto')
+  })
+
+  it('manual arrow: moving bound shape keeps interior waypoints unchanged and stays orthogonal', () => {
+    // R at (50,75): center (100,100). Arrow start bound to R, end free at (300,100).
+    // One interior waypoint at (200,100) — already orthogonal.
+    const R = makeRectangleAt('R', 50, 75)
+    const interiorWaypoint: [number, number] = [200, 100]
+    const arrow: DiagramElement = {
+      ...makeArrow('arrow-manual', [[154, 100], [300, 100]], 'R', undefined),
+      waypoints: [interiorWaypoint],
+      routeMode: 'manual',
+    } as unknown as DiagramElement
+
+    store.elements = [R, arrow]
+
+    // Move R down by 50px so start anchor changes y.
+    store.updateElements([{ id: 'R', patch: { x: 50, y: 125 } }])
+
+    const updated = store.elements.find((e) => e.id === 'arrow-manual')
+    expect(updated?.type).toBe('arrow')
+    if (updated?.type !== 'arrow') return
+
+    // routeMode must stay 'manual'.
+    expect((updated as any).routeMode).toBe('manual')
+
+    // The interior waypoint [200,100] must be preserved as-is.
+    const waypoints: [number, number][] = (updated as any).waypoints ?? []
+    expect(waypoints).toContainEqual(interiorWaypoint)
+
+    // Full route: [start, ...waypoints, end] — every consecutive pair must
+    // share x or y (axis-aligned).
+    const start = updated.points[0]
+    const end = updated.points[1]
+    const fullRoute: [number, number][] = [start, ...waypoints, end]
+    for (let i = 0; i < fullRoute.length - 1; i++) {
+      const [x1, y1] = fullRoute[i]!
+      const [x2, y2] = fullRoute[i + 1]!
+      const isAxisAligned = Math.abs(x1 - x2) < EPSILON || Math.abs(y1 - y2) < EPSILON
+      expect(isAxisAligned, `segment ${i} → ${i + 1} is not axis-aligned: [${x1},${y1}] → [${x2},${y2}]`).toBe(true)
+    }
   })
 })

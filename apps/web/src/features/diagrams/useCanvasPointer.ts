@@ -17,7 +17,7 @@ import type { useSelection } from './useSelection'
 import type { useMarquee } from './useMarquee'
 import type { useResize } from './useResize'
 import { findShapeAtScenePoint, elementCenter, findElementById } from './connectors'
-import { facingSideAnchor } from './orthogonalRoute'
+import { facingSideAnchor, facingSide, autoWaypoints } from './orthogonalRoute'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -31,6 +31,7 @@ type LinearEndpoints = {
   ax: number; ay: number; bx: number; by: number
   startBinding: DiagramBinding | null
   endBinding: DiagramBinding | null
+  waypoints: [number, number][]
 }
 
 // ── Composable ────────────────────────────────────────────────────────────────
@@ -223,7 +224,7 @@ export function useCanvasPointer(
     const rawEnd = getScenePt(event)
 
     if (state.tool !== 'arrow') {
-      return { ax: state.ax, ay: state.ay, bx: rawEnd.x, by: rawEnd.y, startBinding: null, endBinding: null }
+      return { ax: state.ax, ay: state.ay, bx: rawEnd.x, by: rawEnd.y, startBinding: null, endBinding: null, waypoints: [] }
     }
 
     const startId = state.startShapeId ?? null
@@ -248,28 +249,38 @@ export function useCanvasPointer(
     let bx = rawEnd.x
     let by = rawEnd.y
 
+    let waypoints: [number, number][] = []
+
     if (startEl && endEl) {
       // Both bound: anchor each end toward the other shape's center.
       const endCenter = elementCenter(endEl)
       const startCenter = elementCenter(startEl)
-      const [sax, say] = facingSideAnchor(startEl, [endCenter.x, endCenter.y])
-      const [ebx, eby] = facingSideAnchor(endEl, [startCenter.x, startCenter.y])
+      const startToward: [number, number] = [endCenter.x, endCenter.y]
+      const endToward: [number, number] = [startCenter.x, startCenter.y]
+      const [sax, say] = facingSideAnchor(startEl, startToward)
+      const [ebx, eby] = facingSideAnchor(endEl, endToward)
       ax = sax; ay = say
       bx = ebx; by = eby
+      const sSide = facingSide(startEl, startToward)
+      const eSide = facingSide(endEl, endToward)
+      waypoints = autoWaypoints([ax, ay], sSide, [bx, by], eSide)
     } else if (startEl) {
       // Only start is bound; `from` for the start anchor is the raw end point.
       const [sax, say] = facingSideAnchor(startEl, [rawEnd.x, rawEnd.y])
       ax = sax; ay = say
+      // One-bound: end side unknown → store empty waypoints.
     } else if (endEl) {
       // Only end is bound; `from` for the end anchor is the raw start point.
       const [ebx, eby] = facingSideAnchor(endEl, [state.ax, state.ay])
       bx = ebx; by = eby
+      // One-bound: start side unknown → store empty waypoints.
     }
 
     return {
       ax, ay, bx, by,
       startBinding: startId ? { elementId: startId } : null,
       endBinding: endId ? { elementId: endId } : null,
+      waypoints,
     }
   }
 
@@ -343,9 +354,9 @@ export function useCanvasPointer(
   function commitLinearOnUp(event: PointerEvent): void {
     const state = drawState.value
     if (state.kind !== 'linear') return
-    const { ax, ay, bx, by, startBinding, endBinding } = resolveLinearEndpoints(state, event)
+    const { ax, ay, bx, by, startBinding, endBinding, waypoints } = resolveLinearEndpoints(state, event)
     const style = { stroke: store.lastStroke, strokeWidth: store.lastStrokeWidth }
-    const el = buildLinearElement(state.tool, ax, ay, bx, by, startBinding, endBinding, style)
+    const el = buildLinearElement(state.tool, ax, ay, bx, by, startBinding, endBinding, style, waypoints)
     if (el) store.addElement(el as DiagramElement)
     cancelDraw()
   }
