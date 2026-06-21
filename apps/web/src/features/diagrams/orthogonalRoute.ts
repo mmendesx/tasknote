@@ -9,8 +9,13 @@ import { computeElementBbox } from './useSelection'
 
 export type Point = [number, number]
 
+/** Cardinal side of a shape bbox. */
+export type Side = 'left' | 'right' | 'top' | 'bottom'
+
 // Mirrors connectorGeometry's module-local DEFAULT_GAP.
 const GAP = 4
+
+const EPSILON = 0.001
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -30,33 +35,45 @@ function pickHorizontalSide(
   return { x: bboxLeft, isRight: false }
 }
 
+/** True when the given side exits horizontally (left or right). */
+function isHorizontalSide(side: Side): boolean {
+  return side === 'left' || side === 'right'
+}
+
 // ── orthogonalRoute ───────────────────────────────────────────────────────────
 
 /**
  * Compute an axis-aligned elbow route between two points.
  *
- * - If start and end share an axis (dx ≈ 0 or dy ≈ 0): returns [start, end] (0 bends).
- * - |dx| >= |dy|: horizontal-first ("Z" shape), 2 bends, 4 points.
- * - |dy| > |dx|: vertical-first ("S" shape), 2 bends, 4 points.
+ * WITHOUT sides (legacy spec-20 behavior):
+ * - |dx| >= |dy|: horizontal-first ("Z" shape), ≤2 bends.
+ * - |dy| > |dx|: vertical-first, ≤2 bends.
+ * - Axially aligned or coincident: [start, end] (0 bends).
  *
- * Consecutive duplicate points are collapsed, so the coincident case (start===end)
- * degenerates to a 1-point array.
+ * WITH sides (side-aware):
+ * - Both horizontal sides (left/right): Z route via midX. 0 bends if same y.
+ * - Both vertical sides (top/bottom): Z route via midY. 0 bends if same x.
+ * - Mixed (one horizontal, one vertical): L route, ≤1 interior bend.
  *
+ * Consecutive duplicate points are collapsed via dedup.
  * Pure, O(1), no DOM, no shape arguments.
  *
- * ponytail: H/V-first is chosen from anchor-to-anchor, while facingSideAnchor picks
- * the side from center-to-center. For large, close, cross-offset shapes the exit
- * direction can disagree (still all right angles). Render derives from 2 stored
- * points by design (no shape lookup); unify only if a scenario needs exact exit dir.
+ * ponytail: midpoint Z ignores facing-away / U-turn cases where anchors point
+ * away from each other; still produces all-right-angles but may look like a
+ * backward stub. Fix only if a concrete scenario demands it.
  */
-export function orthogonalRoute(start: Point, end: Point): Point[] {
+export function orthogonalRoute(start: Point, end: Point, startSide?: Side, endSide?: Side): Point[] {
   const [sx, sy] = start
   const [ex, ey] = end
 
+  // Side-aware path: both sides must be provided to enter this branch.
+  if (startSide !== undefined && endSide !== undefined) {
+    return routeWithSides(start, end, startSide, endSide)
+  }
+
+  // Legacy spec-20 behavior (no sides): dominant axis from anchor-to-anchor delta.
   const dx = ex - sx
   const dy = ey - sy
-
-  const EPSILON = 0.001
 
   // Axially aligned or coincident: straight segment (or degenerate point).
   if (Math.abs(dx) < EPSILON || Math.abs(dy) < EPSILON) {
@@ -72,6 +89,81 @@ export function orthogonalRoute(start: Point, end: Point): Point[] {
   // Vertical-first: start → (sx, midY) → (ex, midY) → end
   const midY = (sy + ey) / 2
   return dedup([[sx, sy], [sx, midY], [ex, midY], [ex, ey]])
+}
+
+/** Side-aware inner route — called only when both sides are defined. */
+function routeWithSides(start: Point, end: Point, startSide: Side, endSide: Side): Point[] {
+  const [sx, sy] = start
+  const [ex, ey] = end
+
+  const startH = isHorizontalSide(startSide)
+  const endH = isHorizontalSide(endSide)
+
+  if (startH && endH) {
+    // Both horizontal exits → Z route through midX.
+    // Aligned on y: straight horizontal segment, 0 bends.
+    if (Math.abs(sy - ey) < EPSILON) return dedup([start, end])
+    const midX = (sx + ex) / 2
+    return dedup([[sx, sy], [midX, sy], [midX, ey], [ex, ey]])
+  }
+
+  if (!startH && !endH) {
+    // Both vertical exits → Z route through midY.
+    // Aligned on x: straight vertical segment, 0 bends.
+    if (Math.abs(sx - ex) < EPSILON) return dedup([start, end])
+    const midY = (sy + ey) / 2
+    return dedup([[sx, sy], [sx, midY], [ex, midY], [ex, ey]])
+  }
+
+  if (startH && !endH) {
+    // Start exits horizontally, end enters vertically → L corner at (ex, sy).
+    return dedup([[sx, sy], [ex, sy], [ex, ey]])
+  }
+
+  // Start exits vertically, end enters horizontally → L corner at (sx, ey).
+  return dedup([[sx, sy], [sx, ey], [ex, ey]])
+}
+
+// ── autoWaypoints ─────────────────────────────────────────────────────────────
+
+/**
+ * Returns only the interior bend points (excludes start and end) for a
+ * side-aware orthogonal route. Stores in an element's `waypoints` field (ICT-3).
+ *
+ * Aligned case (0 bends) → returns [].
+ */
+export function autoWaypoints(
+  start: Point,
+  startSide: Side,
+  end: Point,
+  endSide: Side,
+): Point[] {
+  const route = orthogonalRoute(start, end, startSide, endSide)
+  return route.slice(1, -1)
+}
+
+// ── facingSide ────────────────────────────────────────────────────────────────
+
+/**
+ * Returns which cardinal side of `shape` faces `toward`.
+ *
+ * Dominance rule (mirrors facingSideAnchor):
+ *   |tx - cx| >= |ty - cy| → LEFT or RIGHT.
+ *   Otherwise              → TOP or BOTTOM.
+ */
+export function facingSide(shape: DiagramElement, toward: Point): Side {
+  const bbox = computeElementBbox(shape)
+  const cx = bbox.x + bbox.width / 2
+  const cy = bbox.y + bbox.height / 2
+
+  const [tx, ty] = toward
+  const adx = Math.abs(tx - cx)
+  const ady = Math.abs(ty - cy)
+
+  if (adx >= ady) {
+    return tx >= cx ? 'right' : 'left'
+  }
+  return ty >= cy ? 'bottom' : 'top'
 }
 
 // ── facingSideAnchor ──────────────────────────────────────────────────────────
