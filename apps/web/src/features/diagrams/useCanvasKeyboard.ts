@@ -1,7 +1,6 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import type { useDiagramsStore } from '@/stores/diagrams'
 import { buildMovePatch } from './useSelection'
-import { reanchorConnectorsForMovedShapes } from './connectors'
 import type { useDrawState } from './useDrawTools'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -105,13 +104,9 @@ export function useCanvasKeyboard(store: Store, drawTools: DrawTools) {
       }
     }
     if (nudgePatches.length > 0) {
-      const movedIds = new Set(store.selectedIds)
-      const movedElements = store.elements.map((el) => {
-        const p = nudgePatches.find((q) => q.id === el.id)
-        return p ? { ...el, ...p.patch } : el
-      })
-      const connectorPatches = reanchorConnectorsForMovedShapes(movedElements, movedIds)
-      store.updateElements([...nudgePatches, ...connectorPatches])
+      // The store re-anchors bound connectors inside updateElements
+      // (reanchorBoundConnectorsInPlace) whenever a bindable shape moves.
+      store.updateElements(nudgePatches)
     }
     return true
   }

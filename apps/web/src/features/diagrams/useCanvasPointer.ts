@@ -16,7 +16,7 @@ import { buildMovePatch } from './useSelection'
 import type { useSelection } from './useSelection'
 import type { useMarquee } from './useMarquee'
 import type { useResize } from './useResize'
-import { resolveShapeIdAtPoint, elementCenter, findElementById, boundEndpoint, reanchorConnectorsForMovedShapes } from './connectors'
+import { resolveShapeIdAtPoint, elementCenter, findElementById, boundEndpoint } from './connectors'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -289,15 +289,9 @@ export function useCanvasPointer(
       }
     }
     if (patches.length > 0) {
-      // Build a post-move view so connector re-anchor uses new shape positions.
-      const movedIds = new Set(mv.ids)
-      const movedElements = store.elements.map((el) => {
-        const p = patches.find((q) => q.id === el.id)
-        return p ? { ...el, ...p.patch } : el
-      })
-      const connectorPatches = reanchorConnectorsForMovedShapes(movedElements, movedIds)
-      // One batched update = one gesture = one history entry.
-      store.updateElements([...patches, ...connectorPatches])
+      // The store re-anchors bound connectors inside updateElements
+      // (reanchorBoundConnectorsInPlace) whenever a bindable shape moves.
+      store.updateElements(patches)
     }
     return true
   }

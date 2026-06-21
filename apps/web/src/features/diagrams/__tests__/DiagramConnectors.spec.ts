@@ -518,4 +518,58 @@ describe('ICT-3: bound connector re-anchors live during shape drag', () => {
     await svg.trigger('pointerup', { pointerId: 1 })
   })
 
+  // Regression (bug 1): moving a bound shape TWICE must keep the binding and
+  // re-anchor every time. A redundant points-only re-anchor in the move handler
+  // used to trip the store's connector-detach guard, nulling the binding after
+  // the first move so the connector stopped following on the second.
+  it('dragging a bound shape twice keeps the binding and re-anchors each time', async () => {
+    const rectR: DiagramElement = {
+      id: 'R', type: 'rectangle', x: 0, y: 0, width: 100, height: 60,
+      stroke: '#000', strokeWidth: 2,
+    }
+    const arrowA: DiagramElement = {
+      id: 'A', type: 'arrow',
+      points: [[200, 30], [104, 30]] as [[number, number], [number, number]],
+      stroke: '#000', strokeWidth: 2,
+      startBinding: null,
+      endBinding: { elementId: 'R' },
+    }
+
+    const { wrapper, pinia } = await mountCanvasWithElements([rectR, arrowA])
+    const svg = wrapper.find('svg.diagram-canvas')
+    const rectNode = wrapper.find('[data-element-id="R"]')
+    const otherEnd = { x: 200, y: 30 } // unbound start — never moves
+
+    // ── Move #1: drag R +50px ──
+    await rectNode.trigger('pointerdown', { clientX: 50, clientY: 30, pointerId: 1 })
+    await svg.trigger('pointermove', { clientX: 100, clientY: 30, pointerId: 1 })
+    await svg.trigger('pointerup', { pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    let elements = pinia.state.value['diagrams'].elements as DiagramElement[]
+    let arrowNew = elements.find((e) => e.id === 'A') as any
+    // Binding must survive the first move.
+    expect(arrowNew.endBinding).toEqual({ elementId: 'R' })
+    let expected = boundEndpoint({ ...rectR, x: 50, y: 0 }, otherEnd)
+    expect(arrowNew.points[1][0]).toBeCloseTo(expected.x, 5)
+
+    // ── Move #2: drag R another +50px (now at x=100) ──
+    const rectNode2 = wrapper.find('[data-element-id="R"]')
+    await rectNode2.trigger('pointerdown', { clientX: 100, clientY: 30, pointerId: 2 })
+    await svg.trigger('pointermove', { clientX: 150, clientY: 30, pointerId: 2 })
+    await svg.trigger('pointerup', { pointerId: 2 })
+    await wrapper.vm.$nextTick()
+
+    elements = pinia.state.value['diagrams'].elements as DiagramElement[]
+    const rNew = elements.find((e) => e.id === 'R') as any
+    arrowNew = elements.find((e) => e.id === 'A') as any
+
+    // Shape is now at x=100, binding still intact, endpoint re-anchored AGAIN.
+    expect(rNew.x).toBeCloseTo(100, 5)
+    expect(arrowNew.endBinding).toEqual({ elementId: 'R' })
+    expected = boundEndpoint({ ...rectR, x: 100, y: 0 }, otherEnd)
+    expect(arrowNew.points[1][0]).toBeCloseTo(expected.x, 5)
+    expect(arrowNew.points[1][1]).toBeCloseTo(expected.y, 5)
+  })
+
 })
