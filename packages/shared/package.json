@@ -17,12 +17,14 @@
     "build": "tsc --project tsconfig.json && tsc --project tsconfig.esm.json",
     "dev": "tsc --project tsconfig.json --watch",
     "lint": "eslint src --ext .ts",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "zod": "^3.23.0"
   },
   "devDependencies": {
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vitest": "^1.4.0"
   }
 }

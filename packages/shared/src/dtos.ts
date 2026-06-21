@@ -200,6 +200,7 @@ export const DiagramElementSchema = z.discriminatedUnion('type', [
     stroke: z.string(),
     fill: z.string().nullable().optional(),
     strokeWidth: z.number(),
+    label: z.string().optional(),
   }),
   z.object({
     id: z.string(),
@@ -211,6 +212,7 @@ export const DiagramElementSchema = z.discriminatedUnion('type', [
     stroke: z.string(),
     fill: z.string().nullable().optional(),
     strokeWidth: z.number(),
+    label: z.string().optional(),
   }),
   z.object({
     id: z.string(),
