@@ -57,6 +57,20 @@ function makeEllipseElement(overrides: Partial<DiagramElement> = {}): DiagramEle
   } as DiagramElement
 }
 
+function makeArrowElement(overrides: Partial<DiagramElement> = {}): DiagramElement {
+  return {
+    id: 'arrow-1',
+    type: 'arrow',
+    points: [[10, 20], [200, 100]] as [number, number][],
+    stroke: 'currentColor',
+    strokeWidth: 2,
+    startBinding: null,
+    endBinding: null,
+    ...({ waypoints: [[50, 20], [50, 100]], routeMode: 'manual' } as object),
+    ...overrides,
+  } as DiagramElement
+}
+
 async function mountCanvasWithElement(el: DiagramElement) {
   const { diagrams: apiDiagrams } = await import('@/api')
   vi.mocked(apiDiagrams.getDiagram).mockResolvedValueOnce({
@@ -328,6 +342,36 @@ describe('DiagramShapeLabelEdit', () => {
     const node = wrapper.find('[data-element-id="rect-1"]')
     expect(node.exists()).toBe(true)
     expect((node.element as HTMLElement).style.display).not.toBe('none')
+  })
+
+  // ICT-7: double-clicking a connector resets it to auto-route; no label editor opens.
+  it('double-click a manual arrow resets it to auto and does NOT open the text input', async () => {
+    const arrowEl = makeArrowElement({ id: 'arrow-1' })
+    const { wrapper, pinia } = await mountCanvasWithElement(arrowEl)
+
+    dblClickElement(wrapper, 'arrow-1')
+    await wrapper.vm.$nextTick()
+
+    // No text editor must open (connectors have no label)
+    const input = wrapper.find('input.diagram-text-input')
+    expect(input.exists()).toBe(false)
+
+    // The connector must now be in auto mode
+    const elements = pinia.state.value['diagrams'].elements
+    expect((elements[0] as any).routeMode).toBe('auto')
+  })
+
+  // Regression guard: shape label edit still works after connector dblclick path added.
+  it('regression (ICT-7): double-click a rectangle still opens its label editor', async () => {
+    const rectEl = makeRectElement({ id: 'rect-1', label: 'Persisted' })
+    const { wrapper } = await mountCanvasWithElement(rectEl)
+
+    dblClickElement(wrapper, 'rect-1')
+    await wrapper.vm.$nextTick()
+
+    const input = wrapper.find('input.diagram-text-input')
+    expect(input.exists()).toBe(true)
+    expect((input.element as HTMLInputElement).value).toBe('Persisted')
   })
 
   // Counterpart: a TEXT element IS hidden while edited (input replaces it).

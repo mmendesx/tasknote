@@ -2121,3 +2121,146 @@ describe('loadDiagram — legacy connector normalization (ICT-8)', () => {
     expect((loaded as any).routeMode).toBe('auto')
   })
 })
+
+describe('useDiagramsStore — resetConnectorRoute (ICT-7)', () => {
+  let store: ReturnType<typeof useDiagramsStore>
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    store = useDiagramsStore()
+    vi.resetAllMocks()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('both-bound manual arrow resets to auto with recomputed waypoints and preserves bindings', () => {
+    // R: center (100,100); x=50, y=75, w=100, h=50
+    // S: center (300,200); x=250, y=175, w=100, h=50
+    const R = makeRectangleAt('R', 50, 75)
+    const S = makeRectangleAt('S', 250, 175)
+
+    // Precompute the expected auto-route so we can assert equality.
+    const startCenter = elementCenter(R)
+    const endCenter = elementCenter(S)
+    const startToward: [number, number] = [endCenter.x, endCenter.y]
+    const endToward: [number, number] = [startCenter.x, startCenter.y]
+    const expectedStart = facingSideAnchor(R, startToward)
+    const expectedEnd = facingSideAnchor(S, endToward)
+    const expectedStartSide = facingSide(R, startToward)
+    const expectedEndSide = facingSide(S, endToward)
+    const expectedWaypoints = autoWaypoints(expectedStart, expectedStartSide, expectedEnd, expectedEndSide)
+
+    const manualArrow: DiagramElement = {
+      id: 'arrow-1',
+      type: 'arrow',
+      points: [[100, 100], [300, 200]],
+      stroke: '#000000',
+      strokeWidth: 1,
+      startBinding: { elementId: 'R' },
+      endBinding: { elementId: 'S' },
+      // Manual waypoints that will be wiped out
+      ...({ waypoints: [[150, 100], [150, 200]], routeMode: 'manual' } as object),
+    } as DiagramElement
+
+    store.elements = [R, S, manualArrow]
+
+    store.resetConnectorRoute('arrow-1')
+
+    const updated = store.elements.find((e) => e.id === 'arrow-1')
+    expect(updated).toBeDefined()
+    expect((updated as any).routeMode).toBe('auto')
+    expect((updated as any).waypoints).toEqual(expectedWaypoints)
+    // Bindings must be preserved — not nulled out by the detach guard
+    expect((updated as any).startBinding).toEqual({ elementId: 'R' })
+    expect((updated as any).endBinding).toEqual({ elementId: 'S' })
+  })
+
+  it('one-bound manual arrow resets routeMode to auto and clears waypoints', () => {
+    const R = makeRectangleAt('R', 50, 75)
+    const manualArrow: DiagramElement = {
+      id: 'arrow-1',
+      type: 'arrow',
+      points: [[100, 100], [300, 200]],
+      stroke: '#000000',
+      strokeWidth: 1,
+      startBinding: { elementId: 'R' },
+      endBinding: null,
+      ...({ waypoints: [[150, 100], [150, 200]], routeMode: 'manual' } as object),
+    } as DiagramElement
+
+    store.elements = [R, manualArrow]
+
+    store.resetConnectorRoute('arrow-1')
+
+    const updated = store.elements.find((e) => e.id === 'arrow-1')
+    expect(updated).toBeDefined()
+    expect((updated as any).routeMode).toBe('auto')
+    expect((updated as any).waypoints).toEqual([])
+  })
+
+  it('unbound manual arrow resets routeMode to auto and clears waypoints, keeps points', () => {
+    const manualArrow: DiagramElement = {
+      id: 'arrow-1',
+      type: 'arrow',
+      points: [[10, 20], [200, 300]],
+      stroke: '#000000',
+      strokeWidth: 1,
+      startBinding: null,
+      endBinding: null,
+      ...({ waypoints: [[50, 50]], routeMode: 'manual' } as object),
+    } as DiagramElement
+
+    store.elements = [manualArrow]
+
+    store.resetConnectorRoute('arrow-1')
+
+    const updated = store.elements.find((e) => e.id === 'arrow-1')
+    expect(updated).toBeDefined()
+    expect((updated as any).routeMode).toBe('auto')
+    expect((updated as any).waypoints).toEqual([])
+    // Points are unchanged for the unbound case
+    expect((updated as any).points).toEqual([[10, 20], [200, 300]])
+  })
+
+  it('creates exactly one history entry — undo restores manual waypoints', () => {
+    const R = makeRectangleAt('R', 50, 75)
+    const S = makeRectangleAt('S', 250, 175)
+    const manualWaypoints: [number, number][] = [[150, 100], [150, 200]]
+    const manualArrow: DiagramElement = {
+      id: 'arrow-1',
+      type: 'arrow',
+      points: [[100, 100], [300, 200]],
+      stroke: '#000000',
+      strokeWidth: 1,
+      startBinding: { elementId: 'R' },
+      endBinding: { elementId: 'S' },
+      ...({ waypoints: manualWaypoints, routeMode: 'manual' } as object),
+    } as DiagramElement
+
+    store.elements = [R, S, manualArrow]
+
+    store.resetConnectorRoute('arrow-1')
+
+    // Confirm it changed
+    expect((store.elements.find((e) => e.id === 'arrow-1') as any).routeMode).toBe('auto')
+
+    // Undo restores the manual state
+    store.undoAction()
+
+    const restored = store.elements.find((e) => e.id === 'arrow-1')
+    expect((restored as any).routeMode).toBe('manual')
+    expect((restored as any).waypoints).toEqual(manualWaypoints)
+  })
+
+  it('no-ops when id does not match a connector', () => {
+    const R = makeRectangleAt('R', 50, 75)
+    store.elements = [R]
+
+    // Should not throw, should leave elements unchanged
+    expect(() => store.resetConnectorRoute('R')).not.toThrow()
+    expect((store.elements.find((e) => e.id === 'R') as any).routeMode).toBeUndefined()
+  })
+})

@@ -164,6 +164,43 @@ export const useDiagramsStore = defineStore('diagrams', () => {
   // ── Editor actions ──────────────────────────────────────────────────────────
 
   /**
+   * Compute the auto-route for a single connector element.
+   *
+   * Shared by normalizeLegacyConnectorRoutes (load-time) and resetConnectorRoute
+   * (user gesture). Does NOT check routeMode or waypoints presence — callers are
+   * responsible for those guards; this function always overwrites with auto route.
+   *
+   * - Both-bound, different shapes: recompute anchors + sides → autoWaypoints.
+   * - Self-loop, one-bound, unbound, or missing shape: set waypoints:[], routeMode:'auto'.
+   */
+  function computeAutoRoute(
+    el: DiagramElement,
+    byId: Map<string, DiagramElement>,
+  ): DiagramElement {
+    const startId = (el as any).startBinding?.elementId as string | undefined
+    const endId = (el as any).endBinding?.elementId as string | undefined
+    const startShape = startId ? byId.get(startId) : undefined
+    const endShape = endId ? byId.get(endId) : undefined
+
+    const isBothBound = startShape != null && endShape != null
+    if (isBothBound && startId !== endId) {
+      const startCenter = elementCenter(startShape!)
+      const endCenter = elementCenter(endShape!)
+      const startToward: [number, number] = [endCenter.x, endCenter.y]
+      const endToward: [number, number] = [startCenter.x, startCenter.y]
+      const start = facingSideAnchor(startShape!, startToward)
+      const end = facingSideAnchor(endShape!, endToward)
+      const startSide = facingSide(startShape!, startToward)
+      const endSide = facingSide(endShape!, endToward)
+      const waypoints = autoWaypoints(start, startSide, end, endSide)
+      return { ...el, points: [start, end], waypoints, routeMode: 'auto' } as unknown as DiagramElement
+    }
+
+    // Self-loop, one-bound, unbound, or missing shape: mark normalized, no elbow.
+    return { ...el, waypoints: [], routeMode: 'auto' } as unknown as DiagramElement
+  }
+
+  /**
    * Normalize legacy spec-20 scenes at load time so the spec-21 renderer's
    * [start, ...waypoints, end] path works correctly.
    *
@@ -188,29 +225,34 @@ export const useDiagramsStore = defineStore('diagrams', () => {
       // is treated as already-normalized and skipped.
       if ((el as any).waypoints !== undefined) return el
 
-      // Legacy auto connector with no waypoints — normalize now.
-      const startId = el.startBinding?.elementId
-      const endId = el.endBinding?.elementId
-      const startShape = startId ? byId.get(startId) : undefined
-      const endShape = endId ? byId.get(endId) : undefined
-
-      const isBothBound = startShape != null && endShape != null
-      if (isBothBound && startId !== endId) {
-        const startCenter = elementCenter(startShape!)
-        const endCenter = elementCenter(endShape!)
-        const startToward: [number, number] = [endCenter.x, endCenter.y]
-        const endToward: [number, number] = [startCenter.x, startCenter.y]
-        const start = facingSideAnchor(startShape!, startToward)
-        const end = facingSideAnchor(endShape!, endToward)
-        const startSide = facingSide(startShape!, startToward)
-        const endSide = facingSide(endShape!, endToward)
-        const waypoints = autoWaypoints(start, startSide, end, endSide)
-        return { ...el, points: [start, end], waypoints, routeMode: 'auto' } as unknown as DiagramElement
-      }
-
-      // One-bound, unbound, self-loop, or missing shape: mark normalized, no elbow.
-      return { ...el, waypoints: [], routeMode: 'auto' } as unknown as DiagramElement
+      // Legacy auto connector with no waypoints — delegate to shared helper.
+      return computeAutoRoute(el, byId)
     })
+  }
+
+  /**
+   * Reset a connector to auto-route mode.
+   *
+   * Called when the user double-clicks a line or arrow (spec-21/ICT-7).
+   * Clears manual waypoints, recomputes anchors + sides for both-bound connectors,
+   * and sets routeMode:'auto'. One history entry is recorded.
+   *
+   * Bypasses updateElement's detach guard (which would null out bindings whenever
+   * points are patched on a bound connector) by assigning elements.value directly.
+   */
+  function resetConnectorRoute(connectorId: string): void {
+    const el = elements.value.find((e) => e.id === connectorId)
+    if (!el || (el.type !== 'arrow' && el.type !== 'line')) return
+
+    pushHistory()
+
+    const byId = new Map<string, DiagramElement>()
+    for (const e of elements.value) byId.set(e.id, e)
+
+    elements.value = elements.value.map((e) =>
+      e.id === connectorId ? computeAutoRoute(e, byId) : e,
+    )
+    scheduleSave()
   }
 
   let loadDiagramAbort: AbortController | null = null
@@ -772,6 +814,7 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     updateElements,
     removeElement,
     removeElements,
+    resetConnectorRoute,
     pushHistory,
     discardLastHistory,
     undoAction,
