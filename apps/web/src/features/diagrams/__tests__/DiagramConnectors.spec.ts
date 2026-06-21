@@ -4,6 +4,8 @@ import type { VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import DiagramCanvas from '../DiagramCanvas.vue'
 import type { DiagramElement } from '@tasknote/shared'
+import { useDiagramsStore } from '@/stores/diagrams'
+import { boundEndpoint, elementCenter } from '../connectors'
 
 // ── API mock ──────────────────────────────────────────────────────────────────
 
@@ -233,6 +235,287 @@ describe('DiagramConnectors — arrow binding on draw (captured-pointer path)', 
     await wrapper.vm.$nextTick()
 
     expect(pinia.state.value['diagrams'].elements).toHaveLength(initialCount)
+  })
+
+})
+
+// ── ICT-3: bound connector re-anchor during shape drag ─────────────────────────
+
+async function mountCanvasWithElements(elements: DiagramElement[]) {
+  const pinia = createPinia()
+  setActivePinia(pinia)
+
+  const { diagrams: apiDiagrams } = await import('@/api')
+  vi.mocked(apiDiagrams.getDiagram).mockResolvedValueOnce({
+    id: 1,
+    title: 'Reanchor test',
+    scene_json: {
+      version: 1,
+      elements,
+      appState: { viewport: { scrollX: 0, scrollY: 0, zoom: 1 } },
+    },
+  } as never)
+
+  const wrapper = mount(DiagramCanvas, {
+    global: { plugins: [pinia] },
+    props: { diagramId: 1 },
+    attachTo: document.body,
+  })
+  _mountedWrappers.push(wrapper)
+  await flushPromises()
+
+  const storeState = pinia.state.value['diagrams']
+  storeState.tool = 'select'
+  storeState.loading = false
+  storeState.loadError = null
+  await wrapper.vm.$nextTick()
+
+  return { wrapper, pinia, storeState, store: useDiagramsStore(pinia) }
+}
+
+describe('ICT-3: bound connector re-anchors live during shape drag', () => {
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  afterEach(() => {
+    while (_mountedWrappers.length) _mountedWrappers.pop()!.unmount()
+  })
+
+  // AC-1: drag a bound shape — arrow endpoint anchors to NEW position, not old.
+  it('dragging a bound shape re-anchors the arrow endpoint to the new position', async () => {
+    // Rect R at (0,0) 100×60. Arrow: unbound start at (200, 30), end bound to R.
+    // Initial bound end: boundEndpoint(R_old, from=(200,30)) = R's right edge x=104, y=30.
+    // After dragging R by dx=50 → R is at (50,0).
+    // Expected new end: boundEndpoint(R_new=(50,0 100x60), from=(200,30)) = x=154, y=30.
+    const rectR: DiagramElement = {
+      id: 'R', type: 'rectangle', x: 0, y: 0, width: 100, height: 60,
+      stroke: '#000', strokeWidth: 2,
+    }
+    // Place initial bound end at the old anchor so we can verify it changes.
+    const arrowA: DiagramElement = {
+      id: 'A', type: 'arrow',
+      points: [[200, 30], [104, 30]] as [[number, number], [number, number]],
+      stroke: '#000', strokeWidth: 2,
+      startBinding: null,
+      endBinding: { elementId: 'R' },
+    }
+
+    const { wrapper, pinia } = await mountCanvasWithElements([rectR, arrowA])
+    const svg = wrapper.find('svg.diagram-canvas')
+    const rectNode = wrapper.find('[data-element-id="R"]')
+    expect(rectNode.exists()).toBe(true)
+
+    // pointerdown on the rect node → selects it and starts move gesture
+    await rectNode.trigger('pointerdown', { clientX: 50, clientY: 30, pointerId: 1 })
+    // pointermove +50px at zoom=1 → dxScene=50, dyScene=0
+    await svg.trigger('pointermove', { clientX: 100, clientY: 30, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    const elements = pinia.state.value['diagrams'].elements as DiagramElement[]
+    const rNew = elements.find((e) => e.id === 'R') as any
+    const arrowNew = elements.find((e) => e.id === 'A') as any
+
+    // Shape moved to (50, 0)
+    expect(rNew.x).toBeCloseTo(50, 5)
+
+    // Compute expected endpoint: R at new position (50,0) 100×60
+    const rNewEl = { ...rectR, x: 50, y: 0 }
+    const otherEnd = { x: 200, y: 30 } // unbound start — unchanged
+    const expected = boundEndpoint(rNewEl, otherEnd)
+
+    expect(arrowNew.points[1][0]).toBeCloseTo(expected.x, 5)
+    expect(arrowNew.points[1][1]).toBeCloseTo(expected.y, 5)
+
+    // Verify it differs from the OLD anchor (guards against stale-position pass)
+    const rOldEl = { ...rectR }
+    const oldExpected = boundEndpoint(rOldEl, otherEnd)
+    expect(expected.x).not.toBeCloseTo(oldExpected.x, 2)
+
+    await svg.trigger('pointerup', { pointerId: 1 })
+  })
+
+  // AC-2: group move of both shapes an arrow binds — both endpoints re-anchor.
+  it('group move re-anchors both endpoints when both bound shapes move together', async () => {
+    // A at (0,0) 100×60, B at (300,0) 100×60. Arrow bound A→B.
+    const shapeA: DiagramElement = {
+      id: 'A', type: 'rectangle', x: 0, y: 0, width: 100, height: 60,
+      stroke: '#000', strokeWidth: 2,
+    }
+    const shapeB: DiagramElement = {
+      id: 'B', type: 'rectangle', x: 300, y: 0, width: 100, height: 60,
+      stroke: '#000', strokeWidth: 2,
+    }
+    // Initial anchors: start on A right edge toward B center (350,30) = (104,30),
+    // end on B left edge toward A center (50,30) = (296,30).
+    const arrowAB: DiagramElement = {
+      id: 'AB', type: 'arrow',
+      points: [[104, 30], [296, 30]] as [[number, number], [number, number]],
+      stroke: '#000', strokeWidth: 2,
+      startBinding: { elementId: 'A' },
+      endBinding: { elementId: 'B' },
+    }
+
+    const { wrapper, pinia, storeState } = await mountCanvasWithElements([shapeA, shapeB, arrowAB])
+    const svg = wrapper.find('svg.diagram-canvas')
+
+    // Select both shapes before pointerdown so both move.
+    storeState.selectedIds = ['A', 'B']
+    await wrapper.vm.$nextTick()
+
+    const nodeA = wrapper.find('[data-element-id="A"]')
+    expect(nodeA.exists()).toBe(true)
+    // pointerdown on A (already selected) → group move begins
+    await nodeA.trigger('pointerdown', { clientX: 50, clientY: 30, pointerId: 1 })
+    // Move +100 in x → dxScene=100
+    await svg.trigger('pointermove', { clientX: 150, clientY: 30, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    const elements = pinia.state.value['diagrams'].elements as DiagramElement[]
+    const aMoved = elements.find((e) => e.id === 'A') as any
+    const bMoved = elements.find((e) => e.id === 'B') as any
+    const arrowMoved = elements.find((e) => e.id === 'AB') as any
+
+    expect(aMoved.x).toBeCloseTo(100, 5) // 0+100
+    expect(bMoved.x).toBeCloseTo(400, 5) // 300+100
+
+    const aNewEl = { ...shapeA, x: 100, y: 0 }
+    const bNewEl = { ...shapeB, x: 400, y: 0 }
+    const expectedStart = boundEndpoint(aNewEl, elementCenter(bNewEl))
+    const expectedEnd = boundEndpoint(bNewEl, elementCenter(aNewEl))
+
+    expect(arrowMoved.points[0][0]).toBeCloseTo(expectedStart.x, 5)
+    expect(arrowMoved.points[0][1]).toBeCloseTo(expectedStart.y, 5)
+    expect(arrowMoved.points[1][0]).toBeCloseTo(expectedEnd.x, 5)
+    expect(arrowMoved.points[1][1]).toBeCloseTo(expectedEnd.y, 5)
+
+    await svg.trigger('pointerup', { pointerId: 1 })
+  })
+
+  // AC-3: only the start-bound shape moves — bound start re-anchors, unbound end unchanged.
+  it('dragging only the start-bound shape re-anchors that end while the other stays unchanged', async () => {
+    // R at (0,0) 100×60. Arrow: start bound to R, end free at (200, 30).
+    const rectR: DiagramElement = {
+      id: 'R', type: 'rectangle', x: 0, y: 0, width: 100, height: 60,
+      stroke: '#000', strokeWidth: 2,
+    }
+    const arrowA: DiagramElement = {
+      id: 'A', type: 'arrow',
+      points: [[104, 30], [200, 30]] as [[number, number], [number, number]],
+      stroke: '#000', strokeWidth: 2,
+      startBinding: { elementId: 'R' },
+      endBinding: null,
+    }
+
+    const { wrapper, pinia } = await mountCanvasWithElements([rectR, arrowA])
+    const svg = wrapper.find('svg.diagram-canvas')
+    const rectNode = wrapper.find('[data-element-id="R"]')
+    expect(rectNode.exists()).toBe(true)
+
+    await rectNode.trigger('pointerdown', { clientX: 50, clientY: 30, pointerId: 1 })
+    // Move +80 in x → dxScene=80
+    await svg.trigger('pointermove', { clientX: 130, clientY: 30, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    const elements = pinia.state.value['diagrams'].elements as DiagramElement[]
+    const rMoved = elements.find((e) => e.id === 'R') as any
+    const arrowMoved = elements.find((e) => e.id === 'A') as any
+
+    expect(rMoved.x).toBeCloseTo(80, 5)
+
+    const rNewEl = { ...rectR, x: 80, y: 0 }
+    const freeEnd = { x: 200, y: 30 }
+    const expectedStart = boundEndpoint(rNewEl, freeEnd)
+
+    // Bound start re-anchored
+    expect(arrowMoved.points[0][0]).toBeCloseTo(expectedStart.x, 5)
+    expect(arrowMoved.points[0][1]).toBeCloseTo(expectedStart.y, 5)
+
+    // Free end unchanged
+    expect(arrowMoved.points[1][0]).toBeCloseTo(200, 5)
+    expect(arrowMoved.points[1][1]).toBeCloseTo(30, 5)
+
+    await svg.trigger('pointerup', { pointerId: 1 })
+  })
+
+  // AC-4: move + undo once → shape AND connector both revert (single history entry).
+  it('undo after a drag reverts both the shape position and the connector endpoint in one step', async () => {
+    const rectR: DiagramElement = {
+      id: 'R', type: 'rectangle', x: 0, y: 0, width: 100, height: 60,
+      stroke: '#000', strokeWidth: 2,
+    }
+    const arrowA: DiagramElement = {
+      id: 'A', type: 'arrow',
+      points: [[200, 30], [104, 30]] as [[number, number], [number, number]],
+      stroke: '#000', strokeWidth: 2,
+      startBinding: null,
+      endBinding: { elementId: 'R' },
+    }
+
+    const { wrapper, pinia, store } = await mountCanvasWithElements([rectR, arrowA])
+    const svg = wrapper.find('svg.diagram-canvas')
+    const rectNode = wrapper.find('[data-element-id="R"]')
+
+    await rectNode.trigger('pointerdown', { clientX: 50, clientY: 30, pointerId: 1 })
+    await svg.trigger('pointermove', { clientX: 100, clientY: 30, pointerId: 1 })
+    await svg.trigger('pointerup', { pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    // Verify the shape actually moved before undoing
+    const elementsMoved = pinia.state.value['diagrams'].elements as DiagramElement[]
+    expect((elementsMoved.find((e) => e.id === 'R') as any).x).toBeCloseTo(50, 5)
+
+    // Undo exactly once
+    store.undoAction()
+    await wrapper.vm.$nextTick()
+
+    const elementsAfterUndo = pinia.state.value['diagrams'].elements as DiagramElement[]
+    const rReverted = elementsAfterUndo.find((e) => e.id === 'R') as any
+    const arrowReverted = elementsAfterUndo.find((e) => e.id === 'A') as any
+
+    // Shape reverts to original position
+    expect(rReverted.x).toBeCloseTo(0, 5)
+    expect(rReverted.y).toBeCloseTo(0, 5)
+
+    // Connector endpoint reverts to original anchor
+    expect(arrowReverted.points[1][0]).toBeCloseTo(104, 5)
+    expect(arrowReverted.points[1][1]).toBeCloseTo(30, 5)
+  })
+
+  // AC-5: free connector not selected near dragged shape remains unchanged.
+  it('a free connector with no bindings is unaffected by a nearby shape drag', async () => {
+    const rectR: DiagramElement = {
+      id: 'R', type: 'rectangle', x: 0, y: 0, width: 100, height: 60,
+      stroke: '#000', strokeWidth: 2,
+    }
+    // Free arrow — no bindings, sits near R
+    const freeArrow: DiagramElement = {
+      id: 'F', type: 'arrow',
+      points: [[10, 10], [90, 50]] as [[number, number], [number, number]],
+      stroke: '#000', strokeWidth: 2,
+      startBinding: null,
+      endBinding: null,
+    }
+
+    const { wrapper, pinia } = await mountCanvasWithElements([rectR, freeArrow])
+    const svg = wrapper.find('svg.diagram-canvas')
+    const rectNode = wrapper.find('[data-element-id="R"]')
+
+    await rectNode.trigger('pointerdown', { clientX: 50, clientY: 30, pointerId: 1 })
+    await svg.trigger('pointermove', { clientX: 100, clientY: 30, pointerId: 1 })
+    await wrapper.vm.$nextTick()
+
+    const elements = pinia.state.value['diagrams'].elements as DiagramElement[]
+    const freeArrowAfter = elements.find((e) => e.id === 'F') as any
+
+    // Free arrow points must be unchanged
+    expect(freeArrowAfter.points[0][0]).toBeCloseTo(10, 5)
+    expect(freeArrowAfter.points[0][1]).toBeCloseTo(10, 5)
+    expect(freeArrowAfter.points[1][0]).toBeCloseTo(90, 5)
+    expect(freeArrowAfter.points[1][1]).toBeCloseTo(50, 5)
+
+    await svg.trigger('pointerup', { pointerId: 1 })
   })
 
 })
