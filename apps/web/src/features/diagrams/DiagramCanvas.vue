@@ -61,7 +61,7 @@ const resize = useResize(
   () => store.elements,
   () => store.viewport,
 )
-const { beginResize } = resize
+const { beginResize, beginWaypointDrag } = resize
 
 const pointer = useCanvasPointer(store, svgEl, drawTools, selection, marquee, resize)
 const {
@@ -319,6 +319,12 @@ function onCanvasDblClick(event: MouseEvent): void {
   const el = store.elements.find((e) => e.id === elementId)
   if (!el) return
 
+  // Connectors have no label — reset to auto-route and return immediately.
+  if (el.type === 'line' || el.type === 'arrow') {
+    store.resetConnectorRoute(el.id)
+    return
+  }
+
   if (el.type === 'rectangle' || el.type === 'ellipse') {
     openShapeLabelEdit(el)
     return
@@ -481,6 +487,14 @@ function openShapeLabelEdit(el: DiagramElement): void {
             // from reaching onCanvasPointerDown, so we capture explicitly here.
             // capturePointerOnSvg targets svgEl directly since pointerEvent.currentTarget
             // is the handle element, not the SVG.
+            capturePointerOnSvg(pointerEvent.pointerId)
+          }
+        }"
+        @waypoint-drag-start="(kind, index, screenX, screenY, pointerEvent) => {
+          const selectedId = store.selectedIds[0]
+          if (selectedId) {
+            beginGestureHistory([...store.elements])
+            beginWaypointDrag(selectedId, kind, index, screenX, screenY)
             capturePointerOnSvg(pointerEvent.pointerId)
           }
         }"

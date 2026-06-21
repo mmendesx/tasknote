@@ -380,3 +380,107 @@ describe('DiagramSelectionHandles — elbow-routed arrow endpoint handles', () =
     expect(Number(second.attributes('cy'))).toBe(40)
   })
 })
+
+// ── ICT-6: Waypoint / segment handles ────────────────────────────────────────
+
+function makeArrowWithWaypoints(): DiagramElement {
+  return {
+    id: 'arrow-wp',
+    type: 'arrow',
+    points: [
+      [0, 0],
+      [200, 0],
+    ] as [[number, number], [number, number]],
+    stroke: '#000000',
+    strokeWidth: 2,
+    waypoints: [[50, 50], [150, 50]],
+  } as unknown as DiagramElement
+}
+
+function mountEndpointHandlesWithWaypoints(element: DiagramElement) {
+  const bbox: SelectionBBox = { x: 0, y: 0, width: 200, height: 50 }
+  return mount(DiagramSelectionHandles, {
+    attachTo: document.createElement('svg'),
+    props: {
+      bbox,
+      zoom: 1,
+      showEndpointHandles: true,
+      element,
+    },
+  })
+}
+
+describe('DiagramSelectionHandles — ICT-6 waypoint handles', () => {
+  it('renders exactly 2 endpoint handles (data-resize-handle) even with 2 waypoints', () => {
+    const wrapper = mountEndpointHandlesWithWaypoints(makeArrowWithWaypoints())
+    const endpointGroups = wrapper.findAll('g[data-resize-handle]')
+    expect(endpointGroups).toHaveLength(2)
+  })
+
+  it('renders waypoint handles distinct from endpoint handles', () => {
+    const wrapper = mountEndpointHandlesWithWaypoints(makeArrowWithWaypoints())
+    const wpHandles = wrapper.findAll('g[data-waypoint-handle]')
+    // 2 waypoints → 2 existing-waypoint handles + 3 segment-midpoint handles = 5 total
+    expect(wpHandles.length).toBeGreaterThan(0)
+  })
+
+  it('renders 2 waypoint handles for 2 stored waypoints', () => {
+    const wrapper = mountEndpointHandlesWithWaypoints(makeArrowWithWaypoints())
+    // data-waypoint-handle="wp-0" and "wp-1"
+    const wpHandles = wrapper.findAll('g[data-waypoint-handle^="wp-"]')
+    expect(wpHandles).toHaveLength(2)
+  })
+
+  it('renders 3 segment-midpoint handles for a route with 2 waypoints (3 segments)', () => {
+    const wrapper = mountEndpointHandlesWithWaypoints(makeArrowWithWaypoints())
+    // data-waypoint-handle="seg-0", "seg-1", "seg-2"
+    const segHandles = wrapper.findAll('g[data-waypoint-handle^="seg-"]')
+    expect(segHandles).toHaveLength(3)
+  })
+
+  it('renders 1 segment handle for a connector with no waypoints', () => {
+    const element = makeArrowElement() // no waypoints → route has 1 segment
+    const wrapper = mountEndpointHandlesWithWaypoints(element)
+    const segHandles = wrapper.findAll('g[data-waypoint-handle^="seg-"]')
+    expect(segHandles).toHaveLength(1)
+  })
+
+  it('waypoint handles use diagram-waypoint-handle-visible class (not diagram-handle-visible)', () => {
+    const wrapper = mountEndpointHandlesWithWaypoints(makeArrowWithWaypoints())
+    const wpVisible = wrapper.findAll('.diagram-waypoint-handle-visible')
+    expect(wpVisible.length).toBeGreaterThan(0)
+  })
+
+  it('endpoint handles still use diagram-handle-visible class', () => {
+    const wrapper = mountEndpointHandlesWithWaypoints(makeArrowWithWaypoints())
+    // Only the 2 endpoint circles should have .diagram-handle-visible
+    const epVisible = wrapper.findAll('.diagram-handle-visible')
+    expect(epVisible).toHaveLength(2)
+  })
+
+  it('pointerdown on a segment handle emits waypointDragStart with kind=segment', async () => {
+    const wrapper = mountEndpointHandlesWithWaypoints(makeArrowWithWaypoints())
+    const segHandle = wrapper.find('g[data-waypoint-handle="seg-0"]')
+    expect(segHandle.exists()).toBe(true)
+
+    await segHandle.trigger('pointerdown', { clientX: 25, clientY: 25 })
+
+    const emitted = wrapper.emitted('waypointDragStart')
+    expect(emitted).toBeTruthy()
+    expect(emitted![0][0]).toBe('segment')
+    expect(emitted![0][1]).toBe(0) // segmentIndex
+  })
+
+  it('pointerdown on a waypoint handle emits waypointDragStart with kind=waypoint', async () => {
+    const wrapper = mountEndpointHandlesWithWaypoints(makeArrowWithWaypoints())
+    const wpHandle = wrapper.find('g[data-waypoint-handle="wp-1"]')
+    expect(wpHandle.exists()).toBe(true)
+
+    await wpHandle.trigger('pointerdown', { clientX: 150, clientY: 50 })
+
+    const emitted = wrapper.emitted('waypointDragStart')
+    expect(emitted).toBeTruthy()
+    expect(emitted![0][0]).toBe('waypoint')
+    expect(emitted![0][1]).toBe(1) // waypointIndex
+  })
+})

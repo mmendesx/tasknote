@@ -51,7 +51,7 @@ export function useCanvasPointer(
   const { drawState, pendingText, textInputRef, previewShape, previewLinear, previewPen, cancelDraw } = drawTools
   const { moveState, beginMove, clearMove } = selection
   const { isActive: marqueeIsActive, startMarquee, updateMarquee, finishMarquee, cancelMarquee } = marquee
-  const { resizeState, updateResize, commitResize, cancelResize, isResizing } = resize
+  const { resizeState, waypointDragState, updateResize, commitResize, cancelResize, isResizing } = resize
 
   // ── Pan state ──────────────────────────────────────────────────────────────
 
@@ -384,6 +384,15 @@ export function useCanvasPointer(
   }
 
   function commitResizeOnUp(event: PointerEvent): void {
+    // Waypoint drag: commitResize clears waypointDragState and returns { patch }
+    const wpState = waypointDragState.value
+    if (wpState) {
+      const result = commitResize(event.clientX, event.clientY)
+      if (result) store.updateElement(wpState.elementId, result.patch)
+      endGestureHistory()
+      return
+    }
+
     const state = resizeState.value
     if (!state) return
     const result = commitResize(event.clientX, event.clientY)
@@ -428,13 +437,14 @@ export function useCanvasPointer(
     }
 
     if (isResizing.value) {
-      const state = resizeState.value
-      if (state) {
+      // Resolve element id from whichever drag state is active (resize or waypoint).
+      const elementId = resizeState.value?.elementId ?? waypointDragState.value?.elementId
+      if (elementId) {
         const patch = updateResize(event.clientX, event.clientY)
         if (patch) {
           // Push the pre-gesture snapshot exactly once, before the first mutation.
           pushGestureHistoryOnce()
-          store.updateElement(state.elementId, patch)
+          store.updateElement(elementId, patch)
         }
       }
       return
@@ -501,6 +511,10 @@ export function useCanvasPointer(
     }
     if (resizeState.value) {
       const orig = resizeState.value.original
+      store.updateElement(orig.id, orig as Partial<DiagramElement>)
+    }
+    if (waypointDragState.value) {
+      const orig = waypointDragState.value.original
       store.updateElement(orig.id, orig as Partial<DiagramElement>)
     }
 

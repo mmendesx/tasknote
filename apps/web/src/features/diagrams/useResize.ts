@@ -7,7 +7,7 @@ import { facingSideAnchor, facingSide, autoWaypoints, fixManualLeg } from './ort
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export type HandleId = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
-export type HandleKind = 'shape' | 'endpoint'
+export type HandleKind = 'shape' | 'endpoint' | 'waypoint'
 
 export interface ResizeState {
   kind: HandleKind
@@ -16,6 +16,23 @@ export interface ResizeState {
   startScreenX: number
   startScreenY: number
   // Snapshot of the element at gesture start
+  original: DiagramElement
+}
+
+/**
+ * State for a waypoint drag gesture (segment-midpoint insertion or existing
+ * waypoint move). Stored separately from ResizeState so the existing endpoint
+ * and shape resize flow is untouched.
+ */
+export interface WaypointDragState {
+  kind: 'segment' | 'waypoint'
+  /** Index into the waypoints array: for 'segment' = insert before this index;
+   *  for 'waypoint' = the existing waypoint at this index. */
+  waypointIndex: number
+  elementId: string
+  startScreenX: number
+  startScreenY: number
+  /** Snapshot of the element at gesture start */
   original: DiagramElement
 }
 
@@ -158,6 +175,60 @@ function buildEndpointPatch(
   return { points: newPts } as Partial<DiagramElement>
 }
 
+// ── Waypoint patch builder ────────────────────────────────────────────────────
+
+/**
+ * Compute the new waypoints array for a waypoint drag gesture.
+ *
+ * For 'segment': inserts a new point at `waypointIndex` in the original
+ * waypoints array and moves it by (dxScene, dyScene) from its initial
+ * segment-midpoint position.
+ *
+ * For 'waypoint': moves the existing waypoint at `waypointIndex` by the delta.
+ *
+ * ponytail: stored waypoints are literal scene positions; segments into/out of
+ * a manual waypoint may be diagonal. The spec requires routeMode→'manual' and
+ * the point to follow the pointer — axis-alignment is a future enhancement.
+ */
+function buildWaypointPatch(
+  original: DiagramElement,
+  kind: 'segment' | 'waypoint',
+  waypointIndex: number,
+  dxScene: number,
+  dyScene: number,
+): Partial<DiagramElement> {
+  if (original.type !== 'line' && original.type !== 'arrow') return {}
+
+  const pts = (original as any).points as [[number, number], [number, number]]
+  const existingWaypoints: [number, number][] = (original as any).waypoints ?? []
+
+  // Build the full route: [start, ...waypoints, end]
+  const route: [number, number][] = [pts[0], ...existingWaypoints, pts[1]]
+
+  let newWaypoints: [number, number][]
+
+  if (kind === 'segment') {
+    // Segment s connects route[s] → route[s+1]. The midpoint was the initial position.
+    const s = waypointIndex
+    const mx = (route[s]![0] + route[s + 1]![0]) / 2
+    const my = (route[s]![1] + route[s + 1]![1]) / 2
+    const newPoint: [number, number] = [mx + dxScene, my + dyScene]
+    // Insert at index s in the waypoints array (between route[s] and route[s+1])
+    newWaypoints = [
+      ...existingWaypoints.slice(0, s),
+      newPoint,
+      ...existingWaypoints.slice(s),
+    ]
+  } else {
+    // Move existing waypoint at waypointIndex
+    const wp = existingWaypoints[waypointIndex]!
+    const moved: [number, number] = [wp[0] + dxScene, wp[1] + dyScene]
+    newWaypoints = existingWaypoints.map((p, i) => (i === waypointIndex ? moved : p))
+  }
+
+  return { waypoints: newWaypoints, routeMode: 'manual' } as Partial<DiagramElement>
+}
+
 // ── Composable ────────────────────────────────────────────────────────────────
 
 export function useResize(
@@ -165,15 +236,18 @@ export function useResize(
   getViewport: () => DiagramViewport,
 ): {
   resizeState: Ref<ResizeState | null>
+  waypointDragState: Ref<WaypointDragState | null>
   beginResize(elementId: string, handle: HandleId | 0 | 1, screenX: number, screenY: number): void
+  beginWaypointDrag(elementId: string, kind: 'segment' | 'waypoint', waypointIndex: number, screenX: number, screenY: number): void
   updateResize(screenX: number, screenY: number): Partial<DiagramElement> | null
   commitResize(screenX: number, screenY: number): { patch: Partial<DiagramElement>; newBindings?: { startBinding: { elementId: string } | null; endBinding: { elementId: string } | null } } | null
   cancelResize(): void
   isResizing: ComputedRef<boolean>
 } {
   const resizeState = ref<ResizeState | null>(null)
+  const waypointDragState = ref<WaypointDragState | null>(null)
 
-  const isResizing = computed(() => resizeState.value !== null)
+  const isResizing = computed(() => resizeState.value !== null || waypointDragState.value !== null)
 
   function beginResize(
     elementId: string,
@@ -196,7 +270,36 @@ export function useResize(
     }
   }
 
+  function beginWaypointDrag(
+    elementId: string,
+    kind: 'segment' | 'waypoint',
+    waypointIndex: number,
+    screenX: number,
+    screenY: number,
+  ): void {
+    const el = findElementById(getElements(), elementId)
+    if (!el) return
+
+    waypointDragState.value = {
+      kind,
+      waypointIndex,
+      elementId,
+      startScreenX: screenX,
+      startScreenY: screenY,
+      original: { ...el } as DiagramElement,
+    }
+  }
+
   function updateResize(screenX: number, screenY: number): Partial<DiagramElement> | null {
+    // Check waypoint drag first
+    const wpState = waypointDragState.value
+    if (wpState) {
+      const viewport = getViewport()
+      const dxScene = (screenX - wpState.startScreenX) / viewport.zoom
+      const dyScene = (screenY - wpState.startScreenY) / viewport.zoom
+      return buildWaypointPatch(wpState.original, wpState.kind, wpState.waypointIndex, dxScene, dyScene)
+    }
+
     const state = resizeState.value
     if (!state) return null
 
@@ -217,6 +320,15 @@ export function useResize(
     patch: Partial<DiagramElement>
     newBindings?: { startBinding: { elementId: string } | null; endBinding: { elementId: string } | null }
   } | null {
+    // Handle waypoint drag commit
+    const wpState = waypointDragState.value
+    if (wpState) {
+      const patch = updateResize(screenX, screenY)
+      waypointDragState.value = null
+      if (!patch) return null
+      return { patch }
+    }
+
     const state = resizeState.value
     if (!state) return null
 
@@ -302,11 +414,14 @@ export function useResize(
 
   function cancelResize(): void {
     resizeState.value = null
+    waypointDragState.value = null
   }
 
   return {
     resizeState,
+    waypointDragState,
     beginResize,
+    beginWaypointDrag,
     updateResize,
     commitResize,
     cancelResize,
