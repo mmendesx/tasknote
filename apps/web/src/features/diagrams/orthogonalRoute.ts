@@ -25,6 +25,29 @@ function dedup(pts: Point[]): Point[] {
   return pts.filter((p, i) => i === 0 || p[0] !== pts[i - 1][0] || p[1] !== pts[i - 1][1])
 }
 
+/**
+ * Collapse runs of collinear points: drop any interior point that lies on the
+ * straight axis-aligned line between its neighbours (same x across all three, or
+ * same y across all three). Keeps endpoints. Idempotent — re-running on a fixed
+ * leg makes no change, so a per-frame re-anchor cannot pile up redundant bends.
+ */
+export function collapseCollinear(pts: Point[]): Point[] {
+  const deduped = dedup(pts)
+  if (deduped.length <= 2) return deduped
+  const out: Point[] = [deduped[0]!]
+  for (let i = 1; i < deduped.length - 1; i++) {
+    const a = out[out.length - 1]!
+    const b = deduped[i]!
+    const c = deduped[i + 1]!
+    const sameX = Math.abs(a[0] - b[0]) < EPSILON && Math.abs(b[0] - c[0]) < EPSILON
+    const sameY = Math.abs(a[1] - b[1]) < EPSILON && Math.abs(b[1] - c[1]) < EPSILON
+    if (sameX || sameY) continue // b is redundant on a straight run
+    out.push(b)
+  }
+  out.push(deduped[deduped.length - 1]!)
+  return out
+}
+
 /** Determine which cardinal side of a bbox center faces toward a target x. */
 function pickHorizontalSide(
   cx: number,
@@ -173,12 +196,15 @@ export function fixManualLeg(
     const wAdj = w[0]!
     // Horizontal exit: move right/left first → corner at (wAdj[0], p[1])
     const corner: Point = isH ? [wAdj[0], p[1]] : [p[0], wAdj[1]]
-    return dedup([corner, ...w])
+    // collapseCollinear with p included so a previously-generated leg corner
+    // (collinear with the new one) is absorbed instead of stacking — keeps
+    // fixManualLeg idempotent across repeated re-anchors. Drop p from the result.
+    return collapseCollinear([p, corner, ...w]).slice(1)
   }
   // 'end': exit from the last waypoint into p
   const wAdj = w[w.length - 1]!
   const corner: Point = isH ? [wAdj[0], p[1]] : [p[0], wAdj[1]]
-  return dedup([...w, corner])
+  return collapseCollinear([...w, corner, p]).slice(0, -1)
 }
 
 // ── facingSide ────────────────────────────────────────────────────────────────

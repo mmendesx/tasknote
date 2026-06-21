@@ -1914,38 +1914,45 @@ describe('reanchorBoundConnectorsInPlace — waypoints (ICT-3)', () => {
     expect((updatedArrow as any).routeMode).toBe('auto')
   })
 
-  it('manual arrow: moving bound shape keeps interior waypoints unchanged and stays orthogonal', () => {
-    // R at (50,75): center (100,100). Arrow start bound to R, end free at (300,100).
-    // One interior waypoint at (200,100) — already orthogonal.
-    const R = makeRectangleAt('R', 50, 75)
-    const interiorWaypoint: [number, number] = [200, 100]
+  // Regression (bug: dragging a bound shape spawned a growing stack of stray,
+  // disconnected/diagonal segments). A manual connector now REVERTS to a clean
+  // auto side-aware route when its bound shape moves — bounded and always
+  // orthogonal, no leg accumulation. (Preserving hand-drawn bends across a move
+  // is a tracked spec-21 follow-up requiring a separate waypoints data model.)
+  it('manual arrow: moving a bound shape reverts it to a clean orthogonal auto route', () => {
+    // R bound at the start; S bound at the end. Manual route with a user bend.
+    const R = makeRectangleAt('R', 50, 75)   // center (100,100)
+    const S = makeRectangleAt('S', 250, 275) // center (300,300)
     const arrow: DiagramElement = {
-      ...makeArrow('arrow-manual', [[154, 100], [300, 100]], 'R', undefined),
-      waypoints: [interiorWaypoint],
+      ...makeArrow('arrow-manual', [[150, 100], [250, 300]], 'R', 'S'),
+      waypoints: [[200, 100], [200, 300]] as [number, number][],
       routeMode: 'manual',
     } as unknown as DiagramElement
 
-    store.elements = [R, arrow]
+    store.elements = [R, S, arrow]
 
-    // Move R down by 50px so start anchor changes y.
+    // Move R so its anchor changes.
     store.updateElements([{ id: 'R', patch: { x: 50, y: 125 } }])
 
     const updated = store.elements.find((e) => e.id === 'arrow-manual')
     expect(updated?.type).toBe('arrow')
     if (updated?.type !== 'arrow') return
 
-    // routeMode must stay 'manual'.
-    expect((updated as any).routeMode).toBe('manual')
+    // Reverted to auto.
+    expect((updated as any).routeMode).toBe('auto')
 
-    // The interior waypoint [200,100] must be preserved as-is.
-    const waypoints: [number, number][] = (updated as any).waypoints ?? []
-    expect(waypoints).toContainEqual(interiorWaypoint)
-
-    // Full route: [start, ...waypoints, end] — every consecutive pair must
-    // share x or y (axis-aligned).
+    // Route equals the side-aware auto route from the new anchors (no stale bends).
+    const newR = store.elements.find((e) => e.id === 'R')!
+    const newS = store.elements.find((e) => e.id === 'S')!
     const start = updated.points[0]
     const end = updated.points[1]
-    const fullRoute: [number, number][] = [start, ...waypoints, end]
+    const startSide = facingSide(newR, [elementCenter(newS).x, elementCenter(newS).y])
+    const endSide = facingSide(newS, [elementCenter(newR).x, elementCenter(newR).y])
+    const expected = autoWaypoints(start, startSide, end, endSide)
+    expect((updated as any).waypoints).toEqual(expected)
+
+    // Full route must be axis-aligned (the bug produced diagonals).
+    const fullRoute: [number, number][] = [start, ...((updated as any).waypoints ?? []), end]
     for (let i = 0; i < fullRoute.length - 1; i++) {
       const [x1, y1] = fullRoute[i]!
       const [x2, y2] = fullRoute[i + 1]!

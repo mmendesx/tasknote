@@ -3,7 +3,7 @@ import { defineStore } from 'pinia'
 import * as api from '@/api'
 import type { Diagram, DiagramElement, DiagramViewport } from '@tasknote/shared'
 import { detachBindingsTo, elementCenter, isBindableShape } from '../features/diagrams/connectors'
-import { facingSideAnchor, facingSide, autoWaypoints, fixManualLeg } from '../features/diagrams/orthogonalRoute'
+import { facingSideAnchor, facingSide, autoWaypoints } from '../features/diagrams/orthogonalRoute'
 import type { Side } from '../features/diagrams/orthogonalRoute'
 import { useHistory } from '../features/diagrams/useHistory'
 
@@ -520,44 +520,15 @@ export const useDiagramsStore = defineStore('diagrams', () => {
         continue
       }
 
-      // Compute waypoints for the updated route.
-      const isManual = (el as any).routeMode === 'manual'
-      let waypoints: [number, number][]
-      if (isManual) {
-        const existingWaypoints: [number, number][] = (el as any).waypoints ?? []
-        if (existingWaypoints.length === 0) {
-          // No interior points to preserve — fall back to auto.
-          waypoints = startSide && endSide ? autoWaypoints(start, startSide, end, endSide) : []
-        } else {
-          // Fix start and/or end legs while keeping interior waypoints.
-          let w: [number, number][] = existingWaypoints
-          const startMoved = matchesStart && startShape !== undefined
-          const endMoved = matchesEnd && endShape !== undefined
-          if (startMoved && startSide) {
-            const fixed = fixManualLeg(start, startSide, w, 'start')
-            w = fixed ?? (startSide && endSide ? autoWaypoints(start, startSide, end, endSide) : [])
-            if (fixed === undefined) {
-              arr[i] = { ...el, points: [start, end], waypoints: w, routeMode: 'manual' } as unknown as DiagramElement
-              continue
-            }
-          }
-          if (endMoved && endSide) {
-            const fixed = fixManualLeg(end, endSide, w, 'end')
-            w = fixed ?? (startSide && endSide ? autoWaypoints(start, startSide, end, endSide) : [])
-            if (fixed === undefined) {
-              arr[i] = { ...el, points: [start, end], waypoints: w, routeMode: 'manual' } as unknown as DiagramElement
-              continue
-            }
-          }
-          waypoints = w
-        }
-        arr[i] = { ...el, points: [start, end], waypoints, routeMode: 'manual' } as unknown as DiagramElement
-        continue
-      }
-
-      // AUTO mode: recompute waypoints from new anchors and sides.
-      waypoints = startSide && endSide ? autoWaypoints(start, startSide, end, endSide) : []
-      arr[i] = { ...el, points: [start, end], waypoints, routeMode: (el as any).routeMode ?? 'auto' } as unknown as DiagramElement
+      // Moving a bound shape re-routes the connector to a clean side-aware auto
+      // path. Manual (hand-dragged) connectors revert to auto on move: preserving
+      // hand-drawn bends across a move needs storing user bends separately from
+      // generated legs (indistinguishable in `waypoints` today) — a data-model
+      // change tracked as a spec-21 follow-up. Reverting keeps every re-anchored
+      // route orthogonal and bounded (no stale-leg diagonals, no per-frame pile-up).
+      // ponytail: revert-to-auto over leg-preservation deletes a whole bug class.
+      const waypoints: [number, number][] = startSide && endSide ? autoWaypoints(start, startSide, end, endSide) : []
+      arr[i] = { ...el, points: [start, end], waypoints, routeMode: 'auto' } as unknown as DiagramElement
     }
   }
 

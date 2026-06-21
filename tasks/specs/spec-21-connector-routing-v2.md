@@ -41,16 +41,20 @@ When a connector is selected, draggable handles appear on its route segments
 re-routing the connector through it with axis-aligned segments. The connector
 switches to **manual** mode on first drag. The drag is one undo entry.
 
-### FR-4: Manual route survives a shape move
+### FR-4: Manual route reverts to auto on a shape move
 Moving (or nudging) a shape bound to a manual connector **re-anchors the bound
-endpoints** to the shape's new facing side but **keeps the user's interior
-waypoints**. The connector does not snap back to auto on move. (Endpoints follow;
-bends stay.) Because the re-anchored endpoint moves while the first/last waypoint
-does not, the **connecting segment** (endpoint ↔ adjacent waypoint) is re-routed
-to stay axis-aligned: an orthogonal "leg" (≤1 bend) is regenerated between the new
-endpoint and the nearest preserved waypoint, so the route remains all right angles.
-Only that connecting leg is recomputed; the user's interior waypoints are
-untouched.
+endpoints** to the shape's new facing side and **re-routes the connector to a
+clean side-aware auto path** (`routeMode → 'auto'`). Hand-drawn bends are NOT
+preserved across a shape move.
+
+> **Why (revised):** the original FR-4 (preserve interior waypoints, regenerate
+> only the connecting leg) shipped a defect — generated leg corners are stored in
+> `waypoints` indistinguishably from user bends, so a per-frame re-anchor piled up
+> stray collinear corners and, on a second move, produced disconnected/diagonal
+> segments ("a lot of lines without connection"). Preserving bends correctly
+> requires storing user bends separately from generated legs (a data-model change),
+> tracked as a **spec-21 follow-up**. Until then, reverting to a clean auto route on
+> move keeps every connector orthogonal and bounded.
 
 ### FR-4b: Backward compatibility via load-time normalization
 A persisted scene from spec-20 stored bound connectors with **no** `waypoints`
