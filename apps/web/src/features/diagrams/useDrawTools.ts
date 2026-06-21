@@ -41,7 +41,7 @@ export type DrawState =
   | { kind: 'shape'; tool: 'rectangle' | 'ellipse'; ax: number; ay: number }
   | { kind: 'linear'; tool: 'line' | 'arrow'; ax: number; ay: number; startShapeId?: string | null }
   | { kind: 'pen'; points: [number, number][] }
-  | { kind: 'text'; x: number; y: number; elId: string }
+  | { kind: 'text'; x: number; y: number; elId: string; target?: 'text' | 'label' }
 
 export function useDrawState() {
   const drawState = ref<DrawState>({ kind: 'idle' })
