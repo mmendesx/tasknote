@@ -2,7 +2,8 @@ import { ref, computed } from 'vue'
 import type { Ref, ComputedRef } from 'vue'
 import type { DiagramElement, DiagramViewport } from '@tasknote/shared'
 import { findShapeAtScenePoint, findElementById } from './connectors'
-import { facingSideAnchor, autoWaypoints, chooseConnectorSides, anchorForSide } from './orthogonalRoute'
+import { facingSideAnchor, facingSide, autoWaypoints, chooseConnectorSides, anchorForSide, composeManualRoute } from './orthogonalRoute'
+import type { Side } from './orthogonalRoute'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -245,12 +246,43 @@ function orthogonalCornerLeg(
  * preserving the original orientation of each leg's first segment. This guarantees
  * every consecutive pair in the full route shares x or y (FR-3).
  */
+/**
+ * Derive the leg-orientation side for each end of a connector at interior-drag
+ * time. Sides are used ONLY to orient the start/end leg corner in
+ * composeManualRoute — endpoints (`pts`) are NOT re-anchored here, so a bound
+ * shape that hasn't moved keeps its current anchor and never jumps mid-drag.
+ *
+ * Bound end → the side facing the adjacent interior point (or the other endpoint
+ * when there are no bends). Free end → undefined (legCorner falls back to a
+ * horizontal leg).
+ */
+function deriveDragSides(
+  original: DiagramElement,
+  pts: [[number, number], [number, number]],
+  interior: [number, number][],
+  els: DiagramElement[],
+): { startSide: Side | undefined; endSide: Side | undefined } {
+  const startId = (original as any).startBinding?.elementId as string | undefined
+  const endId = (original as any).endBinding?.elementId as string | undefined
+  const startShape = startId ? findElementById(els, startId) : undefined
+  const endShape = endId ? findElementById(els, endId) : undefined
+
+  const towardStart = interior[0] ?? pts[1]
+  const towardEnd = interior[interior.length - 1] ?? pts[0]
+
+  return {
+    startSide: startShape ? facingSide(startShape, towardStart) : undefined,
+    endSide: endShape ? facingSide(endShape, towardEnd) : undefined,
+  }
+}
+
 function buildWaypointPatch(
   original: DiagramElement,
   kind: 'segment' | 'waypoint',
   waypointIndex: number,
   dxScene: number,
   dyScene: number,
+  els: DiagramElement[],
 ): Partial<DiagramElement> {
   if (original.type !== 'line' && original.type !== 'arrow') return {}
 
@@ -263,10 +295,10 @@ function buildWaypointPatch(
   let newWaypoints: [number, number][]
 
   if (kind === 'segment') {
-    // Cap waypoints at the schema limit (50) so a save can't be rejected
+    // Cap userBends at the schema limit (50) so a save can't be rejected
     // server-side. A segment slide inserts 2 corners, so block at 48.
     if (existingWaypoints.length > MAX_WAYPOINTS - 2) {
-      return { waypoints: existingWaypoints, routeMode: 'manual' } as Partial<DiagramElement>
+      return { userBends: existingWaypoints, waypoints: existingWaypoints, routeMode: 'manual' } as Partial<DiagramElement>
     }
     // Segment s connects route[s] → route[s+1].
     // Replace it with two corners so the route stays fully axis-aligned.
@@ -311,7 +343,14 @@ function buildWaypointPatch(
     newWaypoints = fullRouteArr.slice(1, -1) as [number, number][]
   }
 
-  return { waypoints: newWaypoints, routeMode: 'manual' } as Partial<DiagramElement>
+  // The orthogonal interior just computed IS the user's bend chain (ICT-4):
+  // store it verbatim in userBends, then derive the rendered route from it via
+  // the same composer used on shape move (ICT-3) — same inputs, same output, so
+  // the first move after a drag doesn't make the route jump.
+  const userBends = newWaypoints
+  const { startSide, endSide } = deriveDragSides(original, pts, userBends, els)
+  const waypoints = composeManualRoute(pts[0], startSide, userBends, pts[1], endSide)
+  return { userBends, waypoints, routeMode: 'manual' } as Partial<DiagramElement>
 }
 
 // ── Composable ────────────────────────────────────────────────────────────────
@@ -382,7 +421,7 @@ export function useResize(
       const viewport = getViewport()
       const dxScene = (screenX - wpState.startScreenX) / viewport.zoom
       const dyScene = (screenY - wpState.startScreenY) / viewport.zoom
-      return buildWaypointPatch(wpState.original, wpState.kind, wpState.waypointIndex, dxScene, dyScene)
+      return buildWaypointPatch(wpState.original, wpState.kind, wpState.waypointIndex, dxScene, dyScene, getElements())
     }
 
     const state = resizeState.value

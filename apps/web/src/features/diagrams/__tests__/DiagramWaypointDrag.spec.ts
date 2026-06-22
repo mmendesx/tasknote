@@ -134,11 +134,13 @@ describe('useResize — waypoint drag patch logic', () => {
     assertAxisAligned(fullRoute(patch!, arrow))
   })
 
-  it('inserts two axis-aligned corners for a segment in the middle of the route', () => {
+  it('slides a middle segment: userBends holds the chain, rendered waypoints collapse the spur', () => {
     // Route: [[0,0], wp[100,0], wp[100,100], [200,100]]
     // segment 1 connects route[1]=(100,0) → route[2]=(100,100) — a vertical segment
-    // Drag dx=20, dy=99 → new x = 120; dy ignored
-    // New waypoints: [100,0], [120,0], [120,100], [100,100]
+    // Drag dx=20, dy=99 → new x = 120; dy ignored.
+    // Interior chain (userBends): [100,0],[120,0],[120,100],[100,100].
+    // Rendered waypoints recompose from that chain — the [100,*] spur back to the
+    // endpoint-leg is collinear-collapsed away, leaving the visible jog [120,0],[120,100].
     const arrow = makeArrow({
       points: [[0, 0], [200, 100]],
       waypoints: [[100, 0], [100, 100]],
@@ -149,15 +151,14 @@ describe('useResize — waypoint drag patch logic', () => {
     resize.beginWaypointDrag('arrow-1', 'segment', 1, 0, 0)
     const patch = resize.updateResize(20, 99)
 
-    const waypoints = (patch as any).waypoints as [number, number][]
-    expect(waypoints).toHaveLength(4)
-    expect(waypoints[0]).toEqual([100, 0])
-    expect(waypoints[1]![0]).toBeCloseTo(120) // new x
-    expect(waypoints[1]![1]).toBeCloseTo(0)   // A.y preserved
-    expect(waypoints[2]![0]).toBeCloseTo(120) // new x
-    expect(waypoints[2]![1]).toBeCloseTo(100) // B.y preserved
-    expect(waypoints[3]).toEqual([100, 100])
+    // userBends preserves the full orthogonal chain the user dragged.
+    const userBends = (patch as any).userBends as [number, number][]
+    expect(userBends).toEqual([[100, 0], [120, 0], [120, 100], [100, 100]])
+    expect((patch as any).routeMode).toBe('manual')
 
+    // Rendered route is the collapsed, axis-aligned jog and still carries x=120.
+    const waypoints = (patch as any).waypoints as [number, number][]
+    expect(waypoints.some((p) => p[0] === 120)).toBe(true)
     assertAxisAligned(fullRoute(patch!, arrow))
   })
 
@@ -221,6 +222,42 @@ describe('useResize — waypoint drag patch logic', () => {
     // Corner moved toward the pointer: some point's x should be less than 200 (original).
     const xs = route.map(([x]) => x)
     expect(xs.some(x => x < 200)).toBe(true)
+  })
+
+  it('bend drag writes userBends, keeps endpoints fixed, and survives recompose (ICT-4)', () => {
+    // points=[[0,0],[200,100]], waypoints=[[0,50],[200,50]], drag corner 1 by (-60,25).
+    const arrow = makeArrow({
+      points: [[0, 0], [200, 100]],
+      waypoints: [[0, 50], [200, 50]],
+      routeMode: 'manual',
+    })
+    const resize = makeResize([arrow])
+
+    resize.beginWaypointDrag('arrow-1', 'waypoint', 1, 0, 0)
+    const patch = resize.updateResize(-60, 25)
+
+    // userBends is written and routeMode stays manual.
+    expect((patch as any).userBends).toBeDefined()
+    expect((patch as any).routeMode).toBe('manual')
+    // Endpoints are NOT in the patch — an interior drag never moves the ends.
+    expect((patch as any).points).toBeUndefined()
+    // The dragged corner Cnew=(140,75) survives composeManualRoute into the render.
+    const waypoints = (patch as any).waypoints as [number, number][]
+    expect(waypoints).toContainEqual([140, 75])
+    assertAxisAligned(fullRoute(patch!, arrow))
+  })
+
+  it('segment slide writes userBends alongside the rendered route (ICT-4)', () => {
+    const arrow = makeArrow({ points: [[0, 0], [200, 0]], waypoints: [], routeMode: 'auto' })
+    const resize = makeResize([arrow])
+
+    resize.beginWaypointDrag('arrow-1', 'segment', 0, 0, 0)
+    const patch = resize.updateResize(10, 30)
+
+    // A slide off the auto route writes both userBends and the rendered waypoints.
+    expect((patch as any).userBends).toEqual([[0, 30], [200, 30]])
+    expect((patch as any).waypoints).toEqual([[0, 30], [200, 30]])
+    expect((patch as any).routeMode).toBe('manual')
   })
 
   it('segment slide is capped at the 50-waypoint schema limit (no oversized save)', () => {

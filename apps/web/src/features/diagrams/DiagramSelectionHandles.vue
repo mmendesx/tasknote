@@ -76,6 +76,11 @@ function isPenElement(el: DiagramElement | null): boolean {
  * - waypointHandles: position of each stored waypoint (for moving)
  *
  * Full route = [points[0], ...(waypoints ?? []), points[1]]
+ *
+ * Handles index the rendered `waypoints`, NOT `userBends` (ICT-4). userBends can
+ * hold collapse artifacts that aren't visible corners; rendered waypoints are
+ * exactly the grabbable bends + leg corners. buildWaypointPatch re-derives
+ * userBends from the rendered route each gesture, so the two stay in sync.
  */
 function getLinearWaypointHandles(el: DiagramElement): {
   segmentHandles: Array<{ segmentIndex: number; cx: number; cy: number }>
