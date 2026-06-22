@@ -272,6 +272,59 @@ describe('DiagramResize', () => {
       assertAxisAligned([pts[0], ...wps, pts[1]])
       expect(patch.routeMode).toBe('auto')
     })
+
+    // ICT-5: a connector with userBends keeps them across an endpoint reposition.
+    it('repositioning an endpoint to empty space keeps user bends (manual)', () => {
+      const userBends: [number, number][] = [[100, 250], [160, 250]]
+      const arrow = makeArrow({
+        points: [[100, 100], [100, 400]],
+        waypoints: userBends,
+        routeMode: 'manual',
+        userBends,
+      } as never)
+      const { beginResize, updateResize, commitResize } = makeResize([arrow])
+
+      beginResize('arrow-1', 0, 0, 0) // drag start endpoint…
+      updateResize(40, 30)            // …into empty space (no shape under it)
+      const patch = commitResize(40, 30)!.patch as any
+
+      expect(patch.routeMode).toBe('manual')
+      // userBends survives by omission — patch doesn't carry it, so {...el,...patch} keeps it.
+      expect(patch.userBends).toBeUndefined()
+      // Route stays axis-aligned and still threads both bends.
+      assertAxisAligned([patch.points[0], ...patch.waypoints, patch.points[1]])
+      expect(patch.waypoints).toContainEqual([100, 250])
+      expect(patch.waypoints).toContainEqual([160, 250])
+    })
+
+    it('repositioning an endpoint onto a shape keeps user bends (manual)', () => {
+      const targetRect: DiagramElement = {
+        id: 'R', type: 'rectangle', x: 0, y: 0, width: 80, height: 60,
+        stroke: '#000', strokeWidth: 2,
+      } as DiagramElement
+      const userBends: [number, number][] = [[200, 300], [260, 300]]
+      const arrow = makeArrow({
+        points: [[200, 200], [300, 400]],
+        waypoints: userBends,
+        routeMode: 'manual',
+        endBinding: { elementId: 'S' },
+        userBends,
+      } as never)
+      const sRect: DiagramElement = {
+        id: 'S', type: 'rectangle', x: 300, y: 360, width: 120, height: 80,
+        stroke: '#000', strokeWidth: 2,
+      } as DiagramElement
+      const { beginResize, updateResize, commitResize } = makeResize([arrow, targetRect, sRect])
+
+      beginResize('arrow-1', 0, 0, 0)   // drag start endpoint…
+      updateResize(-160, -170)          // …onto R (~40,30)
+      const res = commitResize(-160, -170)!
+      const patch = res.patch as any
+
+      expect(patch.routeMode).toBe('manual')
+      expect(res.newBindings!.startBinding).toEqual({ elementId: 'R' })
+      assertAxisAligned([patch.points[0], ...patch.waypoints, patch.points[1]])
+    })
   })
 
   describe('isResizing state', () => {

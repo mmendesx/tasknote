@@ -478,12 +478,23 @@ export function useResize(
         let startBinding = original.startBinding ?? null
         let endBinding = original.endBinding ?? null
 
-        // Repositioning an endpoint re-routes the connector to a clean side-aware
-        // AUTO path (and clears manual mode). Keeping a manual route's stored
-        // waypoints while the endpoint moves leaves them stale → diagonal seams
-        // between the moved endpoint and the now-disconnected first/last waypoint
-        // (the reported "various lines" bug). Same revert-to-auto rule as the
-        // shape-move re-anchor; preserving hand-drawn bends is a spec-21 follow-up.
+        // A connector carrying user bends is manual: repositioning an endpoint
+        // keeps userBends and recomposes the route (ICT-5). Empty userBends →
+        // the original revert-to-auto path (clears stale waypoints, no stray
+        // diagonal seams — the spec-21 "various lines" fix).
+        const userBends: [number, number][] = (original as any).userBends ?? []
+        const isManual = userBends.length > 0
+        // Manual leg orientation aims at the route's nearest bend, not the far
+        // endpoint: handle 0 exits toward userBends[0], handle 1 toward the last.
+        const nearestBend = handle === 0 ? userBends[0] : userBends[userBends.length - 1]
+
+        // Per-end geometry, resolved by each case below; the shared block after
+        // composes auto or manual waypoints from these.
+        let start = patchPts[0] as [number, number]
+        let end = patchPts[1] as [number, number]
+        let startSide: Side | undefined
+        let endSide: Side | undefined
+
         if (handle === 0) {
           startBinding = shapeId ? { elementId: shapeId } : null
           if (shapeId) {
@@ -492,23 +503,23 @@ export function useResize(
               const endShape = endBinding?.elementId ? findElementById(getElements(), endBinding.elementId) : undefined
               if (endShape) {
                 // Both ends bound — choose sides by clearance for a clean route.
-                const { startSide, endSide } = chooseConnectorSides(shape, endShape)
-                const anchored = anchorForSide(shape, startSide)
-                const otherAnchored = anchorForSide(endShape, endSide)
-                ;(patch as any).points = [anchored, otherAnchored]
-                ;(patch as any).waypoints = autoWaypoints(anchored, startSide, otherAnchored, endSide)
+                const sides = chooseConnectorSides(shape, endShape)
+                startSide = sides.startSide
+                endSide = sides.endSide
+                start = anchorForSide(shape, startSide)
+                end = anchorForSide(endShape, endSide)
               } else {
-                // Other end free: anchor the bound start toward the free point.
-                const toward: [number, number] = [patchPts[1][0], patchPts[1][1]]
-                const anchored = facingSideAnchor(shape, toward)
-                ;(patch as any).points = [anchored, patchPts[1]]
-                ;(patch as any).waypoints = []
+                // Other end free: anchor the bound start toward the nearest bend
+                // (manual) or the far endpoint (auto).
+                const toward = isManual ? (nearestBend ?? end) : end
+                start = facingSideAnchor(shape, toward)
+                startSide = facingSide(shape, toward)
+                end = patchPts[1]
+                // endSide stays undefined — free end.
               }
             }
-          } else {
-            // Dragged onto empty space — free endpoint, no elbow.
-            ;(patch as any).waypoints = []
           }
+          // else dragged onto empty space — start stays free (startSide undefined).
         } else {
           endBinding = shapeId ? { elementId: shapeId } : null
           if (shapeId) {
@@ -517,25 +528,35 @@ export function useResize(
               const startShape = startBinding?.elementId ? findElementById(getElements(), startBinding.elementId) : undefined
               if (startShape) {
                 // Both ends bound — choose sides by clearance for a clean route.
-                const { startSide, endSide } = chooseConnectorSides(startShape, shape)
-                const otherAnchored = anchorForSide(startShape, startSide)
-                const anchored = anchorForSide(shape, endSide)
-                ;(patch as any).points = [otherAnchored, anchored]
-                ;(patch as any).waypoints = autoWaypoints(otherAnchored, startSide, anchored, endSide)
+                const sides = chooseConnectorSides(startShape, shape)
+                startSide = sides.startSide
+                endSide = sides.endSide
+                start = anchorForSide(startShape, startSide)
+                end = anchorForSide(shape, endSide)
               } else {
-                // Other end free: anchor the bound end toward the free point.
-                const toward: [number, number] = [patchPts[0][0], patchPts[0][1]]
-                const anchored = facingSideAnchor(shape, toward)
-                ;(patch as any).points = [patchPts[0], anchored]
-                ;(patch as any).waypoints = []
+                // Other end free: anchor the bound end toward the nearest bend
+                // (manual) or the far endpoint (auto).
+                const toward = isManual ? (nearestBend ?? start) : start
+                end = facingSideAnchor(shape, toward)
+                endSide = facingSide(shape, toward)
+                start = patchPts[0]
+                // startSide stays undefined — free end.
               }
             }
-          } else {
-            // Dragged onto empty space — free endpoint, no elbow.
-            ;(patch as any).waypoints = []
           }
+          // else dragged onto empty space — end stays free (endSide undefined).
         }
-        ;(patch as any).routeMode = 'auto'
+
+        ;(patch as any).points = [start, end]
+        if (isManual) {
+          // Keep userBends verbatim, recompose the legs against the new anchors.
+          ;(patch as any).waypoints = composeManualRoute(start, startSide, userBends, end, endSide)
+          ;(patch as any).routeMode = 'manual'
+        } else {
+          ;(patch as any).waypoints =
+            startSide && endSide ? autoWaypoints(start, startSide, end, endSide) : []
+          ;(patch as any).routeMode = 'auto'
+        }
 
         newBindings = { startBinding, endBinding }
       }
