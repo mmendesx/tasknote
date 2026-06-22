@@ -2,7 +2,7 @@ import { ref, computed } from 'vue'
 import type { Ref, ComputedRef } from 'vue'
 import type { DiagramElement, DiagramViewport } from '@tasknote/shared'
 import { findShapeAtScenePoint, findElementById } from './connectors'
-import { facingSideAnchor, facingSide, autoWaypoints } from './orthogonalRoute'
+import { facingSideAnchor, autoWaypoints, chooseConnectorSides, anchorForSide } from './orthogonalRoute'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -450,13 +450,21 @@ export function useResize(
           if (shapeId) {
             const shape = findElementById(getElements(), shapeId)
             if (shape) {
-              const toward: [number, number] = [patchPts[1][0], patchPts[1][1]]
-              const anchored = facingSideAnchor(shape, toward)
-              ;(patch as any).points = [anchored, patchPts[1]]
-              const startSide = facingSide(shape, toward)
               const endShape = endBinding?.elementId ? findElementById(getElements(), endBinding.elementId) : undefined
-              const endSide = endShape ? facingSide(endShape, [anchored[0], anchored[1]]) : undefined
-              ;(patch as any).waypoints = endSide ? autoWaypoints(anchored, startSide, patchPts[1], endSide) : []
+              if (endShape) {
+                // Both ends bound — choose sides by clearance for a clean route.
+                const { startSide, endSide } = chooseConnectorSides(shape, endShape)
+                const anchored = anchorForSide(shape, startSide)
+                const otherAnchored = anchorForSide(endShape, endSide)
+                ;(patch as any).points = [anchored, otherAnchored]
+                ;(patch as any).waypoints = autoWaypoints(anchored, startSide, otherAnchored, endSide)
+              } else {
+                // Other end free: anchor the bound start toward the free point.
+                const toward: [number, number] = [patchPts[1][0], patchPts[1][1]]
+                const anchored = facingSideAnchor(shape, toward)
+                ;(patch as any).points = [anchored, patchPts[1]]
+                ;(patch as any).waypoints = []
+              }
             }
           } else {
             // Dragged onto empty space — free endpoint, no elbow.
@@ -467,13 +475,21 @@ export function useResize(
           if (shapeId) {
             const shape = findElementById(getElements(), shapeId)
             if (shape) {
-              const toward: [number, number] = [patchPts[0][0], patchPts[0][1]]
-              const anchored = facingSideAnchor(shape, toward)
-              ;(patch as any).points = [patchPts[0], anchored]
-              const endSide = facingSide(shape, toward)
               const startShape = startBinding?.elementId ? findElementById(getElements(), startBinding.elementId) : undefined
-              const startSide = startShape ? facingSide(startShape, [anchored[0], anchored[1]]) : undefined
-              ;(patch as any).waypoints = startSide ? autoWaypoints(patchPts[0], startSide, anchored, endSide) : []
+              if (startShape) {
+                // Both ends bound — choose sides by clearance for a clean route.
+                const { startSide, endSide } = chooseConnectorSides(startShape, shape)
+                const otherAnchored = anchorForSide(startShape, startSide)
+                const anchored = anchorForSide(shape, endSide)
+                ;(patch as any).points = [otherAnchored, anchored]
+                ;(patch as any).waypoints = autoWaypoints(otherAnchored, startSide, anchored, endSide)
+              } else {
+                // Other end free: anchor the bound end toward the free point.
+                const toward: [number, number] = [patchPts[0][0], patchPts[0][1]]
+                const anchored = facingSideAnchor(shape, toward)
+                ;(patch as any).points = [patchPts[0], anchored]
+                ;(patch as any).waypoints = []
+              }
             }
           } else {
             // Dragged onto empty space — free endpoint, no elbow.

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { orthogonalRoute, facingSideAnchor, facingSide, autoWaypoints } from '../orthogonalRoute'
+import { orthogonalRoute, facingSideAnchor, facingSide, autoWaypoints, anchorForSide, chooseConnectorSides } from '../orthogonalRoute'
 import type { DiagramElement } from '@tasknote/shared'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -281,5 +281,51 @@ describe('facingSide — rectangle (0,0,100,60), center=(50,30)', () => {
   it('tie (adx === ady, toward right): resolves to "right" (x-dominant)', () => {
     // cx=50, cy=30; toward=[130,110] → adx=80, ady=80 → tie → x dominates → right
     expect(facingSide(rectEl, [130, 110])).toBe('right')
+  })
+})
+
+// ── anchorForSide ───────────────────────────────────────────────────────────────
+
+describe('anchorForSide — rectangle (0,0,100,60)', () => {
+  it('returns each side midpoint (GAP=0)', () => {
+    expect(anchorForSide(rectEl, 'right')).toEqual([100, 30])
+    expect(anchorForSide(rectEl, 'left')).toEqual([0, 30])
+    expect(anchorForSide(rectEl, 'top')).toEqual([50, 0])
+    expect(anchorForSide(rectEl, 'bottom')).toEqual([50, 60])
+  })
+})
+
+// ── chooseConnectorSides (clearance-based) ──────────────────────────────────────
+
+function rectAt(id: string, x: number, y: number, w = 100, h = 50): DiagramElement {
+  return { id, type: 'rectangle', x, y, width: w, height: h, stroke: '#000', strokeWidth: 2 } as DiagramElement
+}
+
+describe('chooseConnectorSides — picks the roomier axis', () => {
+  it('side-by-side (X gap >> Y overlap): horizontal sides', () => {
+    const a = rectAt('a', 0, 0)       // 0-100 x, 0-50 y
+    const b = rectAt('b', 300, 10)    // 300-400 x, overlapping y
+    expect(chooseConnectorSides(a, b)).toEqual({ startSide: 'right', endSide: 'left' })
+  })
+
+  it('stacked (Y gap >> X overlap): vertical sides', () => {
+    const a = rectAt('a', 0, 0)       // 0-100 x, 0-50 y
+    const b = rectAt('b', 10, 300)    // overlapping x, 300-350 y
+    expect(chooseConnectorSides(a, b)).toEqual({ startSide: 'bottom', endSide: 'top' })
+  })
+
+  it('diagonal cramped channel: routes on the roomier axis (the screenshot bug)', () => {
+    // A right=200/bottom=130, B left=220/top=200. X gap=20, Y gap=70 → vertical.
+    const a = rectAt('a', 30, 30, 170, 100)   // right=200, bottom=130
+    const b = rectAt('b', 220, 200, 170, 100) // left=220, top=200
+    expect(chooseConnectorSides(a, b)).toEqual({ startSide: 'bottom', endSide: 'top' })
+  })
+
+  it('conservative tie-break: equal gaps keep the center-dominant axis', () => {
+    // Symmetric diagonal, equal X/Y gaps → no override → center-dominant.
+    const a = rectAt('a', 0, 0, 100, 100)     // right=100, bottom=100
+    const b = rectAt('b', 200, 200, 100, 100) // left=200, top=200; gapX=gapY=100
+    // centers (50,50)&(250,250): dx=dy → center tie → horizontal.
+    expect(chooseConnectorSides(a, b)).toEqual({ startSide: 'right', endSide: 'left' })
   })
 })

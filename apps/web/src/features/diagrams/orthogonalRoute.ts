@@ -205,3 +205,75 @@ export function facingSideAnchor(shape: DiagramElement, toward: Point): Point {
   // Top side
   return [cx, bbox.y - GAP]
 }
+
+// ── Side-aware anchor + clearance-based side selection ──────────────────────────
+
+/**
+ * Midpoint of the given `side` of `shape`, offset outward by GAP. Unlike
+ * facingSideAnchor (which derives the side from a target point), the side is
+ * explicit — so the caller can pick the side once (e.g. by clearance) and get a
+ * matching anchor, avoiding the anchor/side axis divergence that causes kinks.
+ */
+export function anchorForSide(shape: DiagramElement, side: Side): Point {
+  const bbox = computeElementBbox(shape)
+  const cx = bbox.x + bbox.width / 2
+  const cy = bbox.y + bbox.height / 2
+  switch (side) {
+    case 'right': return [bbox.x + bbox.width + GAP, cy]
+    case 'left': return [bbox.x - GAP, cy]
+    case 'bottom': return [cx, bbox.y + bbox.height + GAP]
+    case 'top': return [cx, bbox.y - GAP]
+  }
+}
+
+/**
+ * Choose which sides two BOUND shapes' connector should exit, by edge-to-edge
+ * CLEARANCE rather than center direction alone. Routing on the roomier axis
+ * avoids cramming the elbow through a narrow channel between near-touching edges.
+ *
+ * Conservative: only overrides the center-dominant choice when the other axis is
+ * clearly roomier (by > EPSILON). When the axes agree (side-by-side / stacked
+ * layouts), the result is identical to the old center rule — so this is additive.
+ *
+ * Returns the side for the connector's START end (on shape `a`) and END end
+ * (on shape `b`).
+ */
+export function chooseConnectorSides(
+  a: DiagramElement,
+  b: DiagramElement,
+): { startSide: Side; endSide: Side } {
+  const ba = computeElementBbox(a)
+  const bb = computeElementBbox(b)
+  const acx = ba.x + ba.width / 2
+  const acy = ba.y + ba.height / 2
+  const bcx = bb.x + bb.width / 2
+  const bcy = bb.y + bb.height / 2
+
+  // Signed edge gap per axis: positive = a clear channel; negative = overlap.
+  const gapX = bb.x >= ba.x + ba.width ? bb.x - (ba.x + ba.width)
+    : ba.x >= bb.x + bb.width ? ba.x - (bb.x + bb.width)
+    : -1 // projections overlap on X
+  const gapY = bb.y >= ba.y + ba.height ? bb.y - (ba.y + ba.height)
+    : ba.y >= bb.y + bb.height ? ba.y - (bb.y + bb.height)
+    : -1 // projections overlap on Y
+
+  // Center-dominant axis (the legacy choice / tie-break).
+  const centerHorizontal = Math.abs(bcx - acx) >= Math.abs(bcy - acy)
+
+  // Override center only when the OTHER axis is clearly roomier.
+  let horizontal: boolean
+  if (centerHorizontal && gapY - gapX > EPSILON) horizontal = false
+  else if (!centerHorizontal && gapX - gapY > EPSILON) horizontal = true
+  else horizontal = centerHorizontal
+
+  if (horizontal) {
+    return {
+      startSide: bcx >= acx ? 'right' : 'left',
+      endSide: acx >= bcx ? 'right' : 'left',
+    }
+  }
+  return {
+    startSide: bcy >= acy ? 'bottom' : 'top',
+    endSide: acy >= bcy ? 'bottom' : 'top',
+  }
+}

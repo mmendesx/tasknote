@@ -17,7 +17,7 @@ import type { useSelection } from './useSelection'
 import type { useMarquee } from './useMarquee'
 import type { useResize } from './useResize'
 import { findShapeAtScenePoint, elementCenter, findElementById } from './connectors'
-import { facingSideAnchor, facingSide, autoWaypoints } from './orthogonalRoute'
+import { facingSideAnchor, autoWaypoints, chooseConnectorSides, anchorForSide } from './orthogonalRoute'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -252,17 +252,12 @@ export function useCanvasPointer(
     let waypoints: [number, number][] = []
 
     if (startEl && endEl) {
-      // Both bound: anchor each end toward the other shape's center.
-      const endCenter = elementCenter(endEl)
-      const startCenter = elementCenter(startEl)
-      const startToward: [number, number] = [endCenter.x, endCenter.y]
-      const endToward: [number, number] = [startCenter.x, startCenter.y]
-      const [sax, say] = facingSideAnchor(startEl, startToward)
-      const [ebx, eby] = facingSideAnchor(endEl, endToward)
+      // Both bound: choose sides by clearance, anchor each end on its side.
+      const { startSide: sSide, endSide: eSide } = chooseConnectorSides(startEl, endEl)
+      const [sax, say] = anchorForSide(startEl, sSide)
+      const [ebx, eby] = anchorForSide(endEl, eSide)
       ax = sax; ay = say
       bx = ebx; by = eby
-      const sSide = facingSide(startEl, startToward)
-      const eSide = facingSide(endEl, endToward)
       waypoints = autoWaypoints([ax, ay], sSide, [bx, by], eSide)
     } else if (startEl) {
       // Only start is bound; `from` for the start anchor is the raw end point.

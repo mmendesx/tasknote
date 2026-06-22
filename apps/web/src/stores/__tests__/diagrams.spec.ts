@@ -957,13 +957,13 @@ describe('useDiagramsStore — bound connector rerouting (ICT-4)', () => {
     const updatedArrow = store.elements.find((e) => e.id === 'arrow-1')!
     expect(updatedArrow.type).toBe('arrow')
     if (updatedArrow.type === 'arrow') {
-      // spec-20: both ends recompute to facing-side midpoints toward the other center.
-      // Start = facingSideAnchor(R, toward new E center (400,400)) → right side → (150,100).
-      expect(updatedArrow.points[0][0]).toBeCloseTo(150, 1)
-      expect(updatedArrow.points[0][1]).toBeCloseTo(100, 1)
-      // End = facingSideAnchor(E, toward R center (100,100)) → left side → (350,400).
-      expect(updatedArrow.points[1][0]).toBeCloseTo(350, 1)
-      expect(updatedArrow.points[1][1]).toBeCloseTo(400, 1)
+      // spec-21 clearance routing: R(50-150 x, 75-125 y), E(350-450 x, 375-425 y).
+      // gapX=200, gapY=250 → Y is roomier → route vertical (R-bottom → E-top),
+      // overriding the center tie. Start = R bottom mid (100,125); end = E top mid (400,375).
+      expect(updatedArrow.points[0][0]).toBeCloseTo(100, 1)
+      expect(updatedArrow.points[0][1]).toBeCloseTo(125, 1)
+      expect(updatedArrow.points[1][0]).toBeCloseTo(400, 1)
+      expect(updatedArrow.points[1][1]).toBeCloseTo(375, 1)
     }
   })
 

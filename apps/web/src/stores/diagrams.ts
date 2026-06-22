@@ -3,7 +3,7 @@ import { defineStore } from 'pinia'
 import * as api from '@/api'
 import type { Diagram, DiagramElement, DiagramViewport } from '@tasknote/shared'
 import { detachBindingsTo, elementCenter, isBindableShape } from '../features/diagrams/connectors'
-import { facingSideAnchor, facingSide, autoWaypoints } from '../features/diagrams/orthogonalRoute'
+import { facingSideAnchor, facingSide, autoWaypoints, chooseConnectorSides, anchorForSide } from '../features/diagrams/orthogonalRoute'
 import type { Side } from '../features/diagrams/orthogonalRoute'
 import { useHistory } from '../features/diagrams/useHistory'
 
@@ -184,14 +184,9 @@ export const useDiagramsStore = defineStore('diagrams', () => {
 
     const isBothBound = startShape != null && endShape != null
     if (isBothBound && startId !== endId) {
-      const startCenter = elementCenter(startShape!)
-      const endCenter = elementCenter(endShape!)
-      const startToward: [number, number] = [endCenter.x, endCenter.y]
-      const endToward: [number, number] = [startCenter.x, startCenter.y]
-      const start = facingSideAnchor(startShape!, startToward)
-      const end = facingSideAnchor(endShape!, endToward)
-      const startSide = facingSide(startShape!, startToward)
-      const endSide = facingSide(endShape!, endToward)
+      const { startSide, endSide } = chooseConnectorSides(startShape!, endShape!)
+      const start = anchorForSide(startShape!, startSide)
+      const end = anchorForSide(endShape!, endSide)
       const waypoints = autoWaypoints(start, startSide, end, endSide)
       return { ...el, points: [start, end], waypoints, routeMode: 'auto' } as unknown as DiagramElement
     }
@@ -465,34 +460,32 @@ export const useDiagramsStore = defineStore('diagrams', () => {
           end = [center.x, center.y]
           // startSide/endSide left undefined: no waypoints for self-loop.
         } else {
-          // Both ends bound to different moved shapes — recompute both along the
-          // new center-to-center ray.
-          const startCenter = elementCenter(startShape)
-          const endCenter = elementCenter(endShape)
-          const startToward: [number, number] = [endCenter.x, endCenter.y]
-          const endToward: [number, number] = [startCenter.x, startCenter.y]
-          start = facingSideAnchor(startShape, startToward)
-          end = facingSideAnchor(endShape, endToward)
-          startSide = facingSide(startShape, startToward)
-          endSide = facingSide(endShape, endToward)
+          // Both ends bound to different moved shapes — pick sides by clearance
+          // (roomier axis), then anchor each end on the chosen side so anchor and
+          // side never disagree.
+          const sides = chooseConnectorSides(startShape, endShape)
+          startSide = sides.startSide
+          endSide = sides.endSide
+          start = anchorForSide(startShape, startSide)
+          end = anchorForSide(endShape, endSide)
         }
       } else if (matchesStart && startShape) {
         // Start is bound to a moved shape; end is either free or bound to an
         // unmoved shape.
         const otherEndId = el.endBinding?.elementId
         const otherEl = otherEndId ? byId.get(otherEndId) : undefined
-        const fromObj = otherEl ? elementCenter(otherEl) : { x: el.points[1][0], y: el.points[1][1] }
-        const startToward: [number, number] = [fromObj.x, fromObj.y]
-        start = facingSideAnchor(startShape, startToward)
-        startSide = facingSide(startShape, startToward)
         if (otherEl) {
-          // Both ends bound to different shapes (other end unmoved) — recompute
-          // end against startShape's new center (FR-B5/FR-B3).
-          const sc = elementCenter(startShape)
-          const endToward: [number, number] = [sc.x, sc.y]
-          end = facingSideAnchor(otherEl, endToward)
-          endSide = facingSide(otherEl, endToward)
+          // Both ends bound to different shapes — choose sides by clearance.
+          const sides = chooseConnectorSides(startShape, otherEl)
+          startSide = sides.startSide
+          endSide = sides.endSide
+          start = anchorForSide(startShape, startSide)
+          end = anchorForSide(otherEl, endSide)
         } else {
+          // Free other end: anchor the moved start toward the free point.
+          const startToward: [number, number] = [el.points[1][0], el.points[1][1]]
+          start = facingSideAnchor(startShape, startToward)
+          startSide = facingSide(startShape, startToward)
           end = el.points[1]
           // endSide left undefined: free end, no side known.
         }
@@ -501,18 +494,18 @@ export const useDiagramsStore = defineStore('diagrams', () => {
         // unmoved shape.
         const otherStartId = el.startBinding?.elementId
         const otherEl = otherStartId ? byId.get(otherStartId) : undefined
-        const fromObj = otherEl ? elementCenter(otherEl) : { x: el.points[0][0], y: el.points[0][1] }
-        const endToward: [number, number] = [fromObj.x, fromObj.y]
-        end = facingSideAnchor(endShape, endToward)
-        endSide = facingSide(endShape, endToward)
         if (otherEl) {
-          // Both ends bound to different shapes (other end unmoved) — recompute
-          // start against endShape's new center (FR-B5/FR-B3).
-          const ec = elementCenter(endShape)
-          const startToward: [number, number] = [ec.x, ec.y]
-          start = facingSideAnchor(otherEl, startToward)
-          startSide = facingSide(otherEl, startToward)
+          // Both ends bound to different shapes — choose sides by clearance.
+          const sides = chooseConnectorSides(otherEl, endShape)
+          startSide = sides.startSide
+          endSide = sides.endSide
+          start = anchorForSide(otherEl, startSide)
+          end = anchorForSide(endShape, endSide)
         } else {
+          // Free other end: anchor the moved end toward the free point.
+          const endToward: [number, number] = [el.points[0][0], el.points[0][1]]
+          end = facingSideAnchor(endShape, endToward)
+          endSide = facingSide(endShape, endToward)
           start = el.points[0]
           // startSide left undefined: free end, no side known.
         }
