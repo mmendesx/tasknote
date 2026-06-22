@@ -61,7 +61,7 @@ const resize = useResize(
   () => store.elements,
   () => store.viewport,
 )
-const { beginResize } = resize
+const { beginResize, beginWaypointDrag } = resize
 
 const pointer = useCanvasPointer(store, svgEl, drawTools, selection, marquee, resize)
 const {
@@ -195,17 +195,26 @@ const canvasCursor = computed(() => {
   return 'default'
 })
 
-/** Scene coords used directly in foreignObject. */
+/** Scene coords used directly in foreignObject (final x/y — no further offset needed). */
 const textEditState = computed(() => {
   const s = drawState.value
   if (s.kind !== 'text') return null
-  return { x: s.x, y: s.y }
+  if (s.target === 'label') {
+    // Center the 200×32 input over the shape's bbox center.
+    // s.x/s.y are the bbox center; subtract half input dimensions (100 wide, 32 tall).
+    return { x: s.x - 100, y: s.y - 16 }
+  }
+  // Text-element mode: shift input up by 16px so baseline aligns with the text node.
+  return { x: s.x, y: s.y - 16 }
 })
 
 /** The element id currently being edited in text mode (empty string = new). */
 const editingElId = computed(() => {
   const s = drawState.value
   if (s.kind !== 'text') return ''
+  // Only hide the element when editing a text element (the input replaces it).
+  // For shape labels the shape must stay visible while its label is edited.
+  if (s.target === 'label') return ''
   return s.elId
 })
 
@@ -252,13 +261,19 @@ function commitText(): void {
   if (state.kind !== 'text') return
 
   if (state.elId) {
-    // Edit mode: update or delete the existing element.
     const trimmed = pendingText.value.trim()
-    if (trimmed) {
+    if (state.target === 'label') {
+      // Shape-label mode: always update, never delete; empty string clears the label.
       store.pushHistory()
-      store.updateElement(state.elId, { text: trimmed } as Partial<DiagramElement>)
+      store.updateElement(state.elId, { label: trimmed } as Partial<DiagramElement>)
     } else {
-      store.removeElements([state.elId])
+      // Text-element mode: update or delete.
+      if (trimmed) {
+        store.pushHistory()
+        store.updateElement(state.elId, { text: trimmed } as Partial<DiagramElement>)
+      } else {
+        store.removeElements([state.elId])
+      }
     }
     cancelDraw()
     return
@@ -295,17 +310,39 @@ function onCanvasMouseDown(event: MouseEvent): void {
 function onCanvasDblClick(event: MouseEvent): void {
   if (store.tool !== 'select') return
 
-  const target = event.target as Element | null
-  if (!target) return
-  const hit = target.closest('[data-element-id]')
+  const evTarget = event.target as Element | null
+  if (!evTarget) return
+  const hit = evTarget.closest('[data-element-id]')
   const elementId = hit ? (hit.getAttribute('data-element-id') ?? null) : null
   if (!elementId) return
 
   const el = store.elements.find((e) => e.id === elementId)
-  if (!el || el.type !== 'text') return
+  if (!el) return
 
-  drawState.value = { kind: 'text', x: el.x, y: el.y, elId: el.id }
-  pendingText.value = el.text
+  // Connectors have no label — reset to auto-route and return immediately.
+  if (el.type === 'line' || el.type === 'arrow') {
+    store.resetConnectorRoute(el.id)
+    return
+  }
+
+  if (el.type === 'rectangle' || el.type === 'ellipse') {
+    openShapeLabelEdit(el)
+    return
+  }
+
+  if (el.type === 'text') {
+    drawState.value = { kind: 'text', x: el.x, y: el.y, elId: el.id }
+    pendingText.value = el.text
+    nextTick(() => textInputRef.value?.focus())
+  }
+}
+
+function openShapeLabelEdit(el: DiagramElement): void {
+  const bbox = computeElementBbox(el)
+  const cx = bbox.x + bbox.width / 2
+  const cy = bbox.y + bbox.height / 2
+  drawState.value = { kind: 'text', x: cx, y: cy, elId: el.id, target: 'label' }
+  pendingText.value = ('label' in el && typeof el.label === 'string') ? el.label : ''
   nextTick(() => textInputRef.value?.focus())
 }
 </script>
@@ -453,6 +490,14 @@ function onCanvasDblClick(event: MouseEvent): void {
             capturePointerOnSvg(pointerEvent.pointerId)
           }
         }"
+        @waypoint-drag-start="(kind, index, screenX, screenY, pointerEvent) => {
+          const selectedId = store.selectedIds[0]
+          if (selectedId) {
+            beginGestureHistory([...store.elements])
+            beginWaypointDrag(selectedId, kind, index, screenX, screenY)
+            capturePointerOnSvg(pointerEvent.pointerId)
+          }
+        }"
       />
 
       <!-- Marquee: accent-tinted translucent fill + solid 1px accent border -->
@@ -481,7 +526,7 @@ function onCanvasDblClick(event: MouseEvent): void {
       <foreignObject
         v-if="textEditState"
         :x="textEditState.x"
-        :y="textEditState.y - 16"
+        :y="textEditState.y"
         width="200"
         height="32"
         class="diagram-text-foreign"
@@ -508,6 +553,10 @@ function onCanvasDblClick(event: MouseEvent): void {
   background-color: var(--color-bg, #ffffff);
   border: 1px solid var(--color-border, #e5e7eb);
   touch-action: none;
+  /* Drawing surface — never let a double-click/drag select the SVG text
+     (shape labels, text elements). The label editor handles its own input. */
+  user-select: none;
+  -webkit-user-select: none;
   /* Drives `currentColor` for committed-element and preview strokes so they
      stay visible (and theme-correct) in both light and dark mode. */
   color: var(--color-text-primary, #1f2937);
@@ -584,5 +633,8 @@ function onCanvasDblClick(event: MouseEvent): void {
   padding: 2px 4px;
   outline: none;
   box-sizing: border-box;
+  /* Re-enable selection inside the editor — the canvas sets user-select:none. */
+  user-select: text;
+  -webkit-user-select: text;
 }
 </style>

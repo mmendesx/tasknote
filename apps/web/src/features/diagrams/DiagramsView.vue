@@ -50,6 +50,40 @@ async function createDiagram(): Promise<void> {
   }
 }
 
+// ── Title ─────────────────────────────────────────────────────────────────────
+// The editable diagram title in the detail header. Local draft mirrors the
+// store's loaded title; committed via renameDiagram on blur / Enter.
+
+const titleDraft = ref('')
+
+watch(
+  () => diagramsStore.title,
+  (t) => { titleDraft.value = t ?? '' },
+  { immediate: true },
+)
+
+async function commitTitle(): Promise<void> {
+  const id = selectedId.value
+  if (id === null) return
+  const next = titleDraft.value.trim()
+  if (next === (diagramsStore.title ?? '')) return // no change
+  try {
+    await diagramsStore.renameDiagram(id, next)
+  } catch {
+    toast.error('Failed to rename diagram', 'Please try again.')
+    titleDraft.value = diagramsStore.title ?? '' // revert draft on failure
+  }
+}
+
+function onTitleKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Enter') {
+    ;(event.target as HTMLInputElement).blur() // triggers commitTitle via @blur
+  } else if (event.key === 'Escape') {
+    titleDraft.value = diagramsStore.title ?? ''
+    ;(event.target as HTMLInputElement).blur()
+  }
+}
+
 // ── Delete ────────────────────────────────────────────────────────────────────
 
 const isPendingDelete = ref(false)
@@ -178,6 +212,17 @@ const exportMenuItems = computed<MenuItemDef[]>(() => [
     <template v-if="selectedId !== null">
       <div class="diagrams-view__detail">
         <div class="diagrams-view__detail-header">
+
+          <!-- Editable diagram title -->
+          <input
+            v-model="titleDraft"
+            class="diagrams-view__title-input focus-ring"
+            type="text"
+            placeholder="Untitled diagram"
+            aria-label="Diagram title"
+            @blur="commitTitle"
+            @keydown="onTitleKeydown"
+          />
 
           <!-- Top-bar right side: save indicator + export dropdown -->
           <div class="diagrams-view__topbar-right">
@@ -370,13 +415,35 @@ const exportMenuItems = computed<MenuItemDef[]>(() => [
 .diagrams-view__detail-header {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   flex-shrink: 0;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-surface);
   padding: 0 8px;
   min-height: 44px;
   gap: 8px;
+}
+
+.diagrams-view__title-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 360px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  padding: 4px 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary, #1f2937);
+}
+
+.diagrams-view__title-input:hover {
+  border-color: var(--color-border);
+}
+
+.diagrams-view__title-input:focus {
+  border-color: var(--color-accent, #6366f1);
+  background: var(--color-bg, #ffffff);
 }
 
 .diagrams-view__topbar-right {

@@ -16,7 +16,8 @@ import { buildMovePatch } from './useSelection'
 import type { useSelection } from './useSelection'
 import type { useMarquee } from './useMarquee'
 import type { useResize } from './useResize'
-import { resolveShapeIdAtPoint, elementCenter, findElementById, boundEndpoint } from './connectors'
+import { findShapeAtScenePoint, elementCenter, findElementById } from './connectors'
+import { facingSideAnchor, autoWaypoints, chooseConnectorSides, anchorForSide } from './orthogonalRoute'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -30,6 +31,7 @@ type LinearEndpoints = {
   ax: number; ay: number; bx: number; by: number
   startBinding: DiagramBinding | null
   endBinding: DiagramBinding | null
+  waypoints: [number, number][]
 }
 
 // ── Composable ────────────────────────────────────────────────────────────────
@@ -49,7 +51,7 @@ export function useCanvasPointer(
   const { drawState, pendingText, textInputRef, previewShape, previewLinear, previewPen, cancelDraw } = drawTools
   const { moveState, beginMove, clearMove } = selection
   const { isActive: marqueeIsActive, startMarquee, updateMarquee, finishMarquee, cancelMarquee } = marquee
-  const { resizeState, updateResize, commitResize, cancelResize, isResizing } = resize
+  const { resizeState, waypointDragState, updateResize, commitResize, cancelResize, isResizing } = resize
 
   // ── Pan state ──────────────────────────────────────────────────────────────
 
@@ -168,7 +170,10 @@ export function useCanvasPointer(
         originalsInSelection.map((e) => ({ ...e }) as DiagramElement),
       )
     }
-    capturePointer(event)
+    // NOTE: do NOT capture the pointer here. Capturing on the first pointerdown of
+    // a double-click suppresses the native dblclick (used to open the label editor).
+    // Capture is deferred to the first real pointermove (handleMovePointerMove), so a
+    // bare click — and thus a double-click — fires normally.
   }
 
   function handleSelectHitEmpty(event: PointerEvent): void {
@@ -189,7 +194,7 @@ export function useCanvasPointer(
       previewShape.value = { type: tool, x: pt.x, y: pt.y, width: 0, height: 0 }
     } else if (tool === 'line' || tool === 'arrow') {
       const startShapeId = tool === 'arrow'
-        ? resolveShapeIdAtPoint(event.clientX, event.clientY, store.elements)
+        ? findShapeAtScenePoint(pt, store.elements)
         : null
       drawState.value = { kind: 'linear', tool, ax: pt.x, ay: pt.y, startShapeId }
       previewLinear.value = { type: tool, ax: pt.x, ay: pt.y, bx: pt.x, by: pt.y }
@@ -219,11 +224,11 @@ export function useCanvasPointer(
     const rawEnd = getScenePt(event)
 
     if (state.tool !== 'arrow') {
-      return { ax: state.ax, ay: state.ay, bx: rawEnd.x, by: rawEnd.y, startBinding: null, endBinding: null }
+      return { ax: state.ax, ay: state.ay, bx: rawEnd.x, by: rawEnd.y, startBinding: null, endBinding: null, waypoints: [] }
     }
 
     const startId = state.startShapeId ?? null
-    const endId = resolveShapeIdAtPoint(event.clientX, event.clientY, store.elements)
+    const endId = findShapeAtScenePoint(rawEnd, store.elements)
     return resolveArrowEndpoints(state, rawEnd, startId, endId)
   }
 
@@ -244,29 +249,33 @@ export function useCanvasPointer(
     let bx = rawEnd.x
     let by = rawEnd.y
 
+    let waypoints: [number, number][] = []
+
     if (startEl && endEl) {
-      // Both bound: anchor each end toward the other shape's center.
-      const endCenter = elementCenter(endEl)
-      const startCenter = elementCenter(startEl)
-      const startPt = boundEndpoint(startEl, endCenter)
-      const endPt = boundEndpoint(endEl, startCenter)
-      ax = startPt.x; ay = startPt.y
-      bx = endPt.x;   by = endPt.y
+      // Both bound: choose sides by clearance, anchor each end on its side.
+      const { startSide: sSide, endSide: eSide } = chooseConnectorSides(startEl, endEl)
+      const [sax, say] = anchorForSide(startEl, sSide)
+      const [ebx, eby] = anchorForSide(endEl, eSide)
+      ax = sax; ay = say
+      bx = ebx; by = eby
+      waypoints = autoWaypoints([ax, ay], sSide, [bx, by], eSide)
     } else if (startEl) {
       // Only start is bound; `from` for the start anchor is the raw end point.
-      const startPt = boundEndpoint(startEl, rawEnd)
-      ax = startPt.x; ay = startPt.y
+      const [sax, say] = facingSideAnchor(startEl, [rawEnd.x, rawEnd.y])
+      ax = sax; ay = say
+      // One-bound: end side unknown → store empty waypoints.
     } else if (endEl) {
       // Only end is bound; `from` for the end anchor is the raw start point.
-      const rawStart = { x: state.ax, y: state.ay }
-      const endPt = boundEndpoint(endEl, rawStart)
-      bx = endPt.x; by = endPt.y
+      const [ebx, eby] = facingSideAnchor(endEl, [state.ax, state.ay])
+      bx = ebx; by = eby
+      // One-bound: start side unknown → store empty waypoints.
     }
 
     return {
       ax, ay, bx, by,
       startBinding: startId ? { elementId: startId } : null,
       endBinding: endId ? { elementId: endId } : null,
+      waypoints,
     }
   }
 
@@ -278,6 +287,9 @@ export function useCanvasPointer(
     const zoom = store.viewport.zoom
     const dxScene = (event.clientX - mv.startScreenX) / zoom
     const dyScene = (event.clientY - mv.startScreenY) / zoom
+    // Capture lazily on the first drag frame (not on pointerdown) so a bare
+    // click / double-click is left intact for the native dblclick handler.
+    capturePointerOnSvg(event.pointerId)
     // Push the pre-gesture snapshot exactly once, before the first mutation.
     pushGestureHistoryOnce()
     // Build all patches first, then apply in one batched call (FR-B8).
@@ -289,6 +301,8 @@ export function useCanvasPointer(
       }
     }
     if (patches.length > 0) {
+      // The store re-anchors bound connectors inside updateElements
+      // (reanchorBoundConnectorsInPlace) whenever a bindable shape moves.
       store.updateElements(patches)
     }
     return true
@@ -335,9 +349,9 @@ export function useCanvasPointer(
   function commitLinearOnUp(event: PointerEvent): void {
     const state = drawState.value
     if (state.kind !== 'linear') return
-    const { ax, ay, bx, by, startBinding, endBinding } = resolveLinearEndpoints(state, event)
+    const { ax, ay, bx, by, startBinding, endBinding, waypoints } = resolveLinearEndpoints(state, event)
     const style = { stroke: store.lastStroke, strokeWidth: store.lastStrokeWidth }
-    const el = buildLinearElement(state.tool, ax, ay, bx, by, startBinding, endBinding, style)
+    const el = buildLinearElement(state.tool, ax, ay, bx, by, startBinding, endBinding, style, waypoints)
     if (el) store.addElement(el as DiagramElement)
     cancelDraw()
   }
@@ -365,6 +379,15 @@ export function useCanvasPointer(
   }
 
   function commitResizeOnUp(event: PointerEvent): void {
+    // Waypoint drag: commitResize clears waypointDragState and returns { patch }
+    const wpState = waypointDragState.value
+    if (wpState) {
+      const result = commitResize(event.clientX, event.clientY)
+      if (result) store.updateElement(wpState.elementId, result.patch)
+      endGestureHistory()
+      return
+    }
+
     const state = resizeState.value
     if (!state) return
     const result = commitResize(event.clientX, event.clientY)
@@ -409,13 +432,14 @@ export function useCanvasPointer(
     }
 
     if (isResizing.value) {
-      const state = resizeState.value
-      if (state) {
+      // Resolve element id from whichever drag state is active (resize or waypoint).
+      const elementId = resizeState.value?.elementId ?? waypointDragState.value?.elementId
+      if (elementId) {
         const patch = updateResize(event.clientX, event.clientY)
         if (patch) {
           // Push the pre-gesture snapshot exactly once, before the first mutation.
           pushGestureHistoryOnce()
-          store.updateElement(state.elementId, patch)
+          store.updateElement(elementId, patch)
         }
       }
       return
@@ -482,6 +506,10 @@ export function useCanvasPointer(
     }
     if (resizeState.value) {
       const orig = resizeState.value.original
+      store.updateElement(orig.id, orig as Partial<DiagramElement>)
+    }
+    if (waypointDragState.value) {
+      const orig = waypointDragState.value.original
       store.updateElement(orig.id, orig as Partial<DiagramElement>)
     }
 

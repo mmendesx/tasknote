@@ -209,6 +209,122 @@ describe('DiagramResize', () => {
       expect(points[1][0]).toBe(110)
       expect(points[1][1]).toBe(90)
     })
+
+    // Regression (bug: repositioning a MANUAL connector's endpoint spawned stray
+    // diagonal segments — the new endpoint stayed wired to now-stale waypoints).
+    // Repositioning an endpoint now reverts the connector to a clean auto route.
+    const assertAxisAligned = (route: [number, number][]) => {
+      for (let i = 0; i < route.length - 1; i++) {
+        const [x1, y1] = route[i]!
+        const [x2, y2] = route[i + 1]!
+        expect(x1 === x2 || y1 === y2,
+          `segment ${i} diagonal: [${x1},${y1}]→[${x2},${y2}]`).toBe(true)
+      }
+    }
+
+    it('repositioning a manual endpoint onto empty space clears stale waypoints (no stray lines)', () => {
+      const arrow = makeArrow({
+        points: [[100, 100], [100, 400]],
+        waypoints: [[100, 250], [160, 250]],
+        routeMode: 'manual',
+        startBinding: { elementId: 'R' },
+      } as never)
+      const { beginResize, updateResize, commitResize } = makeResize([arrow])
+
+      beginResize('arrow-1', 0, 0, 0)
+      updateResize(40, 30) // drag start into empty space (no shape present)
+      const res = commitResize(40, 30)
+      const patch = res!.patch as any
+
+      // The bug left stale waypoints wired to the moved endpoint (the diagonal
+      // "various lines"). A free endpoint has no side → no elbow → empty waypoints,
+      // a clean direct 2-point segment. Key invariant: NO stale interior waypoints.
+      expect(patch.waypoints).toEqual([])
+      expect(patch.routeMode).toBe('auto')
+    })
+
+    it('repositioning a manual endpoint onto a shape stays axis-aligned (reverts to auto)', () => {
+      const targetRect: DiagramElement = {
+        id: 'R', type: 'rectangle', x: 0, y: 0, width: 80, height: 60,
+        stroke: '#000', strokeWidth: 2,
+      } as DiagramElement
+      // End is bound to S (kept), start dragged onto R.
+      const sRect: DiagramElement = {
+        id: 'S', type: 'rectangle', x: 300, y: 360, width: 120, height: 80,
+        stroke: '#000', strokeWidth: 2,
+      } as DiagramElement
+      const arrow = makeArrow({
+        points: [[200, 200], [300, 400]],
+        waypoints: [[200, 300], [260, 300]],
+        routeMode: 'manual',
+        endBinding: { elementId: 'S' },
+      } as never)
+      const { beginResize, updateResize, commitResize } = makeResize([arrow, targetRect, sRect])
+
+      beginResize('arrow-1', 0, 0, 0)
+      // Drag start onto R (centre ~40,30): from (200,200) by (-160,-170).
+      updateResize(-160, -170)
+      const res = commitResize(-160, -170)
+      const patch = res!.patch as any
+
+      const pts = patch.points ?? (arrow as any).points
+      const wps = patch.waypoints ?? (arrow as any).waypoints
+      assertAxisAligned([pts[0], ...wps, pts[1]])
+      expect(patch.routeMode).toBe('auto')
+    })
+
+    // ICT-5: a connector with userBends keeps them across an endpoint reposition.
+    it('repositioning an endpoint to empty space keeps user bends (manual)', () => {
+      const userBends: [number, number][] = [[100, 250], [160, 250]]
+      const arrow = makeArrow({
+        points: [[100, 100], [100, 400]],
+        waypoints: userBends,
+        routeMode: 'manual',
+        userBends,
+      } as never)
+      const { beginResize, updateResize, commitResize } = makeResize([arrow])
+
+      beginResize('arrow-1', 0, 0, 0) // drag start endpoint…
+      updateResize(40, 30)            // …into empty space (no shape under it)
+      const patch = commitResize(40, 30)!.patch as any
+
+      expect(patch.routeMode).toBe('manual')
+      // userBends survives by omission — patch doesn't carry it, so {...el,...patch} keeps it.
+      expect(patch.userBends).toBeUndefined()
+      // Route stays axis-aligned and still threads both bends.
+      assertAxisAligned([patch.points[0], ...patch.waypoints, patch.points[1]])
+      expect(patch.waypoints).toContainEqual([100, 250])
+      expect(patch.waypoints).toContainEqual([160, 250])
+    })
+
+    it('repositioning an endpoint onto a shape keeps user bends (manual)', () => {
+      const targetRect: DiagramElement = {
+        id: 'R', type: 'rectangle', x: 0, y: 0, width: 80, height: 60,
+        stroke: '#000', strokeWidth: 2,
+      } as DiagramElement
+      const userBends: [number, number][] = [[200, 300], [260, 300]]
+      const arrow = makeArrow({
+        points: [[200, 200], [300, 400]],
+        waypoints: userBends,
+        routeMode: 'manual',
+        endBinding: { elementId: 'S' },
+        userBends,
+      } as never)
+      const sRect: DiagramElement = {
+        id: 'S', type: 'rectangle', x: 300, y: 360, width: 120, height: 80,
+        stroke: '#000', strokeWidth: 2,
+      } as DiagramElement
+      const { beginResize, updateResize, commitResize } = makeResize([arrow, targetRect, sRect])
+
+      beginResize('arrow-1', 0, 0, 0)   // drag start endpoint…
+      updateResize(-160, -170)          // …onto R (~40,30)
+      const res = commitResize(-160, -170)!
+      const patch = res.patch as any
+
+      expect(patch.routeMode).toBe('manual')
+      expect(res.newBindings!.startBinding).toEqual({ elementId: 'R' })
+      assertAxisAligned([patch.points[0], ...patch.waypoints, patch.points[1]])
+    })
   })
 
   describe('isResizing state', () => {

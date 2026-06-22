@@ -54,3 +54,4 @@ coverage/
 
 # Local agent/editor config
 .claude/
+test-results/

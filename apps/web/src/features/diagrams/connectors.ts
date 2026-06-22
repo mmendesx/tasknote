@@ -84,28 +84,20 @@ export function findShapeAtScenePoint(
     const el = elements[i]
     if (!isBindableShape(el)) continue
 
+    // Bind by bounding box for BOTH rectangles and ellipses. Binding is an
+    // "aim at this shape" intent, and the visible attach point (facingSideAnchor)
+    // already snaps to the bbox-side midpoint — so an ellipse must bind across its
+    // whole bbox, not just the curve, otherwise releasing near a bbox corner is a
+    // dead zone where the endpoint silently fails to bind.
     const bbox = computeElementBbox(el)
-
-    if (el.type === 'rectangle') {
-      if (
-        point.x >= bbox.x &&
-        point.x <= bbox.x + bbox.width &&
-        point.y >= bbox.y &&
-        point.y <= bbox.y + bbox.height
-      ) {
-        return el.id
-      }
-    } else if (el.type === 'ellipse') {
-      const rx = bbox.width / 2
-      const ry = bbox.height / 2
-      if (rx === 0 || ry === 0) continue
-      const cx = bbox.x + rx
-      const cy = bbox.y + ry
-      const nx = (point.x - cx) / rx
-      const ny = (point.y - cy) / ry
-      if (nx * nx + ny * ny <= 1) {
-        return el.id
-      }
+    if (bbox.width === 0 || bbox.height === 0) continue
+    if (
+      point.x >= bbox.x &&
+      point.x <= bbox.x + bbox.width &&
+      point.y >= bbox.y &&
+      point.y <= bbox.y + bbox.height
+    ) {
+      return el.id
     }
   }
   return null

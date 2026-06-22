@@ -34,6 +34,11 @@ function pointsToAttr(points: [number, number][]): string {
   return points.map(([x, y]) => `${x},${y}`).join(' ')
 }
 
+/** Serialize the stored connector route: start, any stored waypoints, end. */
+function connectorRoute(el: Extract<DiagramElement, { type: 'line' | 'arrow' }>): [number, number][] {
+  return [el.points[0], ...(el.waypoints ?? []), el.points[1]] as [number, number][]
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
@@ -113,21 +118,31 @@ export function buildExportSvg(elements: DiagramElement[], opts: ExportSvgOpts):
       const stroke = resolveColor(el.stroke, resolvedColor)
       const fill = el.fill ? resolveColor(el.fill, resolvedColor) : 'none'
       bodyParts.push(`<rect x="${el.x}" y="${el.y}" width="${el.width}" height="${el.height}" stroke="${escapeXml(stroke)}" fill="${escapeXml(fill)}" stroke-width="${el.strokeWidth}"/>`)
+      const label = el.label?.trim()
+      if (label) {
+        const lx = el.x + el.width / 2
+        const ly = el.y + el.height / 2
+        bodyParts.push(`<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="central" font-size="14" fill="${escapeXml(stroke)}" pointer-events="none">${escapeXml(label)}</text>`)
+      }
     } else if (el.type === 'ellipse') {
       const stroke = resolveColor(el.stroke, resolvedColor)
       const fill = el.fill ? resolveColor(el.fill, resolvedColor) : 'none'
       const cx2 = el.x + el.width / 2
       const cy2 = el.y + el.height / 2
       bodyParts.push(`<ellipse cx="${cx2}" cy="${cy2}" rx="${el.width / 2}" ry="${el.height / 2}" stroke="${escapeXml(stroke)}" fill="${escapeXml(fill)}" stroke-width="${el.strokeWidth}"/>`)
+      const label = el.label?.trim()
+      if (label) {
+        bodyParts.push(`<text x="${cx2}" y="${cy2}" text-anchor="middle" dominant-baseline="central" font-size="14" fill="${escapeXml(stroke)}" pointer-events="none">${escapeXml(label)}</text>`)
+      }
     } else if (el.type === 'line') {
       const stroke = resolveColor(el.stroke, resolvedColor)
-      const [[x1, y1], [x2, y2]] = el.points
-      bodyParts.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${escapeXml(stroke)}" stroke-width="${el.strokeWidth}"/>`)
+      const ptsAttr = pointsToAttr(connectorRoute(el))
+      bodyParts.push(`<polyline points="${ptsAttr}" fill="none" stroke="${escapeXml(stroke)}" stroke-width="${el.strokeWidth}"/>`)
     } else if (el.type === 'arrow') {
       const stroke = resolveColor(el.stroke, resolvedColor)
       const safeId = `diagram-arrowhead-${stroke.replace(/[^a-zA-Z0-9]/g, '_')}`
-      const [[x1, y1], [x2, y2]] = el.points
-      bodyParts.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${escapeXml(stroke)}" stroke-width="${el.strokeWidth}" marker-end="url(#${safeId})"/>`)
+      const ptsAttr = pointsToAttr(connectorRoute(el))
+      bodyParts.push(`<polyline points="${ptsAttr}" fill="none" stroke="${escapeXml(stroke)}" stroke-width="${el.strokeWidth}" marker-end="url(#${safeId})"/>`)
     } else if (el.type === 'text') {
       const fill = resolveColor(el.color, resolvedColor)
       bodyParts.push(`<text x="${el.x}" y="${el.y}" font-size="${el.fontSize}" fill="${escapeXml(fill)}">${escapeXml(el.text)}</text>`)

@@ -200,6 +200,7 @@ export const DiagramElementSchema = z.discriminatedUnion('type', [
     stroke: z.string(),
     fill: z.string().nullable().optional(),
     strokeWidth: z.number(),
+    label: z.string().optional(),
   }),
   z.object({
     id: z.string(),
@@ -211,6 +212,7 @@ export const DiagramElementSchema = z.discriminatedUnion('type', [
     stroke: z.string(),
     fill: z.string().nullable().optional(),
     strokeWidth: z.number(),
+    label: z.string().optional(),
   }),
   z.object({
     id: z.string(),
@@ -220,6 +222,9 @@ export const DiagramElementSchema = z.discriminatedUnion('type', [
     strokeWidth: z.number(),
     startBinding: DiagramBindingSchema.nullable().optional(),
     endBinding: DiagramBindingSchema.nullable().optional(),
+    waypoints: z.array(z.tuple([z.number(), z.number()])).max(50, 'A connector must not exceed 50 waypoints').optional(),
+    routeMode: z.enum(['auto', 'manual']).optional(),
+    userBends: z.array(z.tuple([z.number(), z.number()])).max(50, 'A connector must not exceed 50 user bends').optional(),
   }),
   z.object({
     id: z.string(),
@@ -229,6 +234,9 @@ export const DiagramElementSchema = z.discriminatedUnion('type', [
     strokeWidth: z.number(),
     startBinding: DiagramBindingSchema.nullable().optional(),
     endBinding: DiagramBindingSchema.nullable().optional(),
+    waypoints: z.array(z.tuple([z.number(), z.number()])).max(50, 'A connector must not exceed 50 waypoints').optional(),
+    routeMode: z.enum(['auto', 'manual']).optional(),
+    userBends: z.array(z.tuple([z.number(), z.number()])).max(50, 'A connector must not exceed 50 user bends').optional(),
   }),
   z.object({
     id: z.string(),

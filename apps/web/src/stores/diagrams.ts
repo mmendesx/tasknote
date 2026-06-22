@@ -2,7 +2,9 @@ import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import * as api from '@/api'
 import type { Diagram, DiagramElement, DiagramViewport } from '@tasknote/shared'
-import { detachBindingsTo, elementCenter, isBindableShape, boundEndpoint } from '../features/diagrams/connectors'
+import { detachBindingsTo, elementCenter, isBindableShape } from '../features/diagrams/connectors'
+import { facingSideAnchor, facingSide, autoWaypoints, chooseConnectorSides, anchorForSide, composeManualRoute } from '../features/diagrams/orthogonalRoute'
+import type { Side } from '../features/diagrams/orthogonalRoute'
 import { useHistory } from '../features/diagrams/useHistory'
 
 const DEBOUNCE_MS = 600
@@ -161,6 +163,142 @@ export const useDiagramsStore = defineStore('diagrams', () => {
 
   // ── Editor actions ──────────────────────────────────────────────────────────
 
+  /**
+   * Compute the auto-route for a single connector element.
+   *
+   * Shared by normalizeLegacyConnectorRoutes (load-time) and resetConnectorRoute
+   * (user gesture). Does NOT check routeMode or waypoints presence — callers are
+   * responsible for those guards; this function always overwrites with auto route.
+   *
+   * - Both-bound, different shapes: recompute anchors + sides → autoWaypoints.
+   * - Self-loop, one-bound, unbound, or missing shape: set waypoints:[], routeMode:'auto'.
+   */
+  function computeAutoRoute(
+    el: DiagramElement,
+    byId: Map<string, DiagramElement>,
+  ): DiagramElement {
+    const startId = (el as any).startBinding?.elementId as string | undefined
+    const endId = (el as any).endBinding?.elementId as string | undefined
+    const startShape = startId ? byId.get(startId) : undefined
+    const endShape = endId ? byId.get(endId) : undefined
+
+    const isBothBound = startShape != null && endShape != null
+    if (isBothBound && startId !== endId) {
+      const { startSide, endSide } = chooseConnectorSides(startShape!, endShape!)
+      const start = anchorForSide(startShape!, startSide)
+      const end = anchorForSide(endShape!, endSide)
+      // ponytail: name says "auto" but a connector carrying user bends recomposes
+      // its manual route here so ICT-7 load-migration can reuse this one helper.
+      // Reset clears userBends first (resetConnectorRoute), so it still lands auto.
+      const userBends = (el as any).userBends as [number, number][] | undefined
+      if (userBends && userBends.length > 0) {
+        const waypoints = composeManualRoute(start, startSide, userBends, end, endSide)
+        return { ...el, points: [start, end], waypoints, routeMode: 'manual' } as unknown as DiagramElement
+      }
+      const waypoints = autoWaypoints(start, startSide, end, endSide)
+      return { ...el, points: [start, end], waypoints, routeMode: 'auto' } as unknown as DiagramElement
+    }
+
+    // Self-loop, one-bound, unbound, or missing shape: mark normalized, no elbow.
+    return { ...el, waypoints: [], routeMode: 'auto' } as unknown as DiagramElement
+  }
+
+  /**
+   * Normalize legacy spec-20 scenes at load time so the spec-21 renderer's
+   * [start, ...waypoints, end] path works correctly.
+   *
+   * spec-20 stored bound connectors WITHOUT `waypoints` (the elbow was derived
+   * at render). spec-21 render reads `waypoints` directly, so missing waypoints
+   * would produce a straight diagonal. This function adds them once on load.
+   *
+   * Rules:
+   * - Manual connector (routeMode === 'manual'):
+   *     - already has userBends → already migrated, skip.
+   *     - no waypoints → nothing to seed, skip.
+   *     - waypoints but no userBends → seed userBends from the persisted route's
+   *       interior, recompose waypoints (ICT-7). Endpoints are kept verbatim and
+   *       sides derived only for leg orientation, so the route looks identical on
+   *       load (recompose also orthogonalizes any non-axis-aligned legacy save).
+   * - Skip if waypoints is already present (non-undefined, even []) — spec-21 saved it.
+   * - Both-bound, different shapes: recompute anchors + sides → autoWaypoints.
+   * - One-bound, unbound, self-loop, or missing shape: set waypoints:[], routeMode:'auto'.
+   */
+  function normalizeLegacyConnectorRoutes(els: DiagramElement[]): DiagramElement[] {
+    const byId = new Map<string, DiagramElement>()
+    for (const el of els) byId.set(el.id, el)
+
+    return els.map((el) => {
+      if (el.type !== 'arrow' && el.type !== 'line') return el
+      if ((el as any).routeMode === 'manual') return migrateManualConnector(el, byId)
+      // ponytail: presence check uses !== undefined so waypoints:[] (spec-21 aligned route)
+      // is treated as already-normalized and skipped.
+      if ((el as any).waypoints !== undefined) return el
+
+      // Legacy auto connector with no waypoints — delegate to shared helper.
+      return computeAutoRoute(el, byId)
+    })
+  }
+
+  /**
+   * Seed userBends on a persisted manual connector that predates ICT-1, then
+   * recompose its rendered route. Keeps endpoints verbatim (no jump on load);
+   * sides are derived only to orient the start/end leg corners.
+   */
+  function migrateManualConnector(
+    el: DiagramElement,
+    byId: Map<string, DiagramElement>,
+  ): DiagramElement {
+    if ((el as any).userBends !== undefined) return el // already migrated
+    const waypoints = (el as any).waypoints as [number, number][] | undefined
+    if (waypoints === undefined || waypoints.length === 0) return el // nothing to seed
+
+    const userBends = waypoints
+    const pts = (el as any).points as [[number, number], [number, number]]
+
+    const startShape = (el as any).startBinding?.elementId
+      ? byId.get((el as any).startBinding.elementId)
+      : undefined
+    const endShape = (el as any).endBinding?.elementId
+      ? byId.get((el as any).endBinding.elementId)
+      : undefined
+
+    // Leg orientation aims at the nearest bend, matching the ICT-4/5 drag rule.
+    const startSide = startShape ? facingSide(startShape, userBends[0]!) : undefined
+    const endSide = endShape ? facingSide(endShape, userBends[userBends.length - 1]!) : undefined
+
+    const newWaypoints = composeManualRoute(pts[0], startSide, userBends, pts[1], endSide)
+    return { ...el, userBends, waypoints: newWaypoints, routeMode: 'manual' } as unknown as DiagramElement
+  }
+
+  /**
+   * Reset a connector to auto-route mode.
+   *
+   * Called when the user double-clicks a line or arrow (spec-21/ICT-7).
+   * Clears manual waypoints, recomputes anchors + sides for both-bound connectors,
+   * and sets routeMode:'auto'. One history entry is recorded.
+   *
+   * Bypasses updateElement's detach guard (which would null out bindings whenever
+   * points are patched on a bound connector) by assigning elements.value directly.
+   */
+  function resetConnectorRoute(connectorId: string): void {
+    const el = elements.value.find((e) => e.id === connectorId)
+    if (!el || (el.type !== 'arrow' && el.type !== 'line')) return
+
+    pushHistory()
+
+    const byId = new Map<string, DiagramElement>()
+    for (const e of elements.value) byId.set(e.id, e)
+
+    // Clear userBends first (ICT-6) so computeAutoRoute lands on the auto path
+    // instead of recomposing the manual route from the bends being reset.
+    elements.value = elements.value.map((e) =>
+      e.id === connectorId
+        ? computeAutoRoute({ ...e, userBends: undefined } as DiagramElement, byId)
+        : e,
+    )
+    scheduleSave()
+  }
+
   let loadDiagramAbort: AbortController | null = null
 
   async function loadDiagram(diagramId: number): Promise<void> {
@@ -180,7 +318,7 @@ export const useDiagramsStore = defineStore('diagrams', () => {
       epoch += 1
       id.value = diagram.id
       title.value = diagram.title
-      elements.value = diagram.scene_json.elements
+      elements.value = normalizeLegacyConnectorRoutes(diagram.scene_json.elements)
       viewport.value = diagram.scene_json.appState.viewport
       dirty.value = false
       sceneGen = 0
@@ -360,6 +498,8 @@ export const useDiagramsStore = defineStore('diagrams', () => {
 
       let start: [number, number]
       let end: [number, number]
+      let startSide: Side | undefined
+      let endSide: Side | undefined
 
       if (matchesStart && matchesEnd && startShape && endShape) {
         if (startShapeId === endShapeId) {
@@ -367,70 +507,75 @@ export const useDiagramsStore = defineStore('diagrams', () => {
           const center = elementCenter(startShape)
           start = [center.x, center.y]
           end = [center.x, center.y]
+          // startSide/endSide left undefined: no waypoints for self-loop.
         } else {
-          // Both ends bound to different moved shapes — recompute both along the
-          // new center-to-center ray.
-          const startCenter = elementCenter(startShape)
-          const endCenter = elementCenter(endShape)
-          const startPt = boundEndpoint(startShape, endCenter)
-          const endPt = boundEndpoint(endShape, startCenter)
-          start = [startPt.x, startPt.y]
-          end = [endPt.x, endPt.y]
+          // Both ends bound to different moved shapes — pick sides by clearance
+          // (roomier axis), then anchor each end on the chosen side so anchor and
+          // side never disagree.
+          const sides = chooseConnectorSides(startShape, endShape)
+          startSide = sides.startSide
+          endSide = sides.endSide
+          start = anchorForSide(startShape, startSide)
+          end = anchorForSide(endShape, endSide)
         }
       } else if (matchesStart && startShape) {
         // Start is bound to a moved shape; end is either free or bound to an
         // unmoved shape.
         const otherEndId = el.endBinding?.elementId
         const otherEl = otherEndId ? byId.get(otherEndId) : undefined
-        const from = otherEl ? elementCenter(otherEl) : { x: el.points[1][0], y: el.points[1][1] }
-        const pt = boundEndpoint(startShape, from)
-        start = [pt.x, pt.y]
         if (otherEl) {
-          // Both ends bound to different shapes (other end unmoved) — recompute
-          // end against startShape's new center (FR-B5/FR-B3).
-          const endPt = boundEndpoint(otherEl, elementCenter(startShape))
-          end = [endPt.x, endPt.y]
+          // Both ends bound to different shapes — choose sides by clearance.
+          const sides = chooseConnectorSides(startShape, otherEl)
+          startSide = sides.startSide
+          endSide = sides.endSide
+          start = anchorForSide(startShape, startSide)
+          end = anchorForSide(otherEl, endSide)
         } else {
+          // Free other end: anchor the moved start toward the free point.
+          const startToward: [number, number] = [el.points[1][0], el.points[1][1]]
+          start = facingSideAnchor(startShape, startToward)
+          startSide = facingSide(startShape, startToward)
           end = el.points[1]
+          // endSide left undefined: free end, no side known.
         }
       } else if (matchesEnd && endShape) {
         // End is bound to a moved shape; start is either free or bound to an
         // unmoved shape.
         const otherStartId = el.startBinding?.elementId
         const otherEl = otherStartId ? byId.get(otherStartId) : undefined
-        const from = otherEl ? elementCenter(otherEl) : { x: el.points[0][0], y: el.points[0][1] }
-        const pt = boundEndpoint(endShape, from)
-        end = [pt.x, pt.y]
         if (otherEl) {
-          // Both ends bound to different shapes (other end unmoved) — recompute
-          // start against endShape's new center (FR-B5/FR-B3).
-          const startPt = boundEndpoint(otherEl, elementCenter(endShape))
-          start = [startPt.x, startPt.y]
+          // Both ends bound to different shapes — choose sides by clearance.
+          const sides = chooseConnectorSides(otherEl, endShape)
+          startSide = sides.startSide
+          endSide = sides.endSide
+          start = anchorForSide(otherEl, startSide)
+          end = anchorForSide(endShape, endSide)
         } else {
+          // Free other end: anchor the moved end toward the free point.
+          const endToward: [number, number] = [el.points[0][0], el.points[0][1]]
+          end = facingSideAnchor(endShape, endToward)
+          endSide = facingSide(endShape, endToward)
           start = el.points[0]
+          // startSide left undefined: free end, no side known.
         }
       } else {
         continue
       }
 
-      arr[i] = { ...el, points: [start, end] } as DiagramElement
+      // Moving a bound shape re-anchors the connector. A connector carrying user
+      // bends stays manual: keep userBends verbatim (never derive them back from
+      // the prior waypoints — that's what accumulated leg corners), recompose the
+      // legs against the new anchors via composeManualRoute. Empty userBends → the
+      // clean side-aware auto path.
+      const userBends = (el as any).userBends as [number, number][] | undefined
+      if (userBends && userBends.length > 0) {
+        const waypoints = composeManualRoute(start, startSide, userBends, end, endSide)
+        arr[i] = { ...el, points: [start, end], waypoints, routeMode: 'manual' } as unknown as DiagramElement
+      } else {
+        const waypoints: [number, number][] = startSide && endSide ? autoWaypoints(start, startSide, end, endSide) : []
+        arr[i] = { ...el, points: [start, end], waypoints, routeMode: 'auto' } as unknown as DiagramElement
+      }
     }
-  }
-
-  /**
-   * Standalone recompute — copies the array once, re-anchors in place, assigns.
-   * Hot paths (updateElements) skip this wrapper and re-anchor their own copy.
-   */
-  function recomputeBoundConnectorsForSet(movedShapeIds: Set<string>): void {
-    if (movedShapeIds.size === 0) return
-    const next = [...elements.value]
-    reanchorBoundConnectorsInPlace(next, movedShapeIds)
-    elements.value = next
-  }
-
-  /** Thin single-shape wrapper — preserves the existing call signature. */
-  function recomputeBoundConnectors(movedElementId: string): void {
-    recomputeBoundConnectorsForSet(new Set([movedElementId]))
   }
 
   /**
@@ -686,6 +831,7 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     updateElements,
     removeElement,
     removeElements,
+    resetConnectorRoute,
     pushHistory,
     discardLastHistory,
     undoAction,

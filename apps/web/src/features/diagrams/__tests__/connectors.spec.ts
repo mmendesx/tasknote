@@ -195,12 +195,16 @@ describe('findShapeAtScenePoint', () => {
       expect(result).toBe('e1')
     })
 
-    it('returns null for a point outside the ellipse perimeter but inside its bbox', () => {
-      // ellipse centered at (100,75), rx=50, ry=25
-      // corner of bbox at (50,50): ((50-100)/50)^2 + ((50-75)/25)^2 = 1 + 1 = 2 > 1 → outside
+    // Regression (bug: connecting an arrow to an ellipse near a bbox corner did
+    // not bind, so that endpoint never followed the ellipse on move). Binding now
+    // uses the bounding box for ellipses too (consistent with rectangles and with
+    // facingSideAnchor, which already attaches at the bbox-side midpoint).
+    it('binds an ellipse when the point is inside its bbox but outside the curve', () => {
+      // ellipse centered at (100,75), rx=50, ry=25 — (52,52) is a bbox-corner zone
+      // that is geometrically outside the ellipse curve but clearly aimed at it.
       const ellipse = makeEllipse('e1', 50, 50, 100, 50)
       const result = findShapeAtScenePoint({ x: 52, y: 52 }, [ellipse])
-      expect(result).toBeNull()
+      expect(result).toBe('e1')
     })
 
     it('does not hit an ellipse with zero radius', () => {

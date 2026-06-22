@@ -12,6 +12,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   resizeStart: [handleId: HandleId | 0 | 1, screenX: number, screenY: number, event: PointerEvent]
+  waypointDragStart: [kind: 'segment' | 'waypoint', index: number, screenX: number, screenY: number, event: PointerEvent]
 }>()
 
 // Visible handle size in screen pixels; dividing by zoom gives scene-space size
@@ -66,6 +67,55 @@ function isLinearElement(el: DiagramElement | null): boolean {
 function isPenElement(el: DiagramElement | null): boolean {
   return el?.type === 'pen'
 }
+
+/**
+ * Compute handles for a selected linear element's waypoints and segment midpoints.
+ *
+ * Returns:
+ * - segmentHandles: midpoint of each segment in the full route (for insertion)
+ * - waypointHandles: position of each stored waypoint (for moving)
+ *
+ * Full route = [points[0], ...(waypoints ?? []), points[1]]
+ *
+ * Handles index the rendered `waypoints`, NOT `userBends` (ICT-4). userBends can
+ * hold collapse artifacts that aren't visible corners; rendered waypoints are
+ * exactly the grabbable bends + leg corners. buildWaypointPatch re-derives
+ * userBends from the rendered route each gesture, so the two stay in sync.
+ */
+function getLinearWaypointHandles(el: DiagramElement): {
+  segmentHandles: Array<{ segmentIndex: number; cx: number; cy: number }>
+  waypointHandles: Array<{ waypointIndex: number; cx: number; cy: number }>
+} {
+  if ((el as any).type !== 'line' && (el as any).type !== 'arrow') {
+    return { segmentHandles: [], waypointHandles: [] }
+  }
+  const pts = (el as any).points as [[number, number], [number, number]]
+  const waypoints: [number, number][] = (el as any).waypoints ?? []
+  const route: [number, number][] = [pts[0], ...waypoints, pts[1]]
+
+  const segmentHandles = route.slice(0, -1).map((p, s) => ({
+    segmentIndex: s,
+    cx: (p[0] + route[s + 1]![0]) / 2,
+    cy: (p[1] + route[s + 1]![1]) / 2,
+  }))
+
+  const waypointHandles = waypoints.map((wp, i) => ({
+    waypointIndex: i,
+    cx: wp[0],
+    cy: wp[1],
+  }))
+
+  return { segmentHandles, waypointHandles }
+}
+
+function onWaypointPointerDown(
+  kind: 'segment' | 'waypoint',
+  index: number,
+  event: PointerEvent,
+): void {
+  event.stopPropagation()
+  emit('waypointDragStart', kind, index, event.clientX, event.clientY, event)
+}
 </script>
 
 <template>
@@ -109,6 +159,75 @@ function isPenElement(el: DiagramElement | null): boolean {
             filter="url(#diagram-handle-shadow)"
             pointer-events="none"
             class="diagram-handle-visible"
+          />
+        </g>
+      </template>
+
+      <!-- Segment-midpoint handles ("+") and waypoint handles — visually distinct from endpoints -->
+      <template v-for="seg in getLinearWaypointHandles(element).segmentHandles" :key="`seg-${seg.segmentIndex}`">
+        <g
+          pointer-events="all"
+          :data-waypoint-handle="`seg-${seg.segmentIndex}`"
+          style="cursor: move"
+          @pointerdown="(e: PointerEvent) => onWaypointPointerDown('segment', seg.segmentIndex, e)"
+        >
+          <!-- Transparent hit circle — minimum 12 screen px target -->
+          <circle
+            :cx="seg.cx"
+            :cy="seg.cy"
+            :r="HIT_HALF_SCREEN / zoom"
+            fill="transparent"
+            stroke="none"
+            pointer-events="all"
+            class="diagram-waypoint-handle-hit"
+          />
+          <!-- Visible: small filled accent diamond (rotated square) — distinct from endpoint circles -->
+          <rect
+            :x="seg.cx - (HANDLE_SCREEN_PX * 0.6) / zoom / 2"
+            :y="seg.cy - (HANDLE_SCREEN_PX * 0.6) / zoom / 2"
+            :width="(HANDLE_SCREEN_PX * 0.6) / zoom"
+            :height="(HANDLE_SCREEN_PX * 0.6) / zoom"
+            :transform="`rotate(45, ${seg.cx}, ${seg.cy})`"
+            fill="var(--color-accent, #6366f1)"
+            stroke="var(--color-surface, #ffffff)"
+            stroke-width="1"
+            vector-effect="non-scaling-stroke"
+            filter="url(#diagram-handle-shadow)"
+            pointer-events="none"
+            class="diagram-waypoint-handle-visible"
+          />
+        </g>
+      </template>
+
+      <template v-for="wp in getLinearWaypointHandles(element).waypointHandles" :key="`wp-${wp.waypointIndex}`">
+        <g
+          pointer-events="all"
+          :data-waypoint-handle="`wp-${wp.waypointIndex}`"
+          style="cursor: move"
+          @pointerdown="(e: PointerEvent) => onWaypointPointerDown('waypoint', wp.waypointIndex, e)"
+        >
+          <!-- Transparent hit circle — minimum 12 screen px target -->
+          <circle
+            :cx="wp.cx"
+            :cy="wp.cy"
+            :r="HIT_HALF_SCREEN / zoom"
+            fill="transparent"
+            stroke="none"
+            pointer-events="all"
+            class="diagram-waypoint-handle-hit"
+          />
+          <!-- Visible: small filled accent circle — distinct from endpoint circles (solid fill, smaller) -->
+          <circle
+            :cx="wp.cx"
+            :cy="wp.cy"
+            :r="(HANDLE_HALF_SCREEN * 0.75) / zoom"
+            fill="var(--color-accent, #6366f1)"
+            stroke="var(--color-surface, #ffffff)"
+            stroke-width="1"
+            vector-effect="non-scaling-stroke"
+            filter="url(#diagram-handle-shadow)"
+            pointer-events="none"
+            class="diagram-waypoint-handle-visible"
           />
         </g>
       </template>

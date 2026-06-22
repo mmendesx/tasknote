@@ -104,6 +104,8 @@ export function useCanvasKeyboard(store: Store, drawTools: DrawTools) {
       }
     }
     if (nudgePatches.length > 0) {
+      // The store re-anchors bound connectors inside updateElements
+      // (reanchorBoundConnectorsInPlace) whenever a bindable shape moves.
       store.updateElements(nudgePatches)
     }
     return true

@@ -137,6 +137,44 @@ describe('DiagramsView', () => {
     expect(router.currentRoute.value.name).toBe('diagrams')
   })
 
+  // Regression (bug: no way to set the diagram title in the editor). The detail
+  // header now has an editable title that commits via renameDiagram on blur.
+  it('editing the title in the detail header renames the diagram', async () => {
+    const { diagrams: apiDiagrams } = await import('@/api')
+    vi.mocked(apiDiagrams.updateDiagram).mockResolvedValueOnce({
+      id: 42, title: 'Renamed', updated_at: new Date(0).toISOString(),
+    } as never)
+
+    const { wrapper, pinia } = await mountView({ path: '/diagrams/42' })
+
+    // The canvas (stubbed here) owns loadDiagram, so seed the editor title the
+    // way a loaded diagram would, then let the header's watch sync the draft.
+    pinia.state.value['diagrams'].title = 'New diagram'
+    await wrapper.vm.$nextTick()
+
+    const titleInput = wrapper.find('input.diagrams-view__title-input')
+    expect(titleInput.exists()).toBe(true)
+    expect((titleInput.element as HTMLInputElement).value).toBe('New diagram')
+
+    await titleInput.setValue('Renamed')
+    await titleInput.trigger('blur')
+    await flushPromises()
+
+    expect(apiDiagrams.updateDiagram).toHaveBeenCalledWith(42, { title: 'Renamed' })
+  })
+
+  it('does not rename when the title is unchanged on blur', async () => {
+    const { diagrams: apiDiagrams } = await import('@/api')
+    const { wrapper } = await mountView({ path: '/diagrams/42' })
+
+    const titleInput = wrapper.find('input.diagrams-view__title-input')
+    // Blur without changing the value.
+    await titleInput.trigger('blur')
+    await flushPromises()
+
+    expect(apiDiagrams.updateDiagram).not.toHaveBeenCalled()
+  })
+
   // Guard: loading state renders spinner
   it('shows a loading spinner while the list is loading', async () => {
     // Delay the API to keep loading=true during mount render

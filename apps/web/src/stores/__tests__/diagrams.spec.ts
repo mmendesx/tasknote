@@ -14,6 +14,15 @@ vi.mock('@/api', () => ({
 import { useDiagramsStore } from '@/stores/diagrams'
 import * as api from '@/api'
 import type { Diagram, DiagramElement, DiagramViewport } from '@tasknote/shared'
+import {
+  autoWaypoints,
+  facingSide,
+  facingSideAnchor,
+  composeManualRoute,
+  chooseConnectorSides,
+  anchorForSide,
+} from '@/features/diagrams/orthogonalRoute'
+import { elementCenter } from '@/features/diagrams/connectors'
 
 // makeRectangle width=100, height=50 → center = (x+50, y+25)
 // For center (100,100): x=50, y=75
@@ -599,9 +608,9 @@ describe('ICT-6 persistence', () => {
     const savedArrow = savedElements.find((e: DiagramElement) => e.id === 'arrow-1')
     expect(savedArrow).toBeDefined()
     if (savedArrow?.type === 'arrow') {
-      // ICT-12: edge-anchored — start is on the R boundary facing (300,300), not the center.
-      expect(savedArrow.points[0][0]).toBeCloseTo(201.15, 1)
-      expect(savedArrow.points[0][1]).toBeCloseTo(168.2, 1)
+      // spec-20: start = facing-side midpoint of R toward (300,300) — bottom side, (180,165).
+      expect(savedArrow.points[0][0]).toBeCloseTo(180, 1)
+      expect(savedArrow.points[0][1]).toBeCloseTo(165, 1)
       expect(savedArrow.points[1]).toEqual([300, 300])
     }
   })
@@ -899,9 +908,9 @@ describe('useDiagramsStore — connector detach on manual drag (ICT-3)', () => {
     const updatedArrow = store.elements.find((e) => e.id === 'arrow-1')
     expect(updatedArrow?.type).toBe('arrow')
     if (updatedArrow?.type === 'arrow') {
-      // ICT-12: edge-anchored — start is on R's boundary facing the free end (300,300).
-      expect(updatedArrow.points[0][0]).toBeCloseTo(201.15, 1)
-      expect(updatedArrow.points[0][1]).toBeCloseTo(168.2, 1)
+      // spec-20: start = facing-side midpoint of R toward free end (300,300) — (180,165).
+      expect(updatedArrow.points[0][0]).toBeCloseTo(180, 1)
+      expect(updatedArrow.points[0][1]).toBeCloseTo(165, 1)
       expect(updatedArrow.points[1]).toEqual([300, 300])
       // Binding on R must still be intact after shape move
       expect(updatedArrow.startBinding).toEqual({ elementId: 'R' })
@@ -935,9 +944,9 @@ describe('useDiagramsStore — bound connector rerouting (ICT-4)', () => {
     const updatedArrow = store.elements.find((e) => e.id === 'arrow-1')!
     expect(updatedArrow.type).toBe('arrow')
     if (updatedArrow.type === 'arrow') {
-      // ICT-12: edge-anchored — start is on R's boundary facing the free end (300,300).
-      expect(updatedArrow.points[0][0]).toBeCloseTo(201.15, 1)
-      expect(updatedArrow.points[0][1]).toBeCloseTo(168.2, 1)
+      // spec-20: start = facing-side midpoint of R toward free end (300,300) — (180,165).
+      expect(updatedArrow.points[0][0]).toBeCloseTo(180, 1)
+      expect(updatedArrow.points[0][1]).toBeCloseTo(165, 1)
       expect(updatedArrow.points[1]).toEqual([300, 300])
     }
   })
@@ -955,13 +964,13 @@ describe('useDiagramsStore — bound connector rerouting (ICT-4)', () => {
     const updatedArrow = store.elements.find((e) => e.id === 'arrow-1')!
     expect(updatedArrow.type).toBe('arrow')
     if (updatedArrow.type === 'arrow') {
-      // FR-B5/FR-B3: both ends recompute along the new center-to-center ray.
-      // Start is edge-anchored on R's boundary facing the new E center (400,400).
-      expect(updatedArrow.points[0][0]).toBeCloseTo(127.83, 1)
-      expect(updatedArrow.points[0][1]).toBeCloseTo(127.83, 1)
-      // End is edge-anchored on E's boundary facing R's center (100,100).
-      expect(updatedArrow.points[1][0]).toBeCloseTo(372.17, 1)
-      expect(updatedArrow.points[1][1]).toBeCloseTo(372.17, 1)
+      // spec-21 clearance routing: R(50-150 x, 75-125 y), E(350-450 x, 375-425 y).
+      // gapX=200, gapY=250 → Y is roomier → route vertical (R-bottom → E-top),
+      // overriding the center tie. Start = R bottom mid (100,125); end = E top mid (400,375).
+      expect(updatedArrow.points[0][0]).toBeCloseTo(100, 1)
+      expect(updatedArrow.points[0][1]).toBeCloseTo(125, 1)
+      expect(updatedArrow.points[1][0]).toBeCloseTo(400, 1)
+      expect(updatedArrow.points[1][1]).toBeCloseTo(375, 1)
     }
   })
 
@@ -1003,9 +1012,9 @@ describe('useDiagramsStore — bound connector rerouting (ICT-4)', () => {
     expect(savedArrow).toBeDefined()
     expect(savedArrow!.type).toBe('arrow')
     if (savedArrow!.type === 'arrow') {
-      // ICT-12: edge-anchored — start is on R's boundary facing the free end (300,300).
-      expect(savedArrow!.points[0][0]).toBeCloseTo(201.15, 1)
-      expect(savedArrow!.points[0][1]).toBeCloseTo(168.2, 1)
+      // spec-20: start = facing-side midpoint of R toward free end (300,300) — (180,165).
+      expect(savedArrow!.points[0][0]).toBeCloseTo(180, 1)
+      expect(savedArrow!.points[0][1]).toBeCloseTo(165, 1)
     }
   })
 })
@@ -1041,11 +1050,11 @@ describe('useDiagramsStore — both-bound arrow rerouting (ICT-6)', () => {
     const updated = store.elements.find((e) => e.id === 'arrow-1')!
     expect(updated.type).toBe('arrow')
     if (updated.type === 'arrow') {
-      // Start: on new A boundary (cx=150) facing B center (350,25) → right edge, gap-stepped
-      expect(updated.points[0][0]).toBeCloseTo(204, 0)
+      // Start: on new A boundary (cx=150) facing B center (350,25) → right edge
+      expect(updated.points[0][0]).toBeCloseTo(200, 0)
       expect(updated.points[0][1]).toBeCloseTo(25, 0)
-      // End: on B boundary (cx=350) facing new A center (150,25) → left edge, gap-stepped
-      expect(updated.points[1][0]).toBeCloseTo(296, 0)
+      // End: on B boundary (cx=350) facing new A center (150,25) → left edge
+      expect(updated.points[1][0]).toBeCloseTo(300, 0)
       expect(updated.points[1][1]).toBeCloseTo(25, 0)
       // Bindings intact
       expect(updated.startBinding).toEqual({ elementId: 'A' })
@@ -1067,11 +1076,11 @@ describe('useDiagramsStore — both-bound arrow rerouting (ICT-6)', () => {
     const updated = store.elements.find((e) => e.id === 'arrow-1')!
     expect(updated.type).toBe('arrow')
     if (updated.type === 'arrow') {
-      // Start: on resized A boundary facing B center (350,25) → right edge, gap-stepped
-      expect(updated.points[0][0]).toBeCloseTo(204, 0)
+      // Start: on resized A boundary facing B center (350,25) → right edge
+      expect(updated.points[0][0]).toBeCloseTo(200, 0)
       expect(updated.points[0][1]).toBeCloseTo(25, 0)
-      // End: on B boundary facing new A center (100,25) → left edge, gap-stepped
-      expect(updated.points[1][0]).toBeCloseTo(296, 0)
+      // End: on B boundary facing new A center (100,25) → left edge
+      expect(updated.points[1][0]).toBeCloseTo(300, 0)
       expect(updated.points[1][1]).toBeCloseTo(25, 0)
     }
   })
@@ -1088,8 +1097,8 @@ describe('useDiagramsStore — both-bound arrow rerouting (ICT-6)', () => {
     expect(updated.type).toBe('arrow')
     if (updated.type === 'arrow') {
       // Start is edge-anchored on R's new boundary facing the free end (300,300).
-      expect(updated.points[0][0]).toBeCloseTo(201.15, 1)
-      expect(updated.points[0][1]).toBeCloseTo(168.2, 1)
+      expect(updated.points[0][0]).toBeCloseTo(180, 1)
+      expect(updated.points[0][1]).toBeCloseTo(165, 1)
       // End (free) is unchanged.
       expect(updated.points[1]).toEqual([300, 300])
     }
@@ -1701,8 +1710,8 @@ describe('useDiagramsStore — legacy center-anchored binding (ICT-12)', () => {
     expect(arrowAfterMove?.type).toBe('arrow')
     if (arrowAfterMove?.type === 'arrow') {
       // Edge-anchored: start is on R's new boundary facing (300, 300)
-      expect(arrowAfterMove.points[0][0]).toBeCloseTo(201.15, 1)
-      expect(arrowAfterMove.points[0][1]).toBeCloseTo(168.2, 1)
+      expect(arrowAfterMove.points[0][0]).toBeCloseTo(180, 1)
+      expect(arrowAfterMove.points[0][1]).toBeCloseTo(165, 1)
       // Free end unchanged
       expect(arrowAfterMove.points[1]).toEqual([300, 300])
     }
@@ -1809,8 +1818,8 @@ describe('useDiagramsStore — updateElements batch (ICT-11 FR-B8)', () => {
     expect(updatedArrow?.type).toBe('arrow')
     if (updatedArrow?.type === 'arrow') {
       // Edge-anchored result identical to single-call path (ICT-12).
-      expect(updatedArrow.points[0][0]).toBeCloseTo(201.15, 1)
-      expect(updatedArrow.points[0][1]).toBeCloseTo(168.2, 1)
+      expect(updatedArrow.points[0][0]).toBeCloseTo(180, 1)
+      expect(updatedArrow.points[0][1]).toBeCloseTo(165, 1)
       expect(updatedArrow.points[1]).toEqual([300, 300])
     }
   })
@@ -1856,5 +1865,632 @@ describe('useDiagramsStore — updateElements batch (ICT-11 FR-B8)', () => {
     vi.advanceTimersByTime(700)
     await Promise.resolve()
     expect(api.diagrams.updateDiagram).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ── ICT-3: waypoints written on every connector write path ──────────────────
+
+const EPSILON = 0.001
+
+describe('reanchorBoundConnectorsInPlace — waypoints (ICT-3)', () => {
+  let store: ReturnType<typeof useDiagramsStore>
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    store = useDiagramsStore()
+    vi.resetAllMocks()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('both-bound auto arrow: moving a shape stores side-aware waypoints and routeMode auto', () => {
+    // R at (50,75): center (100,100). S at (300,75): center (350,100).
+    // After moving R down to y=175, centers differ in y: R=(100,200), S=(350,100).
+    // Both sides are right/left (|dx|>=|dy|) but y differs → 2-bend Z waypoints.
+    const R = makeRectangleAt('R', 50, 75)
+    const S = makeRectangleAt('S', 300, 75)
+    const arrow: DiagramElement = {
+      ...makeArrow('arrow-1', [[154, 100], [296, 100]], 'R', 'S'),
+    }
+    store.elements = [R, S, arrow]
+
+    // Move R down by 100px: new center (100,200), S center still (350,100).
+    store.updateElements([{ id: 'R', patch: { x: 50, y: 175 } }])
+
+    const updatedArrow = store.elements.find((e) => e.id === 'arrow-1')
+    expect(updatedArrow?.type).toBe('arrow')
+    if (updatedArrow?.type !== 'arrow') return
+
+    const newR = store.elements.find((e) => e.id === 'R')!
+    const newS = store.elements.find((e) => e.id === 'S')!
+
+    const rCenter = elementCenter(newR)
+    const sCenter = elementCenter(newS)
+    const expectedStartSide = facingSide(newR, [sCenter.x, sCenter.y])
+    const expectedEndSide = facingSide(newS, [rCenter.x, rCenter.y])
+    const start = updatedArrow.points[0]
+    const end = updatedArrow.points[1]
+    const expectedWaypoints = autoWaypoints(start, expectedStartSide, end, expectedEndSide)
+
+    // The route must have interior bends (non-degenerate case).
+    expect(expectedWaypoints.length).toBeGreaterThan(0)
+    expect((updatedArrow as any).waypoints).toEqual(expectedWaypoints)
+    expect((updatedArrow as any).routeMode).toBe('auto')
+  })
+
+  // Regression (bug: dragging a bound shape spawned a growing stack of stray,
+  // disconnected/diagonal segments). A manual connector now REVERTS to a clean
+  // auto side-aware route when its bound shape moves — bounded and always
+  // orthogonal, no leg accumulation. (Preserving hand-drawn bends across a move
+  // is a tracked spec-21 follow-up requiring a separate waypoints data model.)
+  it('manual arrow: moving a bound shape reverts it to a clean orthogonal auto route', () => {
+    // R bound at the start; S bound at the end. Manual route with a user bend.
+    const R = makeRectangleAt('R', 50, 75)   // center (100,100)
+    const S = makeRectangleAt('S', 250, 275) // center (300,300)
+    const arrow: DiagramElement = {
+      ...makeArrow('arrow-manual', [[150, 100], [250, 300]], 'R', 'S'),
+      waypoints: [[200, 100], [200, 300]] as [number, number][],
+      routeMode: 'manual',
+    } as unknown as DiagramElement
+
+    store.elements = [R, S, arrow]
+
+    // Move R so its anchor changes.
+    store.updateElements([{ id: 'R', patch: { x: 50, y: 125 } }])
+
+    const updated = store.elements.find((e) => e.id === 'arrow-manual')
+    expect(updated?.type).toBe('arrow')
+    if (updated?.type !== 'arrow') return
+
+    // Reverted to auto.
+    expect((updated as any).routeMode).toBe('auto')
+
+    // Route equals the side-aware auto route from the new anchors (no stale bends).
+    const newR = store.elements.find((e) => e.id === 'R')!
+    const newS = store.elements.find((e) => e.id === 'S')!
+    const start = updated.points[0]
+    const end = updated.points[1]
+    const startSide = facingSide(newR, [elementCenter(newS).x, elementCenter(newS).y])
+    const endSide = facingSide(newS, [elementCenter(newR).x, elementCenter(newR).y])
+    const expected = autoWaypoints(start, startSide, end, endSide)
+    expect((updated as any).waypoints).toEqual(expected)
+
+    // Full route must be axis-aligned (the bug produced diagonals).
+    const fullRoute: [number, number][] = [start, ...((updated as any).waypoints ?? []), end]
+    for (let i = 0; i < fullRoute.length - 1; i++) {
+      const [x1, y1] = fullRoute[i]!
+      const [x2, y2] = fullRoute[i + 1]!
+      const isAxisAligned = Math.abs(x1 - x2) < EPSILON || Math.abs(y1 - y2) < EPSILON
+      expect(isAxisAligned, `segment ${i} → ${i + 1} is not axis-aligned: [${x1},${y1}] → [${x2},${y2}]`).toBe(true)
+    }
+  })
+})
+
+// ─── ICT-8: Load-time normalization for legacy scenes ────────────────────────
+
+describe('loadDiagram — legacy connector normalization (ICT-8)', () => {
+  let store: ReturnType<typeof useDiagramsStore>
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    store = useDiagramsStore()
+    vi.resetAllMocks()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('legacy both-bound arrow (no waypoints/routeMode) gets waypoints and routeMode auto after load', async () => {
+    // R: x=50, y=75, w=100, h=50 → center (100,100)
+    // S: x=300, y=75, w=100, h=50 → center (350,100)
+    // Centers differ only in X (purely horizontal) — facingSide will pick right/left.
+    const R = makeRectangleAt('R', 50, 75)
+    const S = makeRectangleAt('S', 300, 75)
+    // Legacy arrow: points at spec-20 center positions, NO waypoints, NO routeMode.
+    const legacyArrow: DiagramElement = {
+      id: 'arrow-legacy',
+      type: 'arrow',
+      points: [[100, 100], [350, 100]],
+      stroke: '#000000',
+      strokeWidth: 1,
+      startBinding: { elementId: 'R' },
+      endBinding: { elementId: 'S' },
+    } as DiagramElement
+    const diagram = makeDiagram(1, 'Legacy', [R, S, legacyArrow])
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
+
+    await store.loadDiagram(1)
+
+    const loaded = store.elements.find((e) => e.id === 'arrow-legacy')
+    expect(loaded).toBeDefined()
+    expect(loaded?.type).toBe('arrow')
+    if (loaded?.type !== 'arrow') return
+
+    // Derive the expected values using the same geometry the helper uses.
+    const rCenter = elementCenter(R)
+    const sCenter = elementCenter(S)
+    const startToward: [number, number] = [sCenter.x, sCenter.y]
+    const endToward: [number, number] = [rCenter.x, rCenter.y]
+    const expectedStart = facingSideAnchor(R, startToward)
+    const expectedEnd = facingSideAnchor(S, endToward)
+    const expectedStartSide = facingSide(R, startToward)
+    const expectedEndSide = facingSide(S, endToward)
+    const expectedWaypoints = autoWaypoints(expectedStart, expectedStartSide, expectedEnd, expectedEndSide)
+
+    expect(loaded.points[0]).toEqual(expectedStart)
+    expect(loaded.points[1]).toEqual(expectedEnd)
+    expect((loaded as any).waypoints).toEqual(expectedWaypoints)
+    expect((loaded as any).routeMode).toBe('auto')
+  })
+
+  // ICT-7: a persisted manual connector with no userBends migrates its waypoints
+  // into userBends on load and recomposes the route (keeping endpoints verbatim).
+  it('migrates a manual connector: seeds userBends from waypoints, keeps points', async () => {
+    const R = makeRectangleAt('R', 100, 75)
+    const S = makeRectangleAt('S', 250, 75)
+    // An orthogonal single-jog route (every segment shares x or y).
+    const persistedWaypoints: [number, number][] = [[150, 60], [300, 60]]
+    const manualArrow: DiagramElement = {
+      id: 'arrow-manual',
+      type: 'arrow',
+      points: [[150, 100], [300, 100]],
+      stroke: '#000000',
+      strokeWidth: 1,
+      startBinding: { elementId: 'R' },
+      endBinding: { elementId: 'S' },
+      waypoints: persistedWaypoints,
+      routeMode: 'manual',
+      // No userBends — pre-ICT-1 save.
+    } as unknown as DiagramElement
+    const diagram = makeDiagram(1, 'Manual', [R, S, manualArrow])
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
+
+    await store.loadDiagram(1)
+
+    const loaded = store.elements.find((e) => e.id === 'arrow-manual')
+    expect(loaded).toBeDefined()
+    if (loaded?.type !== 'arrow') return
+    // Endpoints kept verbatim — no jump on load.
+    expect(loaded.points[0]).toEqual([150, 100])
+    expect(loaded.points[1]).toEqual([300, 100])
+    // userBends seeded from the persisted route's interior, verbatim.
+    expect((loaded as any).userBends).toEqual(persistedWaypoints)
+    expect((loaded as any).routeMode).toBe('manual')
+    // Orthogonal data round-trips through the composer — route looks identical.
+    const sSide = facingSide(R, persistedWaypoints[0])
+    const eSide = facingSide(S, persistedWaypoints[persistedWaypoints.length - 1])
+    expect((loaded as any).waypoints).toEqual(
+      composeManualRoute([150, 100], sSide, persistedWaypoints, [300, 100], eSide),
+    )
+  })
+
+  it('migrates a free-end manual connector without emptying its route', async () => {
+    // The regression that a computeAutoRoute-reuse would cause: a free/unbound
+    // manual connector must NOT have its route wiped on load.
+    const persistedWaypoints: [number, number][] = [[100, 200], [300, 200]]
+    const freeManual: DiagramElement = {
+      id: 'arrow-free',
+      type: 'arrow',
+      points: [[100, 100], [300, 100]],
+      stroke: '#000000',
+      strokeWidth: 1,
+      startBinding: null,
+      endBinding: null,
+      waypoints: persistedWaypoints,
+      routeMode: 'manual',
+    } as unknown as DiagramElement
+    const diagram = makeDiagram(1, 'Free', [freeManual])
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
+
+    await store.loadDiagram(1)
+
+    const loaded = store.elements.find((e) => e.id === 'arrow-free')
+    expect(loaded).toBeDefined()
+    if (loaded?.type !== 'arrow') return
+    expect((loaded as any).routeMode).toBe('manual')
+    expect((loaded as any).userBends).toEqual(persistedWaypoints)
+    // Route is NOT emptied — both bends survive.
+    expect((loaded as any).waypoints.length).toBeGreaterThan(0)
+    expect((loaded as any).waypoints).toContainEqual([100, 200])
+    expect((loaded as any).waypoints).toContainEqual([300, 200])
+  })
+
+  it('leaves an already-migrated manual connector (userBends present) untouched', async () => {
+    const userBends: [number, number][] = [[200, 60]]
+    const migrated: DiagramElement = {
+      id: 'arrow-done',
+      type: 'arrow',
+      points: [[150, 100], [300, 100]],
+      stroke: '#000000',
+      strokeWidth: 1,
+      startBinding: null,
+      endBinding: null,
+      waypoints: [[200, 100]],
+      userBends,
+      routeMode: 'manual',
+    } as unknown as DiagramElement
+    const diagram = makeDiagram(1, 'Done', [migrated])
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
+
+    await store.loadDiagram(1)
+
+    const loaded = store.elements.find((e) => e.id === 'arrow-done')
+    // Untouched: userBends and waypoints as saved.
+    expect((loaded as any).userBends).toEqual(userBends)
+    expect((loaded as any).waypoints).toEqual([[200, 100]])
+  })
+
+  it('connector already auto with waypoints:[] is left untouched by load', async () => {
+    const R = makeRectangleAt('R', 50, 75)
+    const S = makeRectangleAt('S', 300, 75)
+    const autoArrow: DiagramElement = {
+      id: 'arrow-auto',
+      type: 'arrow',
+      points: [[154, 100], [296, 100]],
+      stroke: '#000000',
+      strokeWidth: 1,
+      startBinding: { elementId: 'R' },
+      endBinding: { elementId: 'S' },
+      waypoints: [],
+      routeMode: 'auto',
+    } as unknown as DiagramElement
+    const diagram = makeDiagram(1, 'Auto', [R, S, autoArrow])
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
+
+    await store.loadDiagram(1)
+
+    const loaded = store.elements.find((e) => e.id === 'arrow-auto')
+    expect(loaded).toBeDefined()
+    if (loaded?.type !== 'arrow') return
+    expect(loaded.points[0]).toEqual([154, 100])
+    expect(loaded.points[1]).toEqual([296, 100])
+    expect((loaded as any).waypoints).toEqual([])
+    expect((loaded as any).routeMode).toBe('auto')
+  })
+
+  it('legacy one-bound arrow gets waypoints:[] and routeMode auto, points unchanged', async () => {
+    const R = makeRectangleAt('R', 50, 75)
+    const oneBoundArrow: DiagramElement = {
+      id: 'arrow-one-bound',
+      type: 'arrow',
+      points: [[154, 100], [400, 200]],
+      stroke: '#000000',
+      strokeWidth: 1,
+      startBinding: { elementId: 'R' },
+      endBinding: null,
+    } as DiagramElement
+    const diagram = makeDiagram(1, 'OneBound', [R, oneBoundArrow])
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
+
+    await store.loadDiagram(1)
+
+    const loaded = store.elements.find((e) => e.id === 'arrow-one-bound')
+    expect(loaded).toBeDefined()
+    if (loaded?.type !== 'arrow') return
+    // Points are NOT recomputed for one-bound connectors.
+    expect(loaded.points[0]).toEqual([154, 100])
+    expect(loaded.points[1]).toEqual([400, 200])
+    expect((loaded as any).waypoints).toEqual([])
+    expect((loaded as any).routeMode).toBe('auto')
+  })
+
+  it('legacy unbound arrow gets waypoints:[] and routeMode auto, points unchanged', async () => {
+    const freeArrow: DiagramElement = {
+      id: 'arrow-free',
+      type: 'arrow',
+      points: [[0, 0], [100, 100]],
+      stroke: '#000000',
+      strokeWidth: 1,
+      startBinding: null,
+      endBinding: null,
+    } as DiagramElement
+    const diagram = makeDiagram(1, 'Free', [freeArrow])
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
+
+    await store.loadDiagram(1)
+
+    const loaded = store.elements.find((e) => e.id === 'arrow-free')
+    expect(loaded).toBeDefined()
+    if (loaded?.type !== 'arrow') return
+    expect(loaded.points[0]).toEqual([0, 0])
+    expect(loaded.points[1]).toEqual([100, 100])
+    expect((loaded as any).waypoints).toEqual([])
+    expect((loaded as any).routeMode).toBe('auto')
+  })
+})
+
+describe('useDiagramsStore — resetConnectorRoute (ICT-7)', () => {
+  let store: ReturnType<typeof useDiagramsStore>
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    store = useDiagramsStore()
+    vi.resetAllMocks()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('both-bound manual arrow resets to auto with recomputed waypoints and preserves bindings', () => {
+    // R: center (100,100); x=50, y=75, w=100, h=50
+    // S: center (300,200); x=250, y=175, w=100, h=50
+    const R = makeRectangleAt('R', 50, 75)
+    const S = makeRectangleAt('S', 250, 175)
+
+    // Precompute the expected auto-route so we can assert equality.
+    const startCenter = elementCenter(R)
+    const endCenter = elementCenter(S)
+    const startToward: [number, number] = [endCenter.x, endCenter.y]
+    const endToward: [number, number] = [startCenter.x, startCenter.y]
+    const expectedStart = facingSideAnchor(R, startToward)
+    const expectedEnd = facingSideAnchor(S, endToward)
+    const expectedStartSide = facingSide(R, startToward)
+    const expectedEndSide = facingSide(S, endToward)
+    const expectedWaypoints = autoWaypoints(expectedStart, expectedStartSide, expectedEnd, expectedEndSide)
+
+    const manualArrow: DiagramElement = {
+      id: 'arrow-1',
+      type: 'arrow',
+      points: [[100, 100], [300, 200]],
+      stroke: '#000000',
+      strokeWidth: 1,
+      startBinding: { elementId: 'R' },
+      endBinding: { elementId: 'S' },
+      // Manual waypoints that will be wiped out
+      ...({ waypoints: [[150, 100], [150, 200]], routeMode: 'manual' } as object),
+    } as DiagramElement
+
+    store.elements = [R, S, manualArrow]
+
+    store.resetConnectorRoute('arrow-1')
+
+    const updated = store.elements.find((e) => e.id === 'arrow-1')
+    expect(updated).toBeDefined()
+    expect((updated as any).routeMode).toBe('auto')
+    expect((updated as any).waypoints).toEqual(expectedWaypoints)
+    // Bindings must be preserved — not nulled out by the detach guard
+    expect((updated as any).startBinding).toEqual({ elementId: 'R' })
+    expect((updated as any).endBinding).toEqual({ elementId: 'S' })
+  })
+
+  it('one-bound manual arrow resets routeMode to auto and clears waypoints', () => {
+    const R = makeRectangleAt('R', 50, 75)
+    const manualArrow: DiagramElement = {
+      id: 'arrow-1',
+      type: 'arrow',
+      points: [[100, 100], [300, 200]],
+      stroke: '#000000',
+      strokeWidth: 1,
+      startBinding: { elementId: 'R' },
+      endBinding: null,
+      ...({ waypoints: [[150, 100], [150, 200]], routeMode: 'manual' } as object),
+    } as DiagramElement
+
+    store.elements = [R, manualArrow]
+
+    store.resetConnectorRoute('arrow-1')
+
+    const updated = store.elements.find((e) => e.id === 'arrow-1')
+    expect(updated).toBeDefined()
+    expect((updated as any).routeMode).toBe('auto')
+    expect((updated as any).waypoints).toEqual([])
+  })
+
+  it('unbound manual arrow resets routeMode to auto and clears waypoints, keeps points', () => {
+    const manualArrow: DiagramElement = {
+      id: 'arrow-1',
+      type: 'arrow',
+      points: [[10, 20], [200, 300]],
+      stroke: '#000000',
+      strokeWidth: 1,
+      startBinding: null,
+      endBinding: null,
+      ...({ waypoints: [[50, 50]], routeMode: 'manual' } as object),
+    } as DiagramElement
+
+    store.elements = [manualArrow]
+
+    store.resetConnectorRoute('arrow-1')
+
+    const updated = store.elements.find((e) => e.id === 'arrow-1')
+    expect(updated).toBeDefined()
+    expect((updated as any).routeMode).toBe('auto')
+    expect((updated as any).waypoints).toEqual([])
+    // Points are unchanged for the unbound case
+    expect((updated as any).points).toEqual([[10, 20], [200, 300]])
+  })
+
+  it('creates exactly one history entry — undo restores manual waypoints', () => {
+    const R = makeRectangleAt('R', 50, 75)
+    const S = makeRectangleAt('S', 250, 175)
+    const manualWaypoints: [number, number][] = [[150, 100], [150, 200]]
+    const manualArrow: DiagramElement = {
+      id: 'arrow-1',
+      type: 'arrow',
+      points: [[100, 100], [300, 200]],
+      stroke: '#000000',
+      strokeWidth: 1,
+      startBinding: { elementId: 'R' },
+      endBinding: { elementId: 'S' },
+      ...({ waypoints: manualWaypoints, routeMode: 'manual' } as object),
+    } as DiagramElement
+
+    store.elements = [R, S, manualArrow]
+
+    store.resetConnectorRoute('arrow-1')
+
+    // Confirm it changed
+    expect((store.elements.find((e) => e.id === 'arrow-1') as any).routeMode).toBe('auto')
+
+    // Undo restores the manual state
+    store.undoAction()
+
+    const restored = store.elements.find((e) => e.id === 'arrow-1')
+    expect((restored as any).routeMode).toBe('manual')
+    expect((restored as any).waypoints).toEqual(manualWaypoints)
+  })
+
+  it('no-ops when id does not match a connector', () => {
+    const R = makeRectangleAt('R', 50, 75)
+    store.elements = [R]
+
+    // Should not throw, should leave elements unchanged
+    expect(() => store.resetConnectorRoute('R')).not.toThrow()
+    expect((store.elements.find((e) => e.id === 'R') as any).routeMode).toBeUndefined()
+  })
+
+  // ICT-6: reset clears userBends so a subsequent move can't recompose a manual route.
+  it('clears userBends back to auto on reset', () => {
+    const R = makeRectangleAt('R', 50, 75)
+    const S = makeRectangleAt('S', 250, 175)
+    const manualArrow: DiagramElement = {
+      ...makeArrow('arrow-1', [[100, 100], [300, 200]], 'R', 'S'),
+      ...({ userBends: [[150, 130]], waypoints: [[150, 130]], routeMode: 'manual' } as object),
+    } as DiagramElement
+    store.elements = [R, S, manualArrow]
+
+    store.resetConnectorRoute('arrow-1')
+
+    const updated = store.elements.find((e) => e.id === 'arrow-1') as any
+    expect(updated.routeMode).toBe('auto')
+    expect(updated.userBends).toBeUndefined()
+  })
+})
+
+describe('useDiagramsStore — manual route preservation on move (ICT-3)', () => {
+  let store: ReturnType<typeof useDiagramsStore>
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    store = useDiagramsStore()
+    vi.resetAllMocks()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  // Build a both-bound manual arrow carrying a single user bend, recomposed
+  // consistently with the store's own composer so the assertion tracks geometry.
+  function setupManualArrow(rx: number, ry: number, sx: number, sy: number, bend: [number, number]) {
+    const R = makeRectangleAt('R', rx, ry)
+    const S = makeRectangleAt('S', sx, sy)
+    const { startSide, endSide } = chooseConnectorSides(R, S)
+    const start = anchorForSide(R, startSide)
+    const end = anchorForSide(S, endSide)
+    const waypoints = composeManualRoute(start, startSide, [bend], end, endSide)
+    const arrow: DiagramElement = {
+      ...makeArrow('arrow-1', [start, end], 'R', 'S'),
+      ...({ userBends: [bend], waypoints, routeMode: 'manual' } as object),
+    } as DiagramElement
+    store.elements = [R, S, arrow]
+    return { R, S }
+  }
+
+  it('keeps the user bend fixed and reconnects the leg when a bound shape moves', () => {
+    // x=180 is distinct from both anchor x-lines so the bend can't collapse away.
+    const bend: [number, number] = [180, 140]
+    setupManualArrow(50, 75, 250, 175, bend)
+
+    // Move R down by 5px (keeps R left of S so sides stay right→left).
+    store.updateElements([{ id: 'R', patch: { x: 50, y: 80 } }])
+
+    const arrow = store.elements.find((e) => e.id === 'arrow-1') as any
+    const R2 = store.elements.find((e) => e.id === 'R')!
+    const S = store.elements.find((e) => e.id === 'S')!
+
+    // routeMode stays manual, userBends untouched, waypoints recomposed against
+    // the new anchors.
+    expect(arrow.routeMode).toBe('manual')
+    expect(arrow.userBends).toEqual([bend])
+    const { startSide, endSide } = chooseConnectorSides(R2, S)
+    const start = anchorForSide(R2, startSide)
+    const end = anchorForSide(S, endSide)
+    expect(arrow.waypoints).toEqual(composeManualRoute(start, startSide, [bend], end, endSide))
+    // The bend's x-line survives — the route still turns at x=180.
+    expect(arrow.waypoints.some((p: [number, number]) => p[0] === bend[0])).toBe(true)
+  })
+
+  it('does not accumulate leg corners over repeated moves', () => {
+    const bend: [number, number] = [180, 140]
+    setupManualArrow(50, 75, 250, 175, bend)
+
+    for (let i = 0; i < 5; i++) {
+      const r = store.elements.find((e) => e.id === 'R') as any
+      store.updateElements([{ id: 'R', patch: { x: r.x + 5, y: r.y } }])
+    }
+
+    const arrow = store.elements.find((e) => e.id === 'arrow-1') as any
+    const R2 = store.elements.find((e) => e.id === 'R')!
+    const S = store.elements.find((e) => e.id === 'S')!
+    const { startSide, endSide } = chooseConnectorSides(R2, S)
+    const start = anchorForSide(R2, startSide)
+    const end = anchorForSide(S, endSide)
+    // After N moves, the route equals a single fresh recompose — no pile-up.
+    expect(arrow.waypoints).toEqual(composeManualRoute(start, startSide, [bend], end, endSide))
+    expect(arrow.userBends).toEqual([bend])
+  })
+
+  it('keeps a bend that ends up inside the moved shape (no bbox filtering)', () => {
+    const bend: [number, number] = [180, 140]
+    setupManualArrow(50, 75, 250, 175, bend)
+
+    // Move R so its bbox engulfs the bend at (180,140): x=150..250, y=120..170.
+    store.updateElements([{ id: 'R', patch: { x: 150, y: 120 } }])
+
+    const arrow = store.elements.find((e) => e.id === 'arrow-1') as any
+    expect(arrow.userBends).toEqual([bend])
+  })
+
+  // Keyboard nudge goes through the same updateElements path as a drag move
+  // (useCanvasKeyboard → store.updateElements), so userBends is preserved there too.
+  it('preserves user bends across a keyboard-style nudge (updateElements path)', () => {
+    const bend: [number, number] = [180, 140]
+    setupManualArrow(50, 75, 250, 175, bend)
+
+    // A 1px nudge of the bound shape — the exact shape of a keyboard step patch.
+    const r = store.elements.find((e) => e.id === 'R') as any
+    store.updateElements([{ id: 'R', patch: { x: r.x, y: r.y + 1 } }])
+
+    const arrow = store.elements.find((e) => e.id === 'arrow-1') as any
+    expect(arrow.routeMode).toBe('manual')
+    expect(arrow.userBends).toEqual([bend])
+  })
+
+  // Move + reroute is one undo entry: the reanchor happens inside the single
+  // elements.value assignment in updateElements, so one history push covers both
+  // the shape position and the recomposed connector route.
+  it('move + reroute is a single undo entry', () => {
+    const bend: [number, number] = [180, 140]
+    setupManualArrow(50, 75, 250, 175, bend)
+    const before = store.elements.find((e) => e.id === 'arrow-1') as any
+    const beforeWaypoints = before.waypoints
+    const beforeR = store.elements.find((e) => e.id === 'R') as any
+    const beforeX = beforeR.x
+
+    // Caller pushes history once, then moves the shape (updateElements reanchors
+    // the connector in the same assignment).
+    store.pushHistory()
+    store.updateElements([{ id: 'R', patch: { x: beforeX + 60, y: beforeR.y } }])
+
+    // Route changed.
+    const moved = store.elements.find((e) => e.id === 'arrow-1') as any
+    expect(moved.waypoints).not.toEqual(beforeWaypoints)
+
+    // One undo restores BOTH the shape position and the connector route.
+    store.undoAction()
+    const restoredR = store.elements.find((e) => e.id === 'R') as any
+    const restoredArrow = store.elements.find((e) => e.id === 'arrow-1') as any
+    expect(restoredR.x).toBe(beforeX)
+    expect(restoredArrow.waypoints).toEqual(beforeWaypoints)
+    expect(restoredArrow.userBends).toEqual([bend])
   })
 })

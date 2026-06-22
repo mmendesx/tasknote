@@ -14,11 +14,28 @@ type PenEl = Extract<DiagramElement, { type: 'pen' }>
 function pointsToAttr(points: [number, number][]): string {
   return points.map(([x, y]) => `${x},${y}`).join(' ')
 }
+
+/**
+ * SVG points attr for a connector. Renders from the stored route:
+ * [start, ...waypoints, end]. No routing is performed at render time.
+ */
+function routeToAttr(el: LineEl | ArrowEl): string {
+  const route: [number, number][] = [el.points[0], ...(el.waypoints ?? []), el.points[1]]
+  return pointsToAttr(route)
+}
 </script>
 
 <template>
   <!-- rectangle -->
   <template v-if="element.type === 'rectangle'">
+    <clipPath :id="`label-clip-${element.id}`">
+      <rect
+        :x="(element as RectEl).x"
+        :y="(element as RectEl).y"
+        :width="(element as RectEl).width"
+        :height="(element as RectEl).height"
+      />
+    </clipPath>
     <rect
       :data-element-id="element.id"
       :x="(element as RectEl).x"
@@ -41,10 +58,30 @@ function pointsToAttr(points: [number, number][]): string {
       fill="transparent"
       class="diagram-hit-target"
     />
+    <!-- centered label — only when label is non-empty/non-whitespace -->
+    <text
+      v-if="(element as RectEl).label?.trim()"
+      :x="(element as RectEl).x + (element as RectEl).width / 2"
+      :y="(element as RectEl).y + (element as RectEl).height / 2"
+      text-anchor="middle"
+      dominant-baseline="central"
+      font-size="14"
+      :fill="(element as RectEl).stroke"
+      :clip-path="`url(#label-clip-${element.id})`"
+      pointer-events="none"
+    >{{ (element as RectEl).label }}</text>
   </template>
 
   <!-- ellipse -->
   <template v-else-if="element.type === 'ellipse'">
+    <clipPath :id="`label-clip-${element.id}`">
+      <ellipse
+        :cx="(element as EllEl).x + (element as EllEl).width / 2"
+        :cy="(element as EllEl).y + (element as EllEl).height / 2"
+        :rx="(element as EllEl).width / 2"
+        :ry="(element as EllEl).height / 2"
+      />
+    </clipPath>
     <ellipse
       :data-element-id="element.id"
       :cx="(element as EllEl).x + (element as EllEl).width / 2"
@@ -67,26 +104,34 @@ function pointsToAttr(points: [number, number][]): string {
       fill="transparent"
       class="diagram-hit-target"
     />
+    <!-- centered label — only when label is non-empty/non-whitespace -->
+    <text
+      v-if="(element as EllEl).label?.trim()"
+      :x="(element as EllEl).x + (element as EllEl).width / 2"
+      :y="(element as EllEl).y + (element as EllEl).height / 2"
+      text-anchor="middle"
+      dominant-baseline="central"
+      font-size="14"
+      :fill="(element as EllEl).stroke"
+      :clip-path="`url(#label-clip-${element.id})`"
+      pointer-events="none"
+    >{{ (element as EllEl).label }}</text>
   </template>
 
   <!-- line -->
   <template v-else-if="element.type === 'line'">
-    <line
+    <polyline
       :data-element-id="element.id"
-      :x1="(element as LineEl).points[0][0]"
-      :y1="(element as LineEl).points[0][1]"
-      :x2="(element as LineEl).points[1][0]"
-      :y2="(element as LineEl).points[1][1]"
+      :points="routeToAttr(element as LineEl)"
+      fill="none"
       :stroke="(element as LineEl).stroke"
       :stroke-width="(element as LineEl).strokeWidth"
     />
-    <!-- wide transparent hit-target -->
-    <line
+    <!-- wide transparent hit-target covers the full elbow path -->
+    <polyline
       :data-element-id="element.id"
-      :x1="(element as LineEl).points[0][0]"
-      :y1="(element as LineEl).points[0][1]"
-      :x2="(element as LineEl).points[1][0]"
-      :y2="(element as LineEl).points[1][1]"
+      :points="routeToAttr(element as LineEl)"
+      fill="none"
       stroke="transparent"
       class="diagram-hit-target"
     />
@@ -94,23 +139,19 @@ function pointsToAttr(points: [number, number][]): string {
 
   <!-- arrow -->
   <template v-else-if="element.type === 'arrow'">
-    <line
+    <polyline
       :data-element-id="element.id"
-      :x1="(element as ArrowEl).points[0][0]"
-      :y1="(element as ArrowEl).points[0][1]"
-      :x2="(element as ArrowEl).points[1][0]"
-      :y2="(element as ArrowEl).points[1][1]"
+      :points="routeToAttr(element as ArrowEl)"
+      fill="none"
       :stroke="(element as ArrowEl).stroke"
       :stroke-width="(element as ArrowEl).strokeWidth"
       marker-end="url(#diagram-arrowhead)"
     />
-    <!-- wide transparent hit-target -->
-    <line
+    <!-- wide transparent hit-target covers the full elbow path -->
+    <polyline
       :data-element-id="element.id"
-      :x1="(element as ArrowEl).points[0][0]"
-      :y1="(element as ArrowEl).points[0][1]"
-      :x2="(element as ArrowEl).points[1][0]"
-      :y2="(element as ArrowEl).points[1][1]"
+      :points="routeToAttr(element as ArrowEl)"
+      fill="none"
       stroke="transparent"
       class="diagram-hit-target"
     />

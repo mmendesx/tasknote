@@ -4,6 +4,8 @@ import type { VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import DiagramCanvas from '../DiagramCanvas.vue'
 import { useDiagramsStore } from '@/stores/diagrams'
+import type { DiagramElement } from '@tasknote/shared'
+import { facingSideAnchor } from '../orthogonalRoute'
 
 // ── API mock ──────────────────────────────────────────────────────────────────
 
@@ -28,7 +30,7 @@ const _mountedWrappers: VueWrapper[] = []
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function makeRect(id = 'rect-1', x = 100, y = 50) {
+function makeRect(id = 'rect-1', x = 100, y = 50): DiagramElement {
   return {
     id,
     type: 'rectangle' as const,
@@ -40,6 +42,15 @@ function makeRect(id = 'rect-1', x = 100, y = 50) {
     fill: null,
     strokeWidth: 2,
   }
+}
+
+function makeArrow(
+  id: string,
+  points: [[number, number], [number, number]],
+  startBinding: { elementId: string } | null = null,
+  endBinding: { elementId: string } | null = null,
+): DiagramElement {
+  return { id, type: 'arrow', points, stroke: '#000000', strokeWidth: 2, startBinding, endBinding }
 }
 
 async function mountCanvas(diagramId = 1) {
@@ -318,6 +329,116 @@ describe('DiagramShortcuts', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Z', ctrlKey: true, bubbles: true }))
     await Promise.resolve()
     expect(store.elements).toHaveLength(2)
+  })
+
+  // ICT-4: ArrowRight nudges rect AND re-anchors bound arrow endpoint
+  it('ArrowRight re-anchors a bound arrow endpoint to the rect new perimeter', async () => {
+    const { store, pinia } = await mountCanvas()
+
+    const state = pinia.state.value['diagrams']
+    const rect = makeRect('rect-1', 100, 50)
+    // Arrow: start unbound at (0, 80), end bound to rect-1
+    const startPoint: [number, number] = [0, 80]
+    const arrow = makeArrow('arrow-1', [startPoint, [100, 80]], null, { elementId: 'rect-1' })
+    state.elements = [rect, arrow]
+    state.selectedIds = ['rect-1']
+
+    fireKey('ArrowRight')
+
+    const updatedRect = store.elements.find((e) => e.id === 'rect-1')
+    expect((updatedRect as { x: number }).x).toBe(101)
+
+    const rectAtNewX = makeRect('rect-1', 101, 50)
+    const [expectedX, expectedY] = facingSideAnchor(rectAtNewX, [startPoint[0], startPoint[1]])
+
+    const updatedArrow = store.elements.find((e) => e.id === 'arrow-1') as DiagramElement & {
+      points: [[number, number], [number, number]]
+    }
+    expect(updatedArrow).toBeDefined()
+    expect(updatedArrow.points[0][0]).toBeCloseTo(startPoint[0], 5)
+    expect(updatedArrow.points[0][1]).toBeCloseTo(startPoint[1], 5)
+    expect(updatedArrow.points[1][0]).toBeCloseTo(expectedX, 5)
+    expect(updatedArrow.points[1][1]).toBeCloseTo(expectedY, 5)
+  })
+
+  // ICT-4: Shift+ArrowRight uses step 10 and re-anchors accordingly
+  it('Shift+ArrowRight uses step 10 and re-anchors bound arrow endpoint', async () => {
+    const { store, pinia } = await mountCanvas()
+
+    const state = pinia.state.value['diagrams']
+    const rect = makeRect('rect-1', 100, 50)
+    const startPoint: [number, number] = [0, 80]
+    const arrow = makeArrow('arrow-1', [startPoint, [100, 80]], null, { elementId: 'rect-1' })
+    state.elements = [rect, arrow]
+    state.selectedIds = ['rect-1']
+
+    fireKey('ArrowRight', { shiftKey: true })
+
+    const updatedRect = store.elements.find((e) => e.id === 'rect-1')
+    expect((updatedRect as { x: number }).x).toBe(110)
+
+    const rectAtNewX = makeRect('rect-1', 110, 50)
+    const [expectedX, expectedY] = facingSideAnchor(rectAtNewX, [startPoint[0], startPoint[1]])
+
+    const updatedArrow = store.elements.find((e) => e.id === 'arrow-1') as DiagramElement & {
+      points: [[number, number], [number, number]]
+    }
+    expect(updatedArrow.points[1][0]).toBeCloseTo(expectedX, 5)
+    expect(updatedArrow.points[1][1]).toBeCloseTo(expectedY, 5)
+  })
+
+  // ICT-4: nudge + single undo reverts both shape position and connector endpoint
+  it('nudge + undo reverts both shape position and bound arrow endpoint', async () => {
+    const { store, pinia } = await mountCanvas()
+
+    const state = pinia.state.value['diagrams']
+    const rect = makeRect('rect-1', 100, 50)
+    const startPoint: [number, number] = [0, 80]
+    const arrow = makeArrow('arrow-1', [startPoint, [100, 80]], null, { elementId: 'rect-1' })
+    state.elements = [rect, arrow]
+    state.selectedIds = ['rect-1']
+
+    store.pushHistory()
+
+    fireKey('ArrowRight')
+
+    const afterNudgeRect = store.elements.find((e) => e.id === 'rect-1')
+    expect((afterNudgeRect as { x: number }).x).toBe(101)
+
+    store.undoAction()
+
+    const afterUndoRect = store.elements.find((e) => e.id === 'rect-1')
+    expect((afterUndoRect as { x: number }).x).toBe(100)
+
+    const afterUndoArrow = store.elements.find((e) => e.id === 'arrow-1') as DiagramElement & {
+      points: [[number, number], [number, number]]
+    }
+    expect(afterUndoArrow.points[1][0]).toBeCloseTo(100, 5)
+    expect(afterUndoArrow.points[1][1]).toBeCloseTo(80, 5)
+  })
+
+  // ICT-4: nudging a shape with no bound connectors works unchanged
+  it('nudging a shape with no bound connectors produces no errors and correct position', async () => {
+    const { store, pinia } = await mountCanvas()
+
+    const state = pinia.state.value['diagrams']
+    const rect = makeRect('rect-1', 100, 50)
+    // Arrow with no bindings (neither start nor end bound to rect-1)
+    const arrow = makeArrow('arrow-1', [[0, 80], [200, 80]], null, null)
+    state.elements = [rect, arrow]
+    state.selectedIds = ['rect-1']
+
+    expect(() => fireKey('ArrowRight')).not.toThrow()
+
+    const updatedRect = store.elements.find((e) => e.id === 'rect-1')
+    expect((updatedRect as { x: number }).x).toBe(101)
+
+    const updatedArrow = store.elements.find((e) => e.id === 'arrow-1') as DiagramElement & {
+      points: [[number, number], [number, number]]
+    }
+    // Arrow has no bindings, so its points must be unchanged
+    expect(updatedArrow.points[0][0]).toBeCloseTo(0, 5)
+    expect(updatedArrow.points[1][0]).toBeCloseTo(200, 5)
   })
 
   // SCN: arrow keys do not move elements when no selection
