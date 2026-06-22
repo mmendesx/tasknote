@@ -123,3 +123,81 @@ describe('DiagramElementSchema — connector waypoints + routeMode fields', () =
     expect(result.success).toBe(false);
   });
 });
+
+describe('DiagramElementSchema — connector userBends field', () => {
+  it('parses a line without userBends (old scenes remain valid)', () => {
+    const result = DiagramElementSchema.safeParse(baseLine);
+    expect(result.success).toBe(true);
+  });
+
+  it('parses an arrow without userBends (old scenes remain valid)', () => {
+    const result = DiagramElementSchema.safeParse(baseArrow);
+    expect(result.success).toBe(true);
+  });
+
+  it('parses a line with userBends and round-trips the values', () => {
+    const input = { ...baseLine, userBends: [[25, 50]] as [number, number][] };
+    const result = DiagramElementSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect((result.data as typeof input).userBends).toEqual([[25, 50]]);
+    }
+  });
+
+  it('parses an arrow with userBends and round-trips the values', () => {
+    const input = { ...baseArrow, userBends: [[10, 30], [60, 80]] as [number, number][] };
+    const result = DiagramElementSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect((result.data as typeof input).userBends).toEqual([[10, 30], [60, 80]]);
+    }
+  });
+
+  it('rejects a line with more than 50 userBends', () => {
+    const userBends = Array.from({ length: 51 }, (_, i) => [i, i] as [number, number]);
+    const input = { ...baseLine, userBends };
+    const result = DiagramElementSchema.safeParse(input);
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an arrow with more than 50 userBends', () => {
+    const userBends = Array.from({ length: 51 }, (_, i) => [i, i] as [number, number]);
+    const input = { ...baseArrow, userBends };
+    const result = DiagramElementSchema.safeParse(input);
+    expect(result.success).toBe(false);
+  });
+
+  it('parses a line with waypoints + routeMode + userBends together', () => {
+    const input = {
+      ...baseLine,
+      waypoints: [[50, 25], [75, 50]] as [number, number][],
+      routeMode: 'manual' as const,
+      userBends: [[50, 25]] as [number, number][],
+    };
+    const result = DiagramElementSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const data = result.data as typeof input;
+      expect(data.waypoints).toEqual([[50, 25], [75, 50]]);
+      expect(data.routeMode).toBe('manual');
+      expect(data.userBends).toEqual([[50, 25]]);
+    }
+  });
+
+  it('parses an arrow with waypoints + routeMode + userBends together', () => {
+    const input = {
+      ...baseArrow,
+      waypoints: [[100, 25]] as [number, number][],
+      routeMode: 'auto' as const,
+      userBends: [[100, 25]] as [number, number][],
+    };
+    const result = DiagramElementSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const data = result.data as typeof input;
+      expect(data.waypoints).toEqual([[100, 25]]);
+      expect(data.routeMode).toBe('auto');
+      expect(data.userBends).toEqual([[100, 25]]);
+    }
+  });
+});
