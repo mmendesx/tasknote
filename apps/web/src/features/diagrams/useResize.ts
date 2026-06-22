@@ -2,7 +2,7 @@ import { ref, computed } from 'vue'
 import type { Ref, ComputedRef } from 'vue'
 import type { DiagramElement, DiagramViewport } from '@tasknote/shared'
 import { findShapeAtScenePoint, findElementById } from './connectors'
-import { facingSideAnchor, facingSide, autoWaypoints, fixManualLeg } from './orthogonalRoute'
+import { facingSideAnchor, facingSide, autoWaypoints } from './orthogonalRoute'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -438,9 +438,13 @@ export function useResize(
         const original = state.original as Extract<DiagramElement, { type: 'line' | 'arrow' }>
         let startBinding = original.startBinding ?? null
         let endBinding = original.endBinding ?? null
-        const isManual = (original as any).routeMode === 'manual'
-        const existingWaypoints: [number, number][] = (original as any).waypoints ?? []
 
+        // Repositioning an endpoint re-routes the connector to a clean side-aware
+        // AUTO path (and clears manual mode). Keeping a manual route's stored
+        // waypoints while the endpoint moves leaves them stale → diagonal seams
+        // between the moved endpoint and the now-disconnected first/last waypoint
+        // (the reported "various lines" bug). Same revert-to-auto rule as the
+        // shape-move re-anchor; preserving hand-drawn bends is a spec-21 follow-up.
         if (handle === 0) {
           startBinding = shapeId ? { elementId: shapeId } : null
           if (shapeId) {
@@ -448,21 +452,15 @@ export function useResize(
             if (shape) {
               const toward: [number, number] = [patchPts[1][0], patchPts[1][1]]
               const anchored = facingSideAnchor(shape, toward)
-              const newPts: [[number, number], [number, number]] = [anchored, patchPts[1]]
-              ;(patch as any).points = newPts
+              ;(patch as any).points = [anchored, patchPts[1]]
               const startSide = facingSide(shape, toward)
               const endShape = endBinding?.elementId ? findElementById(getElements(), endBinding.elementId) : undefined
-              if (isManual) {
-                const fixed = fixManualLeg(anchored, startSide, existingWaypoints, 'start')
-                ;(patch as any).waypoints = fixed ?? autoWaypoints(anchored, startSide, patchPts[1], endShape ? facingSide(endShape, [anchored[0], anchored[1]]) : startSide)
-              } else {
-                const endSide = endShape ? facingSide(endShape, [anchored[0], anchored[1]]) : undefined
-                ;(patch as any).waypoints = endSide ? autoWaypoints(anchored, startSide, patchPts[1], endSide) : []
-              }
+              const endSide = endShape ? facingSide(endShape, [anchored[0], anchored[1]]) : undefined
+              ;(patch as any).waypoints = endSide ? autoWaypoints(anchored, startSide, patchPts[1], endSide) : []
             }
           } else {
-            // End re-anchored to nothing — clear waypoints for auto connectors.
-            if (!isManual) { (patch as any).waypoints = [] }
+            // Dragged onto empty space — free endpoint, no elbow.
+            ;(patch as any).waypoints = []
           }
         } else {
           endBinding = shapeId ? { elementId: shapeId } : null
@@ -471,23 +469,18 @@ export function useResize(
             if (shape) {
               const toward: [number, number] = [patchPts[0][0], patchPts[0][1]]
               const anchored = facingSideAnchor(shape, toward)
-              const newPts: [[number, number], [number, number]] = [patchPts[0], anchored]
-              ;(patch as any).points = newPts
+              ;(patch as any).points = [patchPts[0], anchored]
               const endSide = facingSide(shape, toward)
               const startShape = startBinding?.elementId ? findElementById(getElements(), startBinding.elementId) : undefined
-              if (isManual) {
-                const fixed = fixManualLeg(anchored, endSide, existingWaypoints, 'end')
-                ;(patch as any).waypoints = fixed ?? autoWaypoints(patchPts[0], startShape ? facingSide(startShape, [anchored[0], anchored[1]]) : endSide, anchored, endSide)
-              } else {
-                const startSide = startShape ? facingSide(startShape, [anchored[0], anchored[1]]) : undefined
-                ;(patch as any).waypoints = startSide ? autoWaypoints(patchPts[0], startSide, anchored, endSide) : []
-              }
+              const startSide = startShape ? facingSide(startShape, [anchored[0], anchored[1]]) : undefined
+              ;(patch as any).waypoints = startSide ? autoWaypoints(patchPts[0], startSide, anchored, endSide) : []
             }
           } else {
-            // End re-anchored to nothing — clear waypoints for auto connectors.
-            if (!isManual) { (patch as any).waypoints = [] }
+            // Dragged onto empty space — free endpoint, no elbow.
+            ;(patch as any).waypoints = []
           }
         }
+        ;(patch as any).routeMode = 'auto'
 
         newBindings = { startBinding, endBinding }
       }
