@@ -298,6 +298,32 @@ describe('buildExportSvg', () => {
     }
   })
 
+  it('exports a manual route with userBends through its rendered waypoints (ICT-7)', () => {
+    // A migrated manual connector carries both userBends and the rendered route.
+    // Export draws waypoints (the rendered route), so the bend appears in the SVG.
+    const elements: DiagramElement[] = [
+      makeArrow({
+        stroke: '#ff0000',
+        points: [[0, 0], [200, 40]],
+        waypoints: [[100, 0], [100, 40]],
+        userBends: [[100, 0], [100, 40]],
+        routeMode: 'manual',
+        startBinding: { elementId: 'A' },
+      } as never),
+    ]
+    const svg = buildExportSvg(elements, { resolvedColor: '#000000' })
+
+    const match = svg.match(/<polyline[^>]*points="([^"]+)"/)
+    expect(match).not.toBeNull()
+    const pts = match![1].split(' ').map((p) => p.split(',').map(Number) as [number, number])
+    // The jog through x=100 is present and the route is axis-aligned.
+    expect(pts).toContainEqual([100, 0])
+    expect(pts).toContainEqual([100, 40])
+    for (let i = 1; i < pts.length; i++) {
+      expect(pts[i - 1][0] === pts[i][0] || pts[i - 1][1] === pts[i][1]).toBe(true)
+    }
+  })
+
   it('arrow polyline has fill="none"', () => {
     const elements: DiagramElement[] = [
       makeArrow({ stroke: '#ff0000', points: [[0, 0], [200, 40]], startBinding: { elementId: 'A' } }),

@@ -212,7 +212,13 @@ export const useDiagramsStore = defineStore('diagrams', () => {
    * would produce a straight diagonal. This function adds them once on load.
    *
    * Rules:
-   * - Skip if routeMode === 'manual' (user route — never touch).
+   * - Manual connector (routeMode === 'manual'):
+   *     - already has userBends → already migrated, skip.
+   *     - no waypoints → nothing to seed, skip.
+   *     - waypoints but no userBends → seed userBends from the persisted route's
+   *       interior, recompose waypoints (ICT-7). Endpoints are kept verbatim and
+   *       sides derived only for leg orientation, so the route looks identical on
+   *       load (recompose also orthogonalizes any non-axis-aligned legacy save).
    * - Skip if waypoints is already present (non-undefined, even []) — spec-21 saved it.
    * - Both-bound, different shapes: recompute anchors + sides → autoWaypoints.
    * - One-bound, unbound, self-loop, or missing shape: set waypoints:[], routeMode:'auto'.
@@ -223,7 +229,7 @@ export const useDiagramsStore = defineStore('diagrams', () => {
 
     return els.map((el) => {
       if (el.type !== 'arrow' && el.type !== 'line') return el
-      if ((el as any).routeMode === 'manual') return el
+      if ((el as any).routeMode === 'manual') return migrateManualConnector(el, byId)
       // ponytail: presence check uses !== undefined so waypoints:[] (spec-21 aligned route)
       // is treated as already-normalized and skipped.
       if ((el as any).waypoints !== undefined) return el
@@ -231,6 +237,37 @@ export const useDiagramsStore = defineStore('diagrams', () => {
       // Legacy auto connector with no waypoints — delegate to shared helper.
       return computeAutoRoute(el, byId)
     })
+  }
+
+  /**
+   * Seed userBends on a persisted manual connector that predates ICT-1, then
+   * recompose its rendered route. Keeps endpoints verbatim (no jump on load);
+   * sides are derived only to orient the start/end leg corners.
+   */
+  function migrateManualConnector(
+    el: DiagramElement,
+    byId: Map<string, DiagramElement>,
+  ): DiagramElement {
+    if ((el as any).userBends !== undefined) return el // already migrated
+    const waypoints = (el as any).waypoints as [number, number][] | undefined
+    if (waypoints === undefined || waypoints.length === 0) return el // nothing to seed
+
+    const userBends = waypoints
+    const pts = (el as any).points as [[number, number], [number, number]]
+
+    const startShape = (el as any).startBinding?.elementId
+      ? byId.get((el as any).startBinding.elementId)
+      : undefined
+    const endShape = (el as any).endBinding?.elementId
+      ? byId.get((el as any).endBinding.elementId)
+      : undefined
+
+    // Leg orientation aims at the nearest bend, matching the ICT-4/5 drag rule.
+    const startSide = startShape ? facingSide(startShape, userBends[0]!) : undefined
+    const endSide = endShape ? facingSide(endShape, userBends[userBends.length - 1]!) : undefined
+
+    const newWaypoints = composeManualRoute(pts[0], startSide, userBends, pts[1], endSide)
+    return { ...el, userBends, waypoints: newWaypoints, routeMode: 'manual' } as unknown as DiagramElement
   }
 
   /**

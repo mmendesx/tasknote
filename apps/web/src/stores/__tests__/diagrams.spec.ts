@@ -2028,20 +2028,24 @@ describe('loadDiagram — legacy connector normalization (ICT-8)', () => {
     expect((loaded as any).routeMode).toBe('auto')
   })
 
-  it('manual connector (routeMode manual, waypoints present) is left untouched by load', async () => {
-    const R = makeRectangleAt('R', 50, 75)
-    const S = makeRectangleAt('S', 300, 75)
-    const manualWaypoints: [number, number][] = [[200, 50]]
+  // ICT-7: a persisted manual connector with no userBends migrates its waypoints
+  // into userBends on load and recomposes the route (keeping endpoints verbatim).
+  it('migrates a manual connector: seeds userBends from waypoints, keeps points', async () => {
+    const R = makeRectangleAt('R', 100, 75)
+    const S = makeRectangleAt('S', 250, 75)
+    // An orthogonal single-jog route (every segment shares x or y).
+    const persistedWaypoints: [number, number][] = [[150, 60], [300, 60]]
     const manualArrow: DiagramElement = {
       id: 'arrow-manual',
       type: 'arrow',
-      points: [[154, 100], [296, 100]],
+      points: [[150, 100], [300, 100]],
       stroke: '#000000',
       strokeWidth: 1,
       startBinding: { elementId: 'R' },
       endBinding: { elementId: 'S' },
-      waypoints: manualWaypoints,
+      waypoints: persistedWaypoints,
       routeMode: 'manual',
+      // No userBends — pre-ICT-1 save.
     } as unknown as DiagramElement
     const diagram = makeDiagram(1, 'Manual', [R, S, manualArrow])
     vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
@@ -2051,10 +2055,74 @@ describe('loadDiagram — legacy connector normalization (ICT-8)', () => {
     const loaded = store.elements.find((e) => e.id === 'arrow-manual')
     expect(loaded).toBeDefined()
     if (loaded?.type !== 'arrow') return
-    expect(loaded.points[0]).toEqual([154, 100])
-    expect(loaded.points[1]).toEqual([296, 100])
-    expect((loaded as any).waypoints).toEqual(manualWaypoints)
+    // Endpoints kept verbatim — no jump on load.
+    expect(loaded.points[0]).toEqual([150, 100])
+    expect(loaded.points[1]).toEqual([300, 100])
+    // userBends seeded from the persisted route's interior, verbatim.
+    expect((loaded as any).userBends).toEqual(persistedWaypoints)
     expect((loaded as any).routeMode).toBe('manual')
+    // Orthogonal data round-trips through the composer — route looks identical.
+    const sSide = facingSide(R, persistedWaypoints[0])
+    const eSide = facingSide(S, persistedWaypoints[persistedWaypoints.length - 1])
+    expect((loaded as any).waypoints).toEqual(
+      composeManualRoute([150, 100], sSide, persistedWaypoints, [300, 100], eSide),
+    )
+  })
+
+  it('migrates a free-end manual connector without emptying its route', async () => {
+    // The regression that a computeAutoRoute-reuse would cause: a free/unbound
+    // manual connector must NOT have its route wiped on load.
+    const persistedWaypoints: [number, number][] = [[100, 200], [300, 200]]
+    const freeManual: DiagramElement = {
+      id: 'arrow-free',
+      type: 'arrow',
+      points: [[100, 100], [300, 100]],
+      stroke: '#000000',
+      strokeWidth: 1,
+      startBinding: null,
+      endBinding: null,
+      waypoints: persistedWaypoints,
+      routeMode: 'manual',
+    } as unknown as DiagramElement
+    const diagram = makeDiagram(1, 'Free', [freeManual])
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
+
+    await store.loadDiagram(1)
+
+    const loaded = store.elements.find((e) => e.id === 'arrow-free')
+    expect(loaded).toBeDefined()
+    if (loaded?.type !== 'arrow') return
+    expect((loaded as any).routeMode).toBe('manual')
+    expect((loaded as any).userBends).toEqual(persistedWaypoints)
+    // Route is NOT emptied — both bends survive.
+    expect((loaded as any).waypoints.length).toBeGreaterThan(0)
+    expect((loaded as any).waypoints).toContainEqual([100, 200])
+    expect((loaded as any).waypoints).toContainEqual([300, 200])
+  })
+
+  it('leaves an already-migrated manual connector (userBends present) untouched', async () => {
+    const userBends: [number, number][] = [[200, 60]]
+    const migrated: DiagramElement = {
+      id: 'arrow-done',
+      type: 'arrow',
+      points: [[150, 100], [300, 100]],
+      stroke: '#000000',
+      strokeWidth: 1,
+      startBinding: null,
+      endBinding: null,
+      waypoints: [[200, 100]],
+      userBends,
+      routeMode: 'manual',
+    } as unknown as DiagramElement
+    const diagram = makeDiagram(1, 'Done', [migrated])
+    vi.mocked(api.diagrams.getDiagram).mockResolvedValueOnce(diagram)
+
+    await store.loadDiagram(1)
+
+    const loaded = store.elements.find((e) => e.id === 'arrow-done')
+    // Untouched: userBends and waypoints as saved.
+    expect((loaded as any).userBends).toEqual(userBends)
+    expect((loaded as any).waypoints).toEqual([[200, 100]])
   })
 
   it('connector already auto with waypoints:[] is left untouched by load', async () => {
