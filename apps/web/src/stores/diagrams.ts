@@ -3,7 +3,7 @@ import { defineStore } from 'pinia'
 import * as api from '@/api'
 import type { Diagram, DiagramElement, DiagramViewport } from '@tasknote/shared'
 import { detachBindingsTo, elementCenter, isBindableShape } from '../features/diagrams/connectors'
-import { facingSideAnchor, facingSide, autoWaypoints, chooseConnectorSides, anchorForSide } from '../features/diagrams/orthogonalRoute'
+import { facingSideAnchor, facingSide, autoWaypoints, chooseConnectorSides, anchorForSide, composeManualRoute } from '../features/diagrams/orthogonalRoute'
 import type { Side } from '../features/diagrams/orthogonalRoute'
 import { useHistory } from '../features/diagrams/useHistory'
 
@@ -187,6 +187,14 @@ export const useDiagramsStore = defineStore('diagrams', () => {
       const { startSide, endSide } = chooseConnectorSides(startShape!, endShape!)
       const start = anchorForSide(startShape!, startSide)
       const end = anchorForSide(endShape!, endSide)
+      // ponytail: name says "auto" but a connector carrying user bends recomposes
+      // its manual route here so ICT-7 load-migration can reuse this one helper.
+      // Reset clears userBends first (resetConnectorRoute), so it still lands auto.
+      const userBends = (el as any).userBends as [number, number][] | undefined
+      if (userBends && userBends.length > 0) {
+        const waypoints = composeManualRoute(start, startSide, userBends, end, endSide)
+        return { ...el, points: [start, end], waypoints, routeMode: 'manual' } as unknown as DiagramElement
+      }
       const waypoints = autoWaypoints(start, startSide, end, endSide)
       return { ...el, points: [start, end], waypoints, routeMode: 'auto' } as unknown as DiagramElement
     }
@@ -244,8 +252,12 @@ export const useDiagramsStore = defineStore('diagrams', () => {
     const byId = new Map<string, DiagramElement>()
     for (const e of elements.value) byId.set(e.id, e)
 
+    // Clear userBends first (ICT-6) so computeAutoRoute lands on the auto path
+    // instead of recomposing the manual route from the bends being reset.
     elements.value = elements.value.map((e) =>
-      e.id === connectorId ? computeAutoRoute(e, byId) : e,
+      e.id === connectorId
+        ? computeAutoRoute({ ...e, userBends: undefined } as DiagramElement, byId)
+        : e,
     )
     scheduleSave()
   }
@@ -513,15 +525,19 @@ export const useDiagramsStore = defineStore('diagrams', () => {
         continue
       }
 
-      // Moving a bound shape re-routes the connector to a clean side-aware auto
-      // path. Manual (hand-dragged) connectors revert to auto on move: preserving
-      // hand-drawn bends across a move needs storing user bends separately from
-      // generated legs (indistinguishable in `waypoints` today) — a data-model
-      // change tracked as a spec-21 follow-up. Reverting keeps every re-anchored
-      // route orthogonal and bounded (no stale-leg diagonals, no per-frame pile-up).
-      // ponytail: revert-to-auto over leg-preservation deletes a whole bug class.
-      const waypoints: [number, number][] = startSide && endSide ? autoWaypoints(start, startSide, end, endSide) : []
-      arr[i] = { ...el, points: [start, end], waypoints, routeMode: 'auto' } as unknown as DiagramElement
+      // Moving a bound shape re-anchors the connector. A connector carrying user
+      // bends stays manual: keep userBends verbatim (never derive them back from
+      // the prior waypoints — that's what accumulated leg corners), recompose the
+      // legs against the new anchors via composeManualRoute. Empty userBends → the
+      // clean side-aware auto path.
+      const userBends = (el as any).userBends as [number, number][] | undefined
+      if (userBends && userBends.length > 0) {
+        const waypoints = composeManualRoute(start, startSide, userBends, end, endSide)
+        arr[i] = { ...el, points: [start, end], waypoints, routeMode: 'manual' } as unknown as DiagramElement
+      } else {
+        const waypoints: [number, number][] = startSide && endSide ? autoWaypoints(start, startSide, end, endSide) : []
+        arr[i] = { ...el, points: [start, end], waypoints, routeMode: 'auto' } as unknown as DiagramElement
+      }
     }
   }
 

@@ -14,7 +14,14 @@ vi.mock('@/api', () => ({
 import { useDiagramsStore } from '@/stores/diagrams'
 import * as api from '@/api'
 import type { Diagram, DiagramElement, DiagramViewport } from '@tasknote/shared'
-import { autoWaypoints, facingSide, facingSideAnchor } from '@/features/diagrams/orthogonalRoute'
+import {
+  autoWaypoints,
+  facingSide,
+  facingSideAnchor,
+  composeManualRoute,
+  chooseConnectorSides,
+  anchorForSide,
+} from '@/features/diagrams/orthogonalRoute'
 import { elementCenter } from '@/features/diagrams/connectors'
 
 // makeRectangle width=100, height=50 → center = (x+50, y+25)
@@ -2269,5 +2276,109 @@ describe('useDiagramsStore — resetConnectorRoute (ICT-7)', () => {
     // Should not throw, should leave elements unchanged
     expect(() => store.resetConnectorRoute('R')).not.toThrow()
     expect((store.elements.find((e) => e.id === 'R') as any).routeMode).toBeUndefined()
+  })
+
+  // ICT-6: reset clears userBends so a subsequent move can't recompose a manual route.
+  it('clears userBends back to auto on reset', () => {
+    const R = makeRectangleAt('R', 50, 75)
+    const S = makeRectangleAt('S', 250, 175)
+    const manualArrow: DiagramElement = {
+      ...makeArrow('arrow-1', [[100, 100], [300, 200]], 'R', 'S'),
+      ...({ userBends: [[150, 130]], waypoints: [[150, 130]], routeMode: 'manual' } as object),
+    } as DiagramElement
+    store.elements = [R, S, manualArrow]
+
+    store.resetConnectorRoute('arrow-1')
+
+    const updated = store.elements.find((e) => e.id === 'arrow-1') as any
+    expect(updated.routeMode).toBe('auto')
+    expect(updated.userBends).toBeUndefined()
+  })
+})
+
+describe('useDiagramsStore — manual route preservation on move (ICT-3)', () => {
+  let store: ReturnType<typeof useDiagramsStore>
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setActivePinia(createPinia())
+    store = useDiagramsStore()
+    vi.resetAllMocks()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  // Build a both-bound manual arrow carrying a single user bend, recomposed
+  // consistently with the store's own composer so the assertion tracks geometry.
+  function setupManualArrow(rx: number, ry: number, sx: number, sy: number, bend: [number, number]) {
+    const R = makeRectangleAt('R', rx, ry)
+    const S = makeRectangleAt('S', sx, sy)
+    const { startSide, endSide } = chooseConnectorSides(R, S)
+    const start = anchorForSide(R, startSide)
+    const end = anchorForSide(S, endSide)
+    const waypoints = composeManualRoute(start, startSide, [bend], end, endSide)
+    const arrow: DiagramElement = {
+      ...makeArrow('arrow-1', [start, end], 'R', 'S'),
+      ...({ userBends: [bend], waypoints, routeMode: 'manual' } as object),
+    } as DiagramElement
+    store.elements = [R, S, arrow]
+    return { R, S }
+  }
+
+  it('keeps the user bend fixed and reconnects the leg when a bound shape moves', () => {
+    // x=180 is distinct from both anchor x-lines so the bend can't collapse away.
+    const bend: [number, number] = [180, 140]
+    setupManualArrow(50, 75, 250, 175, bend)
+
+    // Move R down by 5px (keeps R left of S so sides stay right→left).
+    store.updateElements([{ id: 'R', patch: { x: 50, y: 80 } }])
+
+    const arrow = store.elements.find((e) => e.id === 'arrow-1') as any
+    const R2 = store.elements.find((e) => e.id === 'R')!
+    const S = store.elements.find((e) => e.id === 'S')!
+
+    // routeMode stays manual, userBends untouched, waypoints recomposed against
+    // the new anchors.
+    expect(arrow.routeMode).toBe('manual')
+    expect(arrow.userBends).toEqual([bend])
+    const { startSide, endSide } = chooseConnectorSides(R2, S)
+    const start = anchorForSide(R2, startSide)
+    const end = anchorForSide(S, endSide)
+    expect(arrow.waypoints).toEqual(composeManualRoute(start, startSide, [bend], end, endSide))
+    // The bend's x-line survives — the route still turns at x=180.
+    expect(arrow.waypoints.some((p: [number, number]) => p[0] === bend[0])).toBe(true)
+  })
+
+  it('does not accumulate leg corners over repeated moves', () => {
+    const bend: [number, number] = [180, 140]
+    setupManualArrow(50, 75, 250, 175, bend)
+
+    for (let i = 0; i < 5; i++) {
+      const r = store.elements.find((e) => e.id === 'R') as any
+      store.updateElements([{ id: 'R', patch: { x: r.x + 5, y: r.y } }])
+    }
+
+    const arrow = store.elements.find((e) => e.id === 'arrow-1') as any
+    const R2 = store.elements.find((e) => e.id === 'R')!
+    const S = store.elements.find((e) => e.id === 'S')!
+    const { startSide, endSide } = chooseConnectorSides(R2, S)
+    const start = anchorForSide(R2, startSide)
+    const end = anchorForSide(S, endSide)
+    // After N moves, the route equals a single fresh recompose — no pile-up.
+    expect(arrow.waypoints).toEqual(composeManualRoute(start, startSide, [bend], end, endSide))
+    expect(arrow.userBends).toEqual([bend])
+  })
+
+  it('keeps a bend that ends up inside the moved shape (no bbox filtering)', () => {
+    const bend: [number, number] = [180, 140]
+    setupManualArrow(50, 75, 250, 175, bend)
+
+    // Move R so its bbox engulfs the bend at (180,140): x=150..250, y=120..170.
+    store.updateElements([{ id: 'R', patch: { x: 150, y: 120 } }])
+
+    const arrow = store.elements.find((e) => e.id === 'arrow-1') as any
+    expect(arrow.userBends).toEqual([bend])
   })
 })
