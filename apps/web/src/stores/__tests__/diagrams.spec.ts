@@ -2449,4 +2449,48 @@ describe('useDiagramsStore — manual route preservation on move (ICT-3)', () =>
     const arrow = store.elements.find((e) => e.id === 'arrow-1') as any
     expect(arrow.userBends).toEqual([bend])
   })
+
+  // Keyboard nudge goes through the same updateElements path as a drag move
+  // (useCanvasKeyboard → store.updateElements), so userBends is preserved there too.
+  it('preserves user bends across a keyboard-style nudge (updateElements path)', () => {
+    const bend: [number, number] = [180, 140]
+    setupManualArrow(50, 75, 250, 175, bend)
+
+    // A 1px nudge of the bound shape — the exact shape of a keyboard step patch.
+    const r = store.elements.find((e) => e.id === 'R') as any
+    store.updateElements([{ id: 'R', patch: { x: r.x, y: r.y + 1 } }])
+
+    const arrow = store.elements.find((e) => e.id === 'arrow-1') as any
+    expect(arrow.routeMode).toBe('manual')
+    expect(arrow.userBends).toEqual([bend])
+  })
+
+  // Move + reroute is one undo entry: the reanchor happens inside the single
+  // elements.value assignment in updateElements, so one history push covers both
+  // the shape position and the recomposed connector route.
+  it('move + reroute is a single undo entry', () => {
+    const bend: [number, number] = [180, 140]
+    setupManualArrow(50, 75, 250, 175, bend)
+    const before = store.elements.find((e) => e.id === 'arrow-1') as any
+    const beforeWaypoints = before.waypoints
+    const beforeR = store.elements.find((e) => e.id === 'R') as any
+    const beforeX = beforeR.x
+
+    // Caller pushes history once, then moves the shape (updateElements reanchors
+    // the connector in the same assignment).
+    store.pushHistory()
+    store.updateElements([{ id: 'R', patch: { x: beforeX + 60, y: beforeR.y } }])
+
+    // Route changed.
+    const moved = store.elements.find((e) => e.id === 'arrow-1') as any
+    expect(moved.waypoints).not.toEqual(beforeWaypoints)
+
+    // One undo restores BOTH the shape position and the connector route.
+    store.undoAction()
+    const restoredR = store.elements.find((e) => e.id === 'R') as any
+    const restoredArrow = store.elements.find((e) => e.id === 'arrow-1') as any
+    expect(restoredR.x).toBe(beforeX)
+    expect(restoredArrow.waypoints).toEqual(beforeWaypoints)
+    expect(restoredArrow.userBends).toEqual([bend])
+  })
 })
