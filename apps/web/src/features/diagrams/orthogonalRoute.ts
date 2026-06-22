@@ -125,6 +125,102 @@ function routeWithSides(start: Point, end: Point, startSide: Side, endSide: Side
   return dedup([[sx, sy], [sx, ey], [ex, ey]])
 }
 
+// ── collapseCollinear ─────────────────────────────────────────────────────────
+
+/**
+ * Remove interior points that lie on a straight axis-aligned run with both
+ * their neighbours. Deduplicates first, then collapses in a single pass so a
+ * run of 3+ collinear points folds down to its two run-endpoints. Idempotent.
+ *
+ * Use-case: prevents per-frame leg-corner pile-up when waypoints are fed back
+ * as inputs on subsequent renders.
+ */
+export function collapseCollinear(pts: Point[]): Point[] {
+  const d = dedup(pts)
+  if (d.length < 3) return d
+  const out: Point[] = [d[0]]
+  for (let i = 1; i < d.length - 1; i++) {
+    const prev = out[out.length - 1]
+    const cur = d[i]
+    const next = d[i + 1]
+    const sameX =
+      Math.abs(prev[0] - cur[0]) < EPSILON && Math.abs(cur[0] - next[0]) < EPSILON
+    const sameY =
+      Math.abs(prev[1] - cur[1]) < EPSILON && Math.abs(cur[1] - next[1]) < EPSILON
+    if (!(sameX || sameY)) out.push(cur)
+  }
+  out.push(d[d.length - 1])
+  return out
+}
+
+// ── composeManualRoute helpers ────────────────────────────────────────────────
+
+/**
+ * Compute the single corner that connects `endpoint` (exiting/entering along
+ * `side`'s axis) to `towardBend`. Returns null when endpoint and towardBend
+ * are already axis-aligned (share x or y — no corner needed).
+ *
+ * Horizontal sides (left/right) and undefined → corner at (bend.x, endpoint.y).
+ * Vertical sides (top/bottom)               → corner at (endpoint.x, bend.y).
+ */
+function legCorner(endpoint: Point, side: Side | undefined, towardBend: Point): Point | null {
+  if (Math.abs(endpoint[0] - towardBend[0]) < EPSILON) return null // same x, already aligned
+  if (Math.abs(endpoint[1] - towardBend[1]) < EPSILON) return null // same y, already aligned
+  if (side !== undefined && !isHorizontalSide(side)) {
+    // Vertical side: exit/enter along y-axis → corner shares endpoint.x
+    return [endpoint[0], towardBend[1]]
+  }
+  // Horizontal side or undefined: exit/enter along x-axis → corner shares endpoint.y
+  return [towardBend[0], endpoint[1]]
+}
+
+// ── composeManualRoute ────────────────────────────────────────────────────────
+
+/**
+ * Rebuild the full rendered interior route (`waypoints`) for a connector from
+ * its user-placed bends + precomputed endpoint sides.
+ *
+ * Returns INTERIOR points only (excludes `start` and `end`), axis-aligned,
+ * deduplicated and collinear-collapsed.
+ *
+ * - Empty userBends: defers to `autoWaypoints` (both sides required) or `[]`.
+ * - Non-empty userBends: inserts one axis-aligned leg corner at each end when
+ *   needed, then assembles [start] + startLeg + userBends + endLeg + [end].
+ *
+ * Pure, O(bends). No shape arguments — sides are precomputed by callers.
+ */
+export function composeManualRoute(
+  start: Point,
+  startSide: Side | undefined,
+  userBends: Point[],
+  end: Point,
+  endSide: Side | undefined,
+): Point[] {
+  if (userBends.length === 0) {
+    if (startSide !== undefined && endSide !== undefined) {
+      return autoWaypoints(start, startSide, end, endSide)
+    }
+    return [] // ponytail: free/degenerate connector — no bends
+  }
+
+  const firstBend = userBends[0]
+  const lastBend = userBends[userBends.length - 1]
+
+  const route: Point[] = [start]
+
+  const startCorner = legCorner(start, startSide, firstBend)
+  if (startCorner !== null) route.push(startCorner)
+
+  route.push(...userBends)
+
+  const endCorner = legCorner(end, endSide, lastBend)
+  if (endCorner !== null) route.push(endCorner)
+
+  route.push(end)
+
+  return collapseCollinear(route).slice(1, -1)
+}
+
 // ── autoWaypoints ─────────────────────────────────────────────────────────────
 
 /**

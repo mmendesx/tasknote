@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { orthogonalRoute, facingSideAnchor, facingSide, autoWaypoints, anchorForSide, chooseConnectorSides } from '../orthogonalRoute'
+import {
+  orthogonalRoute,
+  facingSideAnchor,
+  facingSide,
+  autoWaypoints,
+  anchorForSide,
+  chooseConnectorSides,
+  collapseCollinear,
+  composeManualRoute,
+} from '../orthogonalRoute'
 import type { DiagramElement } from '@tasknote/shared'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -327,5 +336,137 @@ describe('chooseConnectorSides — picks the roomier axis', () => {
     const b = rectAt('b', 200, 200, 100, 100) // left=200, top=200; gapX=gapY=100
     // centers (50,50)&(250,250): dx=dy → center tie → horizontal.
     expect(chooseConnectorSides(a, b)).toEqual({ startSide: 'right', endSide: 'left' })
+  })
+})
+
+// ── collapseCollinear ─────────────────────────────────────────────────────────
+
+describe('collapseCollinear', () => {
+  it('removes collinear interior point on y-axis run', () => {
+    // [0,0]→[0,5]→[0,10]: middle point is collinear on x=0 → collapsed
+    const result = collapseCollinear([[0, 0], [0, 5], [0, 10], [10, 10]])
+    expect(result).toEqual([[0, 0], [0, 10], [10, 10]])
+  })
+
+  it('removes collinear interior point on x-axis run', () => {
+    // [0,0]→[5,0]→[10,0]: middle is collinear on y=0 → collapsed
+    const result = collapseCollinear([[0, 0], [5, 0], [10, 0], [10, 10]])
+    expect(result).toEqual([[0, 0], [10, 0], [10, 10]])
+  })
+
+  it('keeps bends (non-collinear corners)', () => {
+    // L-shape: [0,0]→[10,0]→[10,10] — no collinear points
+    const pts: [number, number][] = [[0, 0], [10, 0], [10, 10]]
+    expect(collapseCollinear(pts)).toEqual(pts)
+  })
+
+  it('idempotent: running twice yields the same result', () => {
+    const pts: [number, number][] = [[0, 0], [0, 5], [0, 10], [10, 10]]
+    const once = collapseCollinear(pts)
+    const twice = collapseCollinear(once)
+    expect(twice).toEqual(once)
+  })
+
+  it('short arrays pass through unchanged', () => {
+    expect(collapseCollinear([[1, 2]])).toEqual([[1, 2]])
+    expect(collapseCollinear([[1, 2], [3, 4]])).toEqual([[1, 2], [3, 4]])
+  })
+})
+
+// ── composeManualRoute ────────────────────────────────────────────────────────
+
+describe('composeManualRoute', () => {
+  it('empty userBends + both sides: equals autoWaypoints', () => {
+    const start: [number, number] = [0, 30]
+    const end: [number, number] = [200, 80]
+    const manual = composeManualRoute(start, 'right', [], end, 'left')
+    const auto = autoWaypoints(start, 'right', end, 'left')
+    expect(manual).toEqual(auto)
+  })
+
+  it('empty userBends + undefined side: returns []', () => {
+    const result = composeManualRoute([0, 0], undefined, [], [100, 100], undefined)
+    expect(result).toEqual([])
+  })
+
+  it('one user bend, both sides bound: full route is axis-aligned', () => {
+    // start=(0,30)/right, bend=(100,80), end=(200,130)/left
+    // legCorner(start=[0,30], 'right', bend=[100,80]) → not aligned → (100,30)
+    // legCorner(end=[200,130], 'left', bend=[100,80]) → not aligned → (100,130)
+    // Assembled: start(0,30)→(100,30)→(100,80)→(100,130)→end(200,130)
+    // collapseCollinear: (100,30)→(100,80)→(100,130) are collinear on x=100 → middle stripped
+    // So bend (100,80) is legitimately removed by collapse (on a straight vertical run).
+    // Use a bend that creates a genuine elbow (different x AND y from BOTH leg corners):
+    // start=(0,30)/right, bend=(80,70) [not on x=80 or y=30 with either corner],
+    // end=(200,130)/left
+    // legCorner(start=[0,30], 'right', [80,70]) → corner=(80,30)
+    // legCorner(end=[200,130], 'left', [80,70]) → corner=(80,130)
+    // Assembled: (0,30)→(80,30)→(80,70)→(80,130)→(200,130) — (80,30),(80,70),(80,130) are collinear!
+    // Need bend at different x from corners: startCorner.x == bend.x always for horizontal side.
+    // Use vertical startSide instead: start=(30,0)/bottom, bend=(80,60), end=(200,130)/left
+    // legCorner(start=[30,0], 'bottom', [80,60]) → vertical side → (30, 60) [corner at (start.x, bend.y)]
+    // legCorner(end=[200,130], 'left', [80,60]) → horizontal side → (80, 130)
+    // Assembled: (30,0)→(30,60)→(80,60)→(80,130)→(200,130) — all axis-aligned, no collinear runs!
+    const start: [number, number] = [30, 0]
+    const bend: [number, number] = [80, 60]
+    const end: [number, number] = [200, 130]
+    const waypoints = composeManualRoute(start, 'bottom', [bend], end, 'left')
+    const full = [start, ...waypoints, end] as [number, number][]
+    expect(allSegmentsAxisAligned(full)).toBe(true)
+    // The user bend must be present in the waypoints
+    expect(waypoints).toContainEqual(bend)
+  })
+
+  it('two user bends, both sides bound: both bends present in order, full route axis-aligned', () => {
+    // start=(0,30)/right, bend1=(60,80), bend2=(120,80)[shares y with bend1], end=(200,130)/left
+    // legCorner(start=[0,30], 'right', bend1=[60,80]) → not aligned → (60,30)
+    // legCorner(end=[200,130], 'left', bend2=[120,80]) → not aligned → (120,130)
+    // Assembled: (0,30)→(60,30)→(60,80)→(120,80)→(120,130)→(200,130)
+    // No three consecutive points are collinear — both bends survive collapseCollinear.
+    const start: [number, number] = [0, 30]
+    const bend1: [number, number] = [60, 80]
+    const bend2: [number, number] = [120, 80]
+    const end: [number, number] = [200, 130]
+    const waypoints = composeManualRoute(start, 'right', [bend1, bend2], end, 'left')
+    const full = [start, ...waypoints, end] as [number, number][]
+    expect(allSegmentsAxisAligned(full)).toBe(true)
+    // Both user bends appear in order within the waypoints
+    const b1idx = waypoints.findIndex(p => p[0] === bend1[0] && p[1] === bend1[1])
+    const b2idx = waypoints.findIndex(p => p[0] === bend2[0] && p[1] === bend2[1])
+    expect(b1idx).toBeGreaterThanOrEqual(0)
+    expect(b2idx).toBeGreaterThanOrEqual(0)
+    expect(b2idx).toBeGreaterThan(b1idx)
+  })
+
+  it('idempotency: feeding output waypoints back as userBends yields same length (no growth)', () => {
+    // Verifies the system cannot pile up leg corners on repeated renders.
+    const start: [number, number] = [0, 30]
+    const end: [number, number] = [200, 130]
+    const bend: [number, number] = [100, 80]
+    const w1 = composeManualRoute(start, 'right', [bend], end, 'left')
+    const w2 = composeManualRoute(start, 'right', w1, end, 'left')
+    expect(w2.length).toBe(w1.length)
+  })
+
+  it('free endpoint (startSide undefined): one bend → full route still axis-aligned', () => {
+    // undefined side defaults to horizontal-leg corner at (bend.x, start.y)
+    const start: [number, number] = [0, 30]
+    const bend: [number, number] = [80, 90]
+    const end: [number, number] = [200, 130]
+    const waypoints = composeManualRoute(start, undefined, [bend], end, 'left')
+    const full = [start, ...waypoints, end] as [number, number][]
+    expect(allSegmentsAxisAligned(full)).toBe(true)
+  })
+
+  it('legs added only at the ends: interior between two bends has no extra corners', () => {
+    // With two bends we expect the leg to only appear before first bend and after last.
+    const start: [number, number] = [0, 0]
+    const bend1: [number, number] = [50, 50]
+    const bend2: [number, number] = [100, 100]
+    const end: [number, number] = [150, 0]
+    const waypoints = composeManualRoute(start, 'right', [bend1, bend2], end, 'left')
+    // Total length: at most startCorner + bend1 + bend2 + endCorner = 4
+    // (minus any collapsed collinear points)
+    expect(waypoints.length).toBeLessThanOrEqual(4)
   })
 })
