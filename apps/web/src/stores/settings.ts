@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import * as api from '@/api'
+import { useBoardsStore } from './boards'
 import type { Settings } from '@tasknote/shared'
 import type { UpdateSettingsDto, OnboardDto } from '@tasknote/shared'
 
@@ -41,6 +42,9 @@ export const useSettingsStore = defineStore('settings', () => {
     error.value = null
     try {
       settings.value = await api.settings.onboard(dto)
+      const boards = useBoardsStore()
+      boards.invalidateColumns()
+      await boards.load()
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Onboarding failed'
       throw err
