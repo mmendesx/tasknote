@@ -4,6 +4,7 @@ import { json } from 'express';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { configureStaticServing } from './static-serving';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, {
@@ -20,6 +21,8 @@ async function bootstrap(): Promise<void> {
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'DELETE'],
   });
+
+  configureStaticServing(app);
 
   app.useGlobalPipes(new ZodValidationPipe());
 
