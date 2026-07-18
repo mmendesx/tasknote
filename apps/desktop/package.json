@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@tasknote/api": "workspace:*"
+    "@tasknote/api": "workspace:*",
+    "electron-updater": "^6.1.0"
   },
   "devDependencies": {
     "@types/node": "^20.12.0",

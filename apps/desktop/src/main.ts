@@ -1,6 +1,7 @@
 import path from 'path';
 import fs from 'fs';
 import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron';
+import { initAutoUpdater } from './updater';
 
 // Log file for main-process output — written before any async work so the
 // path is available in the error dialog if boot fails.
@@ -135,6 +136,7 @@ app.whenReady()
     }
 
     createWindow(apiUrl);
+    initAutoUpdater(writeLog);
 
     app.on('activate', () => {
       const { BrowserWindow: BW } = require('electron') as typeof import('electron');
