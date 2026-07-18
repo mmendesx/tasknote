@@ -33,7 +33,12 @@ ipcMain.handle('desktop:notify', (_event, title: unknown, body: unknown): void =
 });
 
 function resolveWebDistDir(): string {
-  // When compiled: dist/main.js lives in apps/desktop/dist/
+  if (app.isPackaged) {
+    // In the packaged AppImage, extraResources are placed at process.resourcesPath/web
+    // (matching the electron-builder.yml extraResources[].to value).
+    return path.join(process.resourcesPath, 'web');
+  }
+  // Dev: dist/main.js lives in apps/desktop/dist/
   // Web dist lives at apps/web/dist/ — two levels up from dist/, then into web/dist.
   return path.resolve(__dirname, '..', '..', 'web', 'dist');
 }

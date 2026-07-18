@@ -1,0 +1,37 @@
+appId: com.tasknote.app
+productName: TaskNote
+copyright: Copyright © 2024 TaskNote
+
+directories:
+  buildResources: build
+  output: dist-electron
+
+icon: build/icon.png
+
+# pnpm workspace symlinks: electron-builder cannot follow pnpm's
+# virtual-store symlinks when resolving node_modules. includeSubNodeModules
+# bundles all workspace-linked packages (e.g. @tasknote/api and its deps)
+# into the app without requiring a workspace-wide node-linker=hoisted change.
+# ponytail: this is the pnpm-symlink workaround; switch to node-linker=hoisted
+# if includeSubNodeModules causes packaging size issues in the future.
+includeSubNodeModules: true
+
+files:
+  - dist/**/*
+  - package.json
+
+extraResources:
+  - from: ../../apps/web/dist
+    to: web
+    filter:
+      - "**/*"
+
+linux:
+  target:
+    - AppImage
+  category: Office
+
+publish:
+  provider: github
+  owner: mmendesx
+  repo: tasknote
