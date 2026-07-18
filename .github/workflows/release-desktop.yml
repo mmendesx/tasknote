@@ -1,0 +1,45 @@
+name: Release Desktop
+
+"on":
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        # Full workspace build so web dist is present for electron-builder to bundle.
+        # desktop declares only @tasknote/api as a dep, so --filter desktop... would
+        # silently skip the web package and produce a broken AppImage.
+        run: pnpm build
+
+      - name: Smoke test
+        run: pnpm --filter @tasknote/desktop smoke
+
+      - name: Package and publish
+        run: pnpm --filter @tasknote/desktop exec electron-builder --linux --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
