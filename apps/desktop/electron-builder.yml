@@ -16,6 +16,12 @@ icon: build/icon.png
 # if includeSubNodeModules causes packaging size issues in the future.
 includeSubNodeModules: true
 
+# Native .node addons must live outside the asar archive so the OS can dlopen
+# them directly. Electron patches require() to extract them, but explicit
+# asarUnpack is more reliable and avoids temp-dir path issues on some Linux systems.
+asarUnpack:
+  - "**/*.node"
+
 files:
   - dist/**/*
   - package.json
@@ -28,7 +34,9 @@ extraResources:
 
 linux:
   target:
-    - AppImage
+    - target: AppImage
+      arch:
+        - x64
   category: Office
 
 publish:
