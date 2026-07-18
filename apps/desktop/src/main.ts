@@ -1,6 +1,6 @@
 import path from 'path';
 import fs from 'fs';
-import { app, BrowserWindow, dialog, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron';
 
 // Log file for main-process output — written before any async work so the
 // path is available in the error dialog if boot fails.
@@ -20,6 +20,16 @@ function writeLog(level: 'INFO' | 'ERROR', message: string, detail?: unknown): v
     process.stdout.write(line);
   }
 }
+
+ipcMain.handle('desktop:notify', (_event, title: unknown, body: unknown): void => {
+  if (typeof title !== 'string' || title.trim() === '') {
+    throw new Error('notify: title must be a non-empty string');
+  }
+  if (typeof body !== 'string' || body.trim() === '') {
+    throw new Error('notify: body must be a non-empty string');
+  }
+  new Notification({ title, body }).show();
+});
 
 function resolveWebDistDir(): string {
   // When compiled: dist/main.js lives in apps/desktop/dist/
@@ -64,6 +74,7 @@ function createWindow(apiUrl: string): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      preload: path.join(__dirname, 'preload.js'),
     },
   });
 
