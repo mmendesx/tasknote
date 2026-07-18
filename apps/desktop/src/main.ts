@@ -69,14 +69,19 @@ function createWindow(apiUrl: string): void {
 
   // Block navigation to non-local origins — surface attacks or accidental redirects.
   win.webContents.on('will-navigate', (event, targetUrl) => {
-    const target = new URL(targetUrl);
-    const origin = new URL(apiUrl);
-    if (target.origin !== origin.origin) {
+    try {
+      const target = new URL(targetUrl);
+      const origin = new URL(apiUrl);
+      if (target.origin !== origin.origin) {
+        event.preventDefault();
+        writeLog('INFO', `Blocked navigation to external origin: ${targetUrl}`);
+        shell.openExternal(targetUrl).catch((err: unknown) => {
+          writeLog('ERROR', 'shell.openExternal failed', err);
+        });
+      }
+    } catch {
       event.preventDefault();
-      writeLog('INFO', `Blocked navigation to external origin: ${targetUrl}`);
-      shell.openExternal(targetUrl).catch((err: unknown) => {
-        writeLog('ERROR', 'shell.openExternal failed', err);
-      });
+      writeLog('INFO', `Blocked navigation to malformed URL: ${targetUrl}`);
     }
   });
 
