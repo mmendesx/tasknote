@@ -41,7 +41,7 @@ jobs:
         # electron-builder derives artifact + latest-linux.yml version from
         # package.json; a stale version silently breaks auto-update.
         working-directory: apps/desktop
-        run: npm version --no-git-tag-version "${GITHUB_REF_NAME#v}"
+        run: npm version --no-git-tag-version --allow-same-version "${GITHUB_REF_NAME#v}"
 
       - name: Package
         run: pnpm --filter @tasknote/desktop exec electron-builder --linux --publish never
