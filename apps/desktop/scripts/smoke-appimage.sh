@@ -13,6 +13,8 @@ rm -f "$LOG"
 # CI has no FUSE — extract and run AppRun directly.
 "$APPIMAGE" --appimage-extract >/dev/null
 RUNNER="squashfs-root/AppRun"
+# AppRun resolves the binary via $APPDIR; unset when invoked outside AppImage runtime.
+export APPDIR="$PWD/squashfs-root"
 
 xvfb-run -a "$RUNNER" --no-sandbox &
 PID=$!
