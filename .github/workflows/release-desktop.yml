@@ -56,6 +56,7 @@ jobs:
         working-directory: apps/desktop
         run: |
           gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" || true
-          gh release upload "$GITHUB_REF_NAME" dist-electron/*.AppImage dist-electron/*.blockmap dist-electron/latest-linux.yml --clobber
+          # blockmap only exists when electron-builder runs differential publishing — upload what's there
+          gh release upload "$GITHUB_REF_NAME" dist-electron/*.AppImage dist-electron/latest-linux.yml $(ls dist-electron/*.blockmap 2>/dev/null) --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
