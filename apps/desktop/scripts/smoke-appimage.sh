@@ -10,8 +10,8 @@ APPIMAGE=$(ls dist-electron/*.AppImage | head -1)
 # userData dir name depends on how Electron resolves app.name in the packaged
 # build — find main.log instead of assuming it.
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}"
-find "$CONFIG_DIR" -maxdepth 2 -name main.log -delete 2>/dev/null || true
-findlog() { find "$CONFIG_DIR" -maxdepth 2 -name main.log 2>/dev/null | head -1; }
+find "$CONFIG_DIR" -maxdepth 3 -name main.log -delete 2>/dev/null || true
+findlog() { find "$CONFIG_DIR" -maxdepth 3 -name main.log 2>/dev/null | head -1; }
 
 # CI has no FUSE — extract and run AppRun directly.
 "$APPIMAGE" --appimage-extract >/dev/null
