@@ -7,8 +7,11 @@ set -euo pipefail
 APPIMAGE=$(ls dist-electron/*.AppImage | head -1)
 [ -n "$APPIMAGE" ] || { echo "No AppImage found in dist-electron/"; exit 1; }
 
-LOG="${XDG_CONFIG_HOME:-$HOME/.config}/TaskNote/main.log"
-rm -f "$LOG"
+# userData dir name depends on how Electron resolves app.name in the packaged
+# build — find main.log instead of assuming it.
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}"
+find "$CONFIG_DIR" -maxdepth 2 -name main.log -delete 2>/dev/null || true
+findlog() { find "$CONFIG_DIR" -maxdepth 2 -name main.log 2>/dev/null | head -1; }
 
 # CI has no FUSE — extract and run AppRun directly.
 "$APPIMAGE" --appimage-extract >/dev/null
@@ -21,18 +24,21 @@ PID=$!
 trap 'kill $PID 2>/dev/null || true; rm -rf squashfs-root' EXIT
 
 for _ in $(seq 1 30); do
-  if grep -q "Nest API listening" "$LOG" 2>/dev/null; then
-    echo "Packaged smoke OK: API booted inside AppImage"
+  LOG=$(findlog)
+  if [ -n "$LOG" ] && grep -q "Nest API listening" "$LOG"; then
+    echo "Packaged smoke OK: API booted inside AppImage (log: $LOG)"
     exit 0
   fi
   if ! kill -0 $PID 2>/dev/null; then
-    echo "Packaged app exited before API boot. Log:"
+    echo "Packaged app exited before API boot. Log ($LOG):"
     cat "$LOG" 2>/dev/null || echo "(no log)"
     exit 1
   fi
   sleep 1
 done
 
-echo "Timed out waiting for API boot. Log:"
-cat "$LOG" 2>/dev/null || echo "(no log)"
+LOG=$(findlog)
+echo "Timed out waiting for API boot. Log ($LOG):"
+cat "$LOG" 2>/dev/null || echo "(no log found under $CONFIG_DIR)"
+ls "$CONFIG_DIR" || true
 exit 1
