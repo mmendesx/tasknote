@@ -39,7 +39,25 @@ jobs:
       - name: Smoke test
         run: pnpm --filter @tasknote/desktop smoke
 
-      - name: Package and publish
-        run: pnpm --filter @tasknote/desktop exec electron-builder --linux --publish always
+      - name: Sync version from tag
+        # electron-builder derives artifact + latest-linux.yml version from
+        # package.json; a stale version silently breaks auto-update.
+        working-directory: apps/desktop
+        run: npm version --no-git-tag-version "${GITHUB_REF_NAME#v}"
+
+      - name: Package
+        run: pnpm --filter @tasknote/desktop exec electron-builder --linux --publish never
+
+      - name: Packaged smoke test (AppImage under xvfb)
+        # Verifies native modules (better-sqlite3) load under the Electron ABI
+        # inside the actual artifact — the plain-Node smoke test cannot catch this.
+        working-directory: apps/desktop
+        run: bash scripts/smoke-appimage.sh
+
+      - name: Publish release assets
+        working-directory: apps/desktop
+        run: |
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" || true
+          gh release upload "$GITHUB_REF_NAME" dist-electron/*.AppImage dist-electron/*.blockmap dist-electron/latest-linux.yml --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
