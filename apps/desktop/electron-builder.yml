@@ -9,11 +9,9 @@ directories:
 icon: build/icon.png
 
 # pnpm workspace symlinks: electron-builder cannot follow pnpm's
-# virtual-store symlinks when resolving node_modules. includeSubNodeModules
-# bundles all workspace-linked packages (e.g. @tasknote/api and its deps)
-# into the app without requiring a workspace-wide node-linker=hoisted change.
-# ponytail: this is the pnpm-symlink workaround; switch to node-linker=hoisted
-# if includeSubNodeModules causes packaging size issues in the future.
+# virtual-store symlinks when resolving node_modules. The workspace uses
+# node-linker=hoisted (root .npmrc) so deps are flat; includeSubNodeModules
+# still bundles workspace-linked packages (e.g. @tasknote/api).
 includeSubNodeModules: true
 
 # Native .node addons must live outside the asar archive so the OS can dlopen
