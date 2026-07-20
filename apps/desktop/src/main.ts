@@ -9,7 +9,7 @@ const logDir = app.getPath('userData');
 const logPath = path.join(logDir, 'main.log');
 
 function writeLog(level: 'INFO' | 'ERROR', message: string, detail?: unknown): void {
-  const line = `[${new Date().toISOString()}] [${level}] ${message}${detail !== undefined ? ' ' + String(detail) : ''}\n`;
+  const line = `[${new Date().toISOString()}] [${level}] ${message}${detail !== undefined ? ' ' + (detail instanceof Error ? detail.stack : String(detail)) : ''}\n`;
   try {
     fs.appendFileSync(logPath, line, 'utf8');
   } catch {
@@ -31,6 +31,17 @@ ipcMain.handle('desktop:notify', (_event, title: unknown, body: unknown): void =
   }
   new Notification({ title, body }).show();
 });
+
+function openExternalSafe(target: URL): void {
+  // Only ever hand http(s) to the OS — file://, smb:// etc. are attack vectors.
+  if (target.protocol !== 'http:' && target.protocol !== 'https:') {
+    writeLog('INFO', `Refused to open non-http(s) URL externally: ${target.href}`);
+    return;
+  }
+  shell.openExternal(target.href).catch((err: unknown) => {
+    writeLog('ERROR', 'shell.openExternal failed', err instanceof Error ? err.stack : err);
+  });
+}
 
 function resolveWebDistDir(): string {
   if (app.isPackaged) {
@@ -92,9 +103,7 @@ function createWindow(apiUrl: string): void {
       if (target.origin !== origin.origin) {
         event.preventDefault();
         writeLog('INFO', `Blocked navigation to external origin: ${targetUrl}`);
-        shell.openExternal(targetUrl).catch((err: unknown) => {
-          writeLog('ERROR', 'shell.openExternal failed', err);
-        });
+        openExternalSafe(target);
       }
     } catch {
       event.preventDefault();
@@ -108,9 +117,7 @@ function createWindow(apiUrl: string): void {
       const target = new URL(targetUrl);
       const origin = new URL(apiUrl);
       if (target.origin !== origin.origin) {
-        shell.openExternal(targetUrl).catch((err: unknown) => {
-          writeLog('ERROR', 'shell.openExternal failed', err);
-        });
+        openExternalSafe(target);
         return { action: 'deny' };
       }
     } catch {
