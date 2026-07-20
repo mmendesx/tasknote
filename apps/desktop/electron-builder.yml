@@ -8,6 +8,11 @@ directories:
 
 icon: build/icon.png
 
+# With node-linker=hoisted, electron lives in the workspace root node_modules;
+# electron-builder can't resolve it from apps/desktop, so pin explicitly.
+# Keep in sync with the electron devDependency.
+electronVersion: 31.7.7
+
 # pnpm workspace symlinks: electron-builder cannot follow pnpm's
 # virtual-store symlinks when resolving node_modules. The workspace uses
 # node-linker=hoisted (root .npmrc) so deps are flat; includeSubNodeModules
