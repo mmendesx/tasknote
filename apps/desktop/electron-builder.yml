@@ -75,6 +75,14 @@ mac:
   notarize:
     teamId: RMS6H5M4K7
 
+# Unsigned: no Authenticode cert configured, users accept one SmartScreen
+# prompt. electron-builder skips signing when no cert env vars are present.
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+
 # electron-builder notarizes the .app before wrapping it in the dmg, so the
 # ticket lands on the app (which is what Gatekeeper checks on launch) but the
 # disk image itself stays unsigned. Signing it removes the warning when the
