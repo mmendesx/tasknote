@@ -53,10 +53,18 @@ mac:
       arch:
         - arm64
   category: public.app-category.productivity
-  # Unsigned build: Gatekeeper shows "unidentified developer" until a Developer ID
-  # cert is available. Disabling the hardened runtime keeps the unsigned app launchable.
-  hardenedRuntime: false
-  identity: null
+  # Notarization requires the hardened runtime, which blocks the JIT and unsigned
+  # memory Electron needs — hence the entitlements below.
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # Signing and notarization are driven by env vars, so a credential-less local
+  # build still succeeds (unsigned) while CI produces a signed+notarized app:
+  #   CSC_LINK / CSC_KEY_PASSWORD          -> Developer ID signing
+  #   APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID -> notarization
+  # electron-builder skips each step when its variables are absent.
+  notarize: true
 
 publish:
   provider: github

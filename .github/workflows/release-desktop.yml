@@ -58,6 +58,14 @@ jobs:
 
       - name: Package
         run: pnpm --filter @tasknote/desktop exec electron-builder --${{ matrix.platform }} --publish never
+        env:
+          # Empty on the Linux job — electron-builder skips signing when unset,
+          # so one step serves both platforms.
+          CSC_LINK: ${{ secrets.MAC_CERT_P12_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Packaged smoke test
         # Verifies native modules (better-sqlite3) load under the Electron ABI
