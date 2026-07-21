@@ -78,6 +78,9 @@ mac:
 dmg:
   sign: true
 
+# Notarizes and staples the dmg itself, after electron-builder has built it.
+afterAllArtifactBuild: scripts/notarize-dmg.js
+
 publish:
   provider: github
   owner: mmendesx
