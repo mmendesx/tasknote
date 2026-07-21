@@ -42,6 +42,17 @@ linux:
         - x64
   category: Office
 
+mac:
+  target:
+    - target: dmg
+      arch:
+        - arm64
+  category: public.app-category.productivity
+  # Unsigned build: Gatekeeper shows "unidentified developer" until a Developer ID
+  # cert is available. Disabling the hardened runtime keeps the unsigned app launchable.
+  hardenedRuntime: false
+  identity: null
+
 publish:
   provider: github
   owner: mmendesx

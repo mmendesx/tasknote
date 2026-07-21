@@ -10,7 +10,20 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    strategy:
+      # One platform failing shouldn't cancel the other's build — a partial
+      # release is more useful than none, and the failure is still reported.
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            artifacts: "dist-electron/*.AppImage dist-electron/latest-linux.yml"
+          - os: macos-latest
+            platform: mac
+            artifacts: "dist-electron/*.dmg dist-electron/latest-mac.yml"
+
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout
@@ -31,32 +44,32 @@ jobs:
       - name: Build all packages
         # Full workspace build so web dist is present for electron-builder to bundle.
         # desktop declares only @tasknote/api as a dep, so --filter desktop... would
-        # silently skip the web package and produce a broken AppImage.
+        # silently skip the web package and produce a broken artifact.
         run: pnpm build
 
       - name: Smoke test
         run: pnpm --filter @tasknote/desktop smoke
 
       - name: Sync version from tag
-        # electron-builder derives artifact + latest-linux.yml version from
+        # electron-builder derives artifact + latest-*.yml version from
         # package.json; a stale version silently breaks auto-update.
         working-directory: apps/desktop
         run: npm version --no-git-tag-version --allow-same-version "${GITHUB_REF_NAME#v}"
 
       - name: Package
-        run: pnpm --filter @tasknote/desktop exec electron-builder --linux --publish never
+        run: pnpm --filter @tasknote/desktop exec electron-builder --${{ matrix.platform }} --publish never
 
-      - name: Packaged smoke test (AppImage under xvfb)
+      - name: Packaged smoke test
         # Verifies native modules (better-sqlite3) load under the Electron ABI
         # inside the actual artifact — the plain-Node smoke test cannot catch this.
         working-directory: apps/desktop
-        run: bash scripts/smoke-appimage.sh
+        run: bash scripts/smoke-packaged.sh
 
       - name: Publish release assets
         working-directory: apps/desktop
         run: |
           gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" || true
           # blockmap only exists when electron-builder runs differential publishing — upload what's there
-          gh release upload "$GITHUB_REF_NAME" dist-electron/*.AppImage dist-electron/latest-linux.yml $(ls dist-electron/*.blockmap 2>/dev/null) --clobber
+          gh release upload "$GITHUB_REF_NAME" ${{ matrix.artifacts }} $(ls dist-electron/*.blockmap 2>/dev/null) --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
