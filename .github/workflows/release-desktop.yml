@@ -8,6 +8,10 @@ name: Release Desktop
 permissions:
   contents: write
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   release:
     strategy:
@@ -22,6 +26,9 @@ jobs:
           - os: macos-latest
             platform: mac
             artifacts: "dist-electron/*.dmg dist-electron/*-mac.zip dist-electron/latest-mac.yml"
+          - os: windows-latest
+            platform: win
+            artifacts: "dist-electron/*.exe dist-electron/latest.yml"
 
     runs-on: ${{ matrix.os }}
 
