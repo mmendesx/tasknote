@@ -62,9 +62,12 @@ jobs:
         # instead surfaces Apple's actual message in seconds.
         if: matrix.platform == 'mac'
         run: |
+          # Team ID is read from the config, not this secret — assert they match
+          # so a stale APPLE_TEAM_ID secret can't mask a real mismatch.
+          echo "configured teamId: RMS6H5M4K7 / secret: ${APPLE_TEAM_ID}"
           xcrun notarytool history \
             --apple-id "$APPLE_ID" \
-            --team-id "$APPLE_TEAM_ID" \
+            --team-id "RMS6H5M4K7" \
             --password "$APPLE_APP_SPECIFIC_PASSWORD" >/dev/null
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}

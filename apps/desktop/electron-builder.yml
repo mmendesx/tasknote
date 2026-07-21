@@ -66,8 +66,10 @@ mac:
   # electron-builder skips each step when its variables are absent.
   # teamId must be explicit: @electron/notarize does not read APPLE_TEAM_ID
   # from the environment when authenticating with an app-specific password.
+  # Hardcoded rather than an ${env.*} macro so it cannot silently arrive
+  # empty or unexpanded — team IDs are public (embedded in every signature).
   notarize:
-    teamId: ${env.APPLE_TEAM_ID}
+    teamId: RMS6H5M4K7
 
 publish:
   provider: github
