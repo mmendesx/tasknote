@@ -21,7 +21,7 @@ jobs:
             artifacts: "dist-electron/*.AppImage dist-electron/latest-linux.yml"
           - os: macos-latest
             platform: mac
-            artifacts: "dist-electron/*.dmg dist-electron/latest-mac.yml"
+            artifacts: "dist-electron/*.dmg dist-electron/*-mac.zip dist-electron/latest-mac.yml"
 
     runs-on: ${{ matrix.os }}
 
