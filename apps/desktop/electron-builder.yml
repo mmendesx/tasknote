@@ -64,7 +64,10 @@ mac:
   #   CSC_LINK / CSC_KEY_PASSWORD          -> Developer ID signing
   #   APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID -> notarization
   # electron-builder skips each step when its variables are absent.
-  notarize: true
+  # teamId must be explicit: @electron/notarize does not read APPLE_TEAM_ID
+  # from the environment when authenticating with an app-specific password.
+  notarize:
+    teamId: ${env.APPLE_TEAM_ID}
 
 publish:
   provider: github
