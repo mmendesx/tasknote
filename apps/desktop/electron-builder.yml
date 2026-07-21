@@ -71,6 +71,13 @@ mac:
   notarize:
     teamId: RMS6H5M4K7
 
+# electron-builder notarizes the .app before wrapping it in the dmg, so the
+# ticket lands on the app (which is what Gatekeeper checks on launch) but the
+# disk image itself stays unsigned. Signing it removes the warning when the
+# dmg is opened.
+dmg:
+  sign: true
+
 publish:
   provider: github
   owner: mmendesx
