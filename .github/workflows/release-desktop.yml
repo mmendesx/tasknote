@@ -7,6 +7,11 @@ name: Release Desktop
 
 permissions:
   contents: write
+  packages: write
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   release:
@@ -22,6 +27,9 @@ jobs:
           - os: macos-latest
             platform: mac
             artifacts: "dist-electron/*.dmg dist-electron/*-mac.zip dist-electron/latest-mac.yml"
+          - os: windows-latest
+            platform: win
+            artifacts: "dist-electron/*.exe dist-electron/latest.yml"
 
     runs-on: ${{ matrix.os }}
 
@@ -110,3 +118,35 @@ jobs:
           gh release upload "$GITHUB_REF_NAME" ${{ matrix.artifacts }} $(ls dist-electron/*.blockmap 2>/dev/null) --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build image
+        run: docker build -t "ghcr.io/mmendesx/tasknote:${GITHUB_REF_NAME#v}" -t ghcr.io/mmendesx/tasknote:latest .
+
+      - name: Container smoke test
+        run: |
+          docker run -d --rm -p 3001:3001 --name smoke "ghcr.io/mmendesx/tasknote:${GITHUB_REF_NAME#v}"
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:3001/api/health && break
+            sleep 1
+          done
+          curl -fsS http://localhost:3001/api/health
+          curl -fsS http://localhost:3001/ | grep -q '<div id='
+          docker stop smoke
+
+      - name: Push image
+        run: |
+          docker push "ghcr.io/mmendesx/tasknote:${GITHUB_REF_NAME#v}"
+          docker push ghcr.io/mmendesx/tasknote:latest

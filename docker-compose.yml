@@ -1,0 +1,13 @@
+# End-user compose: run TaskNote without installing the desktop app.
+# Usage: docker compose up -d  →  http://localhost:3001
+services:
+  tasknote:
+    image: ghcr.io/mmendesx/tasknote:latest
+    ports:
+      - "3001:3001"
+    volumes:
+      - tasknote-data:/data
+    restart: unless-stopped
+
+volumes:
+  tasknote-data:

@@ -14,7 +14,7 @@ export interface ServerOptions {
 
 export async function createServer(options: ServerOptions = {}): Promise<INestApplication> {
   const port = options.port ?? parseInt(process.env['PORT'] ?? '3001', 10);
-  const host = options.host ?? '127.0.0.1';
+  const host = options.host ?? process.env['HOST'] ?? '127.0.0.1';
 
   const app = await NestFactory.create(AppModule, {
     bodyParser: false,

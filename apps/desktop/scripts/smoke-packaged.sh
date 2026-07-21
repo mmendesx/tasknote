@@ -23,6 +23,14 @@ case "$(uname -s)" in
     LAUNCH=(xvfb-run -a "squashfs-root/AppRun" --no-sandbox)
     CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}"
     ;;
+  MINGW*|MSYS*)
+    EXE="dist-electron/win-unpacked/TaskNote.exe"
+    [ -f "$EXE" ] || { echo "No win-unpacked exe found in dist-electron/"; exit 1; }
+    LAUNCH=("$EXE")
+    # find is MSYS/Git Bash; it needs a POSIX path, not APPDATA's native
+    # C:\Users\... form (which it silently fails on, swallowed by 2>/dev/null).
+    CONFIG_DIR="$(cygpath -u "${APPDATA:?APPDATA not set}")"
+    ;;
   *)
     echo "Unsupported platform: $(uname -s)"; exit 1 ;;
 esac
