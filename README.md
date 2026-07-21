@@ -148,6 +148,18 @@ The file is re-created with seed data on next startup.
 
 ---
 
+## Run with Docker
+
+Don't want to install the desktop app? Run TaskNote in a browser:
+
+```bash
+docker compose up -d
+```
+
+Open http://localhost:3001. Data persists in the `tasknote-data` volume.
+
+---
+
 ## License
 
 MIT
