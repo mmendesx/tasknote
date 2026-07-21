@@ -56,6 +56,21 @@ jobs:
         working-directory: apps/desktop
         run: npm version --no-git-tag-version --allow-same-version "${GITHUB_REF_NAME#v}"
 
+      - name: Verify notarization credentials
+        # electron-builder reports notarytool auth failures as an opaque
+        # "is not valid JSON" parse error after a full build. Failing here
+        # instead surfaces Apple's actual message in seconds.
+        if: matrix.platform == 'mac'
+        run: |
+          xcrun notarytool history \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" >/dev/null
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
       - name: Package
         run: pnpm --filter @tasknote/desktop exec electron-builder --${{ matrix.platform }} --publish never
         env:
