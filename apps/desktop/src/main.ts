@@ -1,6 +1,6 @@
 import path from 'path';
 import fs from 'fs';
-import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Notification, screen, shell } from 'electron';
 import { initAutoUpdater } from './updater';
 
 // Log file for main-process output — written before any async work so the
@@ -84,9 +84,13 @@ async function bootApi(): Promise<string> {
 }
 
 function createWindow(apiUrl: string): void {
+  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
   const win = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    width,
+    height,
+    minWidth: 900,
+    minHeight: 600,
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const } : {}),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
