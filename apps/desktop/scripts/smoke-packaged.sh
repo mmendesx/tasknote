@@ -23,6 +23,12 @@ case "$(uname -s)" in
     LAUNCH=(xvfb-run -a "squashfs-root/AppRun" --no-sandbox)
     CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}"
     ;;
+  MINGW*|MSYS*)
+    EXE="dist-electron/win-unpacked/TaskNote.exe"
+    [ -f "$EXE" ] || { echo "No win-unpacked exe found in dist-electron/"; exit 1; }
+    LAUNCH=("$EXE")
+    CONFIG_DIR="$APPDATA"
+    ;;
   *)
     echo "Unsupported platform: $(uname -s)"; exit 1 ;;
 esac
