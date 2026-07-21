@@ -66,10 +66,14 @@ mac:
   # electron-builder skips each step when its variables are absent.
   # teamId must be explicit: @electron/notarize does not read APPLE_TEAM_ID
   # from the environment when authenticating with an app-specific password.
-  # A wrong or empty value fails deep inside notarytool with an opaque error,
-  # so CI validates the format before packaging (see release-desktop.yml).
+  #
+  # This is a literal, NOT ${env.APPLE_TEAM_ID}: electron-builder 24.13.3 does
+  # not expand env macros inside the notarize block, and the unexpanded string
+  # fails deep inside notarytool as "Unexpected token 'E' ... is not valid JSON".
+  # Verified empirically — v0.3.2 (literal) notarized, v0.3.3 (macro) did not.
+  # CI asserts this value matches the APPLE_TEAM_ID variable before packaging.
   notarize:
-    teamId: ${env.APPLE_TEAM_ID}
+    teamId: RMS6H5M4K7
 
 # electron-builder notarizes the .app before wrapping it in the dmg, so the
 # ticket lands on the app (which is what Gatekeeper checks on launch) but the

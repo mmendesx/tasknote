@@ -62,14 +62,19 @@ jobs:
         # instead surfaces Apple's actual message in seconds.
         if: matrix.platform == 'mac'
         run: |
-          # An empty or unexpanded team ID authenticates against the wrong team
-          # and fails deep inside notarytool — catch the shape up front.
           if [[ ! "$APPLE_TEAM_ID" =~ ^[A-Z0-9]{10}$ ]]; then
             echo "::error::APPLE_TEAM_ID must be a 10-char team ID, got: '$APPLE_TEAM_ID'"
             echo "Set it with: gh variable set APPLE_TEAM_ID"
             exit 1
           fi
-          echo "teamId: $APPLE_TEAM_ID"
+          # electron-builder can't read this variable (env macros don't expand in
+          # the notarize block), so the yml carries a literal — assert they agree.
+          CONFIGURED=$(grep -A1 '^  notarize:' apps/desktop/electron-builder.yml | grep teamId | awk '{print $2}')
+          if [[ "$CONFIGURED" != "$APPLE_TEAM_ID" ]]; then
+            echo "::error::electron-builder.yml teamId '$CONFIGURED' != APPLE_TEAM_ID variable '$APPLE_TEAM_ID'"
+            exit 1
+          fi
+          echo "teamId: $APPLE_TEAM_ID (matches electron-builder.yml)"
           xcrun notarytool history \
             --apple-id "$APPLE_ID" \
             --team-id "$APPLE_TEAM_ID" \
