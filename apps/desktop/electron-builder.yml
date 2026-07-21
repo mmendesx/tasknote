@@ -82,6 +82,9 @@ win:
     - target: nsis
       arch:
         - x64
+  # Dashed name: spaces would word-split the CI blockmap upload and break
+  # electron-updater, which requests the space→dash form of the asset name.
+  artifactName: "${productName}-Setup-${version}.${ext}"
 
 # electron-builder notarizes the .app before wrapping it in the dmg, so the
 # ticket lands on the app (which is what Gatekeeper checks on launch) but the
