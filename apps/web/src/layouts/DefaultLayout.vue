@@ -857,6 +857,21 @@ const routeLabel = computed(() => {
   flex-shrink: 0;
 }
 
+/* Electron macOS: hiddenInset title bar — topbar doubles as window drag region */
+html.desktop-mac .topbar {
+  -webkit-app-region: drag;
+}
+html.desktop-mac .topbar button,
+html.desktop-mac .topbar__route-actions,
+html.desktop-mac .topbar__actions {
+  -webkit-app-region: no-drag;
+}
+/* clear the traffic lights (~70px inset) over the sidebar logo row */
+html.desktop-mac .sidebar__logo {
+  padding-left: 80px;
+  -webkit-app-region: drag;
+}
+
 .topbar__hamburger {
   display: none;
   color: var(--color-text-secondary);
