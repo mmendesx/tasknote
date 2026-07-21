@@ -5,13 +5,19 @@
 // No-ops when notarization credentials are absent (local builds).
 const { execFileSync } = require('child_process');
 
-const TEAM_ID = 'RMS6H5M4K7';
-
 exports.default = async function notarizeDmg({ artifactPaths }) {
-  const { APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD } = process.env;
+  const { APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID } = process.env;
   if (!APPLE_ID || !APPLE_APP_SPECIFIC_PASSWORD) {
     console.log('  • skipped dmg notarization  reason=credentials absent');
     return;
+  }
+  // A blank or unexpanded team ID authenticates against the wrong team and
+  // fails deep inside notarytool with an opaque error — fail loudly instead.
+  const TEAM_ID = APPLE_TEAM_ID;
+  if (!/^[A-Z0-9]{10}$/.test(TEAM_ID ?? '')) {
+    throw new Error(
+      `APPLE_TEAM_ID must be a 10-character team ID, got: ${JSON.stringify(TEAM_ID)}`,
+    );
   }
 
   const dmgs = artifactPaths.filter((p) => p.endsWith('.dmg'));

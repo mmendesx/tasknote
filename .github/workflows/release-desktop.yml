@@ -62,17 +62,22 @@ jobs:
         # instead surfaces Apple's actual message in seconds.
         if: matrix.platform == 'mac'
         run: |
-          # Team ID is read from the config, not this secret — assert they match
-          # so a stale APPLE_TEAM_ID secret can't mask a real mismatch.
-          echo "configured teamId: RMS6H5M4K7 / secret: ${APPLE_TEAM_ID}"
+          # An empty or unexpanded team ID authenticates against the wrong team
+          # and fails deep inside notarytool — catch the shape up front.
+          if [[ ! "$APPLE_TEAM_ID" =~ ^[A-Z0-9]{10}$ ]]; then
+            echo "::error::APPLE_TEAM_ID must be a 10-char team ID, got: '$APPLE_TEAM_ID'"
+            echo "Set it with: gh variable set APPLE_TEAM_ID"
+            exit 1
+          fi
+          echo "teamId: $APPLE_TEAM_ID"
           xcrun notarytool history \
             --apple-id "$APPLE_ID" \
-            --team-id "RMS6H5M4K7" \
+            --team-id "$APPLE_TEAM_ID" \
             --password "$APPLE_APP_SPECIFIC_PASSWORD" >/dev/null
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
 
       - name: Package
         run: pnpm --filter @tasknote/desktop exec electron-builder --${{ matrix.platform }} --publish never
@@ -83,7 +88,8 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Public identifier (embedded in every signature), so a variable, not a secret.
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
 
       - name: Packaged smoke test
         # Verifies native modules (better-sqlite3) load under the Electron ABI
