@@ -30,7 +30,7 @@ async function handleConfirm() {
   resetError.value = null
 
   try {
-    await adminApi.reset()
+    await adminApi.reset(confirmText.value)
     
     window.location.reload()
   } catch (err) {
